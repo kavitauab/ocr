@@ -62,6 +62,8 @@ CREATE TABLE IF NOT EXISTS `invoices` (
   `page_count` INT DEFAULT 1,
   `status` ENUM('uploaded','processing','completed','failed') NOT NULL DEFAULT 'uploaded',
   `processing_error` TEXT,
+  `ocr_sent_at` DATETIME NULL,
+  `ocr_returned_at` DATETIME NULL,
   `invoice_number` VARCHAR(255),
   `invoice_date` VARCHAR(20),
   `due_date` VARCHAR(20),
@@ -83,6 +85,8 @@ CREATE TABLE IF NOT EXISTS `invoices` (
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX `idx_company` (`company_id`),
+  INDEX `idx_ocr_sent_at` (`ocr_sent_at`),
+  INDEX `idx_ocr_returned_at` (`ocr_returned_at`),
   FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -129,8 +133,39 @@ CREATE TABLE IF NOT EXISTS `usage_logs` (
   `invoices_processed` INT NOT NULL DEFAULT 0,
   `storage_used_bytes` BIGINT NOT NULL DEFAULT 0,
   `api_calls_count` INT NOT NULL DEFAULT 0,
+  `ocr_jobs_count` INT NOT NULL DEFAULT 0,
+  `ocr_input_tokens` BIGINT NOT NULL DEFAULT 0,
+  `ocr_output_tokens` BIGINT NOT NULL DEFAULT 0,
+  `ocr_total_tokens` BIGINT NOT NULL DEFAULT 0,
+  `ocr_cost_usd` DECIMAL(14,6) NOT NULL DEFAULT 0,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY `uk_company_month` (`company_id`, `month`),
+  FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ocr_jobs` (
+  `id` VARCHAR(30) NOT NULL PRIMARY KEY,
+  `invoice_id` VARCHAR(30) NOT NULL,
+  `company_id` VARCHAR(30) NOT NULL,
+  `provider` VARCHAR(50) NOT NULL DEFAULT 'anthropic',
+  `model` VARCHAR(100),
+  `status` ENUM('processing','completed','failed') NOT NULL DEFAULT 'processing',
+  `request_id` VARCHAR(255),
+  `input_tokens` INT NOT NULL DEFAULT 0,
+  `output_tokens` INT NOT NULL DEFAULT 0,
+  `total_tokens` INT NOT NULL DEFAULT 0,
+  `cache_creation_input_tokens` INT NOT NULL DEFAULT 0,
+  `cache_read_input_tokens` INT NOT NULL DEFAULT 0,
+  `cost_usd` DECIMAL(14,6) NOT NULL DEFAULT 0,
+  `error_message` TEXT,
+  `sent_at` DATETIME NULL,
+  `returned_at` DATETIME NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX `idx_ocr_jobs_company_created` (`company_id`, `created_at`),
+  INDEX `idx_ocr_jobs_invoice` (`invoice_id`),
+  INDEX `idx_ocr_jobs_status` (`status`),
+  FOREIGN KEY (`invoice_id`) REFERENCES `invoices`(`id`) ON DELETE CASCADE,
   FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

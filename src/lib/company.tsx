@@ -38,11 +38,15 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   const fetchCompanies = async () => {
     try {
       const { data } = await api.get("/user/companies");
-      setCompanies(data.companies);
+      const mapped = (data.companies || []).map((c: any) => ({
+        ...c,
+        role: c.company_role || c.companyRole || c.role || "viewer",
+      }));
+      setCompanies(mapped);
 
       const savedId = localStorage.getItem("selectedCompanyId");
-      const saved = data.companies.find((c: Company) => c.id === savedId);
-      setSelectedCompany(saved || data.companies[0] || null);
+      const saved = mapped.find((c: Company) => c.id === savedId);
+      setSelectedCompany(saved || mapped[0] || null);
     } catch {
       setCompanies([]);
     } finally {

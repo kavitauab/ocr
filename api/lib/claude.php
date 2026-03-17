@@ -22,7 +22,27 @@ function getAllExtractionFields() {
     ];
 }
 
-function extractInvoiceData($filePath, $fileType, $enabledFields = null) {
+function buildClaudeUsageMetadata($responseData, $fallbackModel) {
+    $usage = (isset($responseData['usage']) && is_array($responseData['usage'])) ? $responseData['usage'] : [];
+
+    $inputTokens = (int)($usage['input_tokens'] ?? 0);
+    $outputTokens = (int)($usage['output_tokens'] ?? 0);
+    $cacheCreationInputTokens = (int)($usage['cache_creation_input_tokens'] ?? 0);
+    $cacheReadInputTokens = (int)($usage['cache_read_input_tokens'] ?? 0);
+
+    return [
+        'provider' => 'anthropic',
+        'model' => $responseData['model'] ?? $fallbackModel,
+        'requestId' => $responseData['id'] ?? null,
+        'inputTokens' => $inputTokens,
+        'outputTokens' => $outputTokens,
+        'cacheCreationInputTokens' => $cacheCreationInputTokens,
+        'cacheReadInputTokens' => $cacheReadInputTokens,
+        'totalTokens' => $inputTokens + $outputTokens + $cacheCreationInputTokens + $cacheReadInputTokens,
+    ];
+}
+
+function extractInvoiceData($filePath, $fileType, $enabledFields = null, $includeUsage = false) {
     $fileData = file_get_contents($filePath);
     if ($fileData === false) {
         throw new Exception('Cannot read file: ' . $filePath);
@@ -121,8 +141,10 @@ Rules:
         ],
     ];
 
+    $model = 'claude-sonnet-4-20250514';
+
     $requestBody = [
-        'model' => 'claude-sonnet-4-20250514',
+        'model' => $model,
         'max_tokens' => 4096,
         'system' => $systemPrompt,
         'tools' => [$tool],
@@ -171,10 +193,19 @@ Rules:
         throw new Exception('Claude API returned invalid response');
     }
 
+    $usageMetadata = buildClaudeUsageMetadata($data, $model);
+
     // Find the tool_use block
     foreach ($data['content'] as $block) {
         if ($block['type'] === 'tool_use') {
-            return $block['input'];
+            if (!$includeUsage) {
+                return $block['input'];
+            }
+
+            return [
+                'data' => $block['input'],
+                'usage' => $usageMetadata,
+            ];
         }
     }
 
