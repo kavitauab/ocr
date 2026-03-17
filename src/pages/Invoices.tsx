@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useCompany } from "@/lib/company";
 import api from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -7,19 +7,26 @@ import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
+import { X } from "lucide-react";
 
 export default function Invoices() {
-  const { selectedCompany } = useCompany();
+  const { selectedCompany, companies } = useCompany();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const page = parseInt(searchParams.get("page") || "1");
   const status = searchParams.get("status") || "";
+  const urlCompanyId = searchParams.get("companyId") || "";
   const [search, setSearch] = useState(searchParams.get("search") || "");
 
+  // URL companyId takes priority over sidebar selection
+  const effectiveCompanyId = urlCompanyId || selectedCompany?.id || "";
+  const filterCompany = urlCompanyId ? companies.find((c) => c.id === urlCompanyId) : null;
+
   const { data, isLoading } = useQuery({
-    queryKey: ["invoices", selectedCompany?.id, page, status, search],
+    queryKey: ["invoices", effectiveCompanyId, page, status, search],
     queryFn: () => {
       const params: Record<string, string> = { page: String(page), limit: "20" };
-      if (selectedCompany) params.companyId = selectedCompany.id;
+      if (effectiveCompanyId) params.companyId = effectiveCompanyId;
       if (status) params.status = status;
       if (search) params.search = search;
       return api.get("/invoices", { params }).then((r) => r.data);
@@ -31,12 +38,27 @@ export default function Invoices() {
     setSearchParams((prev) => { prev.set("search", search); prev.set("page", "1"); return prev; });
   };
 
+  const clearCompanyFilter = () => {
+    setSearchParams((prev) => { prev.delete("companyId"); prev.set("page", "1"); return prev; });
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Invoices</h1>
         <Link to="/upload"><Button>Upload Invoice</Button></Link>
       </div>
+
+      {filterCompany && (
+        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
+          <span className="text-sm text-blue-700">
+            Showing invoices for <strong>{filterCompany.name}</strong>
+          </span>
+          <Button variant="ghost" size="sm" onClick={clearCompanyFilter} className="h-6 px-2 text-blue-600 hover:text-blue-800">
+            <X className="h-3 w-3 mr-1" />Clear filter
+          </Button>
+        </div>
+      )}
 
       <div className="flex gap-2">
         <form onSubmit={handleSearch} className="flex gap-2 flex-1">
@@ -70,7 +92,7 @@ export default function Invoices() {
           {data?.invoices?.map((inv: any) => (
             <TableRow key={inv.id}>
               <TableCell>
-                <Link to={`/invoices/${inv.id}`} className="text-blue-600 hover:underline">
+                <Link to={`/invoices/${inv.id}`} className="text-blue-600 hover:underline font-medium">
                   {inv.invoiceNumber || inv.originalFilename}
                 </Link>
               </TableCell>

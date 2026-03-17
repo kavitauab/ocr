@@ -278,13 +278,55 @@ class Invoice extends BaseResource {
         $stmt->execute($params);
         $row = $stmt->fetch();
 
-        sendJSON([
+        $result = [
             'totalInvoices' => (int)($row['total'] ?? 0),
             'completedCount' => (int)($row['completed'] ?? 0),
             'processingCount' => (int)($row['processing'] ?? 0),
             'failedCount' => (int)($row['failed'] ?? 0),
             'totalAmountSum' => (float)($row['total_amount'] ?? 0),
-        ]);
+        ];
+
+        // Superadmin: add per-company breakdown when viewing all
+        if ($user['role'] === 'superadmin' && !$companyId) {
+            // Per-company invoice stats
+            $companySql = "SELECT c.id, c.name, c.code,
+                COUNT(i.id) as total_invoices,
+                SUM(CASE WHEN i.status='completed' THEN 1 ELSE 0 END) as completed,
+                SUM(CASE WHEN i.status='failed' THEN 1 ELSE 0 END) as failed,
+                MAX(i.created_at) as last_activity
+                FROM companies c
+                LEFT JOIN invoices i ON i.company_id = c.id
+                GROUP BY c.id, c.name, c.code
+                ORDER BY last_activity DESC";
+            $companyRows = $this->db->query($companySql)->fetchAll();
+
+            // Usage logs aggregated per company
+            $usageSql = "SELECT company_id, SUM(invoices_processed) as processed, SUM(api_calls_count) as api_calls, SUM(storage_used_bytes) as storage FROM usage_logs GROUP BY company_id";
+            $usageRows = $this->db->query($usageSql)->fetchAll();
+            $usageMap = [];
+            foreach ($usageRows as $u) {
+                $usageMap[$u['company_id']] = $u;
+            }
+
+            $companies = [];
+            foreach ($companyRows as $c) {
+                $usage = $usageMap[$c['id']] ?? [];
+                $companies[] = [
+                    'companyId' => $c['id'],
+                    'companyName' => $c['name'],
+                    'companyCode' => $c['code'],
+                    'totalInvoices' => (int)($c['total_invoices'] ?? 0),
+                    'completedCount' => (int)($c['completed'] ?? 0),
+                    'failedCount' => (int)($c['failed'] ?? 0),
+                    'apiCalls' => (int)($usage['api_calls'] ?? 0),
+                    'storageUsedBytes' => (int)($usage['storage'] ?? 0),
+                    'lastActivity' => $c['last_activity'],
+                ];
+            }
+            $result['companies'] = $companies;
+        }
+
+        sendJSON($result);
     }
 
     public function file($id) {
