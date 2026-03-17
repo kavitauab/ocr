@@ -7,8 +7,8 @@ require_once __DIR__ . '/../lib/vecticum.php';
 
 class Invoice extends BaseResource {
     protected $tableName = 'invoices';
-    protected $searchColumns = ['invoice_number', 'vendor_name', 'buyer_name'];
-    protected $allowedOrderColumns = ['id', 'created_at', 'updated_at', 'invoice_date', 'vendor_name', 'total_amount', 'status'];
+    protected $searchColumns = ['invoice_number', 'vendor_name', 'buyer_name', 'original_filename'];
+    protected $allowedOrderColumns = ['id', 'created_at', 'updated_at', 'invoice_date', 'vendor_name', 'total_amount', 'status', 'ocr_sent_at', 'ocr_returned_at'];
 
     private function formatInvoice($row) {
         if (!$row) return $row;
@@ -36,6 +36,11 @@ class Invoice extends BaseResource {
         $search = $_GET['search'] ?? '';
         $status = $_GET['status'] ?? '';
         $companyId = $_GET['companyId'] ?? '';
+        $lifecycle = $_GET['lifecycle'] ?? '';
+        $sentFrom = $_GET['sentFrom'] ?? '';
+        $sentTo = $_GET['sentTo'] ?? '';
+        $returnedFrom = $_GET['returnedFrom'] ?? '';
+        $returnedTo = $_GET['returnedTo'] ?? '';
         $page = max(1, intval($_GET['page'] ?? 1));
         $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
         $offset = ($page - 1) * $limit;
@@ -62,15 +67,43 @@ class Invoice extends BaseResource {
         }
 
         if ($search) {
-            $conditions[] = "(i.invoice_number LIKE :search OR i.vendor_name LIKE :search2 OR i.buyer_name LIKE :search3)";
+            $conditions[] = "(i.invoice_number LIKE :search OR i.vendor_name LIKE :search2 OR i.buyer_name LIKE :search3 OR i.original_filename LIKE :search4)";
             $params['search'] = "%$search%";
             $params['search2'] = "%$search%";
             $params['search3'] = "%$search%";
+            $params['search4'] = "%$search%";
         }
 
         if ($status) {
             $conditions[] = "i.status = :status";
             $params['status'] = $status;
+        }
+
+        if ($lifecycle === 'sent') {
+            $conditions[] = "i.ocr_sent_at IS NOT NULL";
+        } elseif ($lifecycle === 'not-sent') {
+            $conditions[] = "i.ocr_sent_at IS NULL";
+        } elseif ($lifecycle === 'returned') {
+            $conditions[] = "i.ocr_returned_at IS NOT NULL";
+        } elseif ($lifecycle === 'pending-return') {
+            $conditions[] = "i.ocr_sent_at IS NOT NULL AND i.ocr_returned_at IS NULL";
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $sentFrom)) {
+            $conditions[] = "i.ocr_sent_at >= :sentFrom";
+            $params['sentFrom'] = $sentFrom . ' 00:00:00';
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $sentTo)) {
+            $conditions[] = "i.ocr_sent_at <= :sentTo";
+            $params['sentTo'] = $sentTo . ' 23:59:59';
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $returnedFrom)) {
+            $conditions[] = "i.ocr_returned_at >= :returnedFrom";
+            $params['returnedFrom'] = $returnedFrom . ' 00:00:00';
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $returnedTo)) {
+            $conditions[] = "i.ocr_returned_at <= :returnedTo";
+            $params['returnedTo'] = $returnedTo . ' 23:59:59';
         }
 
         $where = $conditions ? 'WHERE ' . implode(' AND ', $conditions) : '';
@@ -119,6 +152,9 @@ class Invoice extends BaseResource {
         ]);
 
         // Extract with Claude
+        $ocrJobId = null;
+        $ocrRequestStarted = false;
+        $ocrUsage = ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-20250514'];
         try {
             // Load company extraction field preferences
             $companyStmt = $this->db->prepare("SELECT extraction_fields FROM companies WHERE id = :id");
@@ -130,17 +166,23 @@ class Invoice extends BaseResource {
             }
 
             $filePath = getFilePath($saved['storedFilename']);
-            $extracted = extractInvoiceData($filePath, $saved['fileType'], $enabledFields);
+            $ocrJobId = startOcrJob($id, $companyId, 'anthropic', 'claude-sonnet-4-20250514');
+            try {
+                $this->db->prepare("UPDATE invoices SET ocr_sent_at = NOW(), updated_at = NOW() WHERE id = :id")
+                    ->execute(['id' => $id]);
+            } catch (\Throwable $e) {
+                // Allow processing to continue on DBs not yet migrated with ocr_sent_at.
+            }
 
-            $stmt = $this->db->prepare("UPDATE invoices SET status = 'completed',
-                invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
-                vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
-                buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
-                total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
-                subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
-                bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
-                updated_at = NOW() WHERE id = :id");
-            $stmt->execute([
+            $ocrRequestStarted = true;
+            $extractionResult = extractInvoiceData($filePath, $saved['fileType'], $enabledFields, true);
+            $extracted = $extractionResult['data'] ?? $extractionResult;
+            if (isset($extractionResult['usage']) && is_array($extractionResult['usage'])) {
+                $ocrUsage = $extractionResult['usage'];
+            }
+
+            $invoiceUpdateParams = [
+                'documentType' => $extracted['documentType'] ?? null,
                 'invoiceNumber' => $extracted['invoiceNumber'] ?? null,
                 'invoiceDate' => $extracted['invoiceDate'] ?? null,
                 'dueDate' => $extracted['dueDate'] ?? null,
@@ -160,13 +202,54 @@ class Invoice extends BaseResource {
                 'confidence' => json_encode($extracted['confidence'] ?? []),
                 'raw' => json_encode($extracted),
                 'id' => $id,
-            ]);
+            ];
 
-            trackInvoiceProcessed($companyId, $file['size']);
+            try {
+                $stmt = $this->db->prepare("UPDATE invoices SET status = 'completed',
+                    document_type = :documentType,
+                    invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
+                    vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
+                    buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
+                    total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
+                    subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
+                    bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
+                    ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id");
+                $stmt->execute($invoiceUpdateParams);
+            } catch (\Throwable $e) {
+                // Fallback for DBs that do not have ocr_returned_at yet.
+                $stmt = $this->db->prepare("UPDATE invoices SET status = 'completed',
+                    document_type = :documentType,
+                    invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
+                    vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
+                    buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
+                    total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
+                    subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
+                    bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
+                    updated_at = NOW() WHERE id = :id");
+                $stmt->execute($invoiceUpdateParams);
+            }
+
+            completeOcrJob($ocrJobId, $ocrUsage);
+            trackInvoiceProcessed($companyId, $file['size'], $ocrUsage);
         } catch (\Throwable $e) {
             try {
-                $this->db->prepare("UPDATE invoices SET status = 'failed', processing_error = :error, updated_at = NOW() WHERE id = :id")
-                    ->execute(['error' => $e->getMessage(), 'id' => $id]);
+                try {
+                    $this->db->prepare("UPDATE invoices
+                        SET status = 'failed',
+                            processing_error = :error,
+                            ocr_returned_at = CASE WHEN ocr_sent_at IS NULL THEN ocr_returned_at ELSE NOW() END,
+                            updated_at = NOW()
+                        WHERE id = :id")
+                        ->execute(['error' => $e->getMessage(), 'id' => $id]);
+                } catch (\Throwable $e3) {
+                    $this->db->prepare("UPDATE invoices SET status = 'failed', processing_error = :error, updated_at = NOW() WHERE id = :id")
+                        ->execute(['error' => $e->getMessage(), 'id' => $id]);
+                }
+
+                if ($ocrRequestStarted) {
+                    failOcrJob($ocrJobId, $e->getMessage(), $ocrUsage);
+                    trackApiCall($companyId, $ocrUsage ?? ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-20250514']);
+                }
             } catch (\Throwable $e2) {
                 error_log("Invoice $id catch failed: " . $e2->getMessage());
             }
@@ -207,10 +290,11 @@ class Invoice extends BaseResource {
         if ($existing['company_id']) requireCompanyAccess($user, $existing['company_id'], 'manager');
 
         $data = $this->getRequestBody();
-        $allowed = ['invoice_number', 'invoice_date', 'due_date', 'vendor_name', 'vendor_address', 'vendor_vat_id', 'buyer_name', 'buyer_address', 'buyer_vat_id', 'total_amount', 'tax_amount', 'subtotal_amount', 'currency', 'po_number', 'payment_terms', 'bank_details', 'status'];
+        $allowed = ['document_type', 'invoice_number', 'invoice_date', 'due_date', 'vendor_name', 'vendor_address', 'vendor_vat_id', 'buyer_name', 'buyer_address', 'buyer_vat_id', 'total_amount', 'tax_amount', 'subtotal_amount', 'currency', 'po_number', 'payment_terms', 'bank_details', 'status'];
 
         // Also handle camelCase from frontend
         $camelMap = [
+            'documentType' => 'document_type',
             'invoiceNumber' => 'invoice_number', 'invoiceDate' => 'invoice_date', 'dueDate' => 'due_date',
             'vendorName' => 'vendor_name', 'vendorAddress' => 'vendor_address', 'vendorVatId' => 'vendor_vat_id',
             'buyerName' => 'buyer_name', 'buyerAddress' => 'buyer_address', 'buyerVatId' => 'buyer_vat_id',
@@ -298,23 +382,87 @@ class Invoice extends BaseResource {
         // Superadmin: add per-company breakdown when viewing all
         if ($user['role'] === 'superadmin' && !$companyId) {
             // Per-company invoice stats
-            $companySql = "SELECT c.id, c.name, c.code,
-                COUNT(i.id) as total_invoices,
-                SUM(CASE WHEN i.status='completed' THEN 1 ELSE 0 END) as completed,
-                SUM(CASE WHEN i.status='failed' THEN 1 ELSE 0 END) as failed,
-                MAX(i.created_at) as last_activity
-                FROM companies c
-                LEFT JOIN invoices i ON i.company_id = c.id
-                GROUP BY c.id, c.name, c.code
-                ORDER BY last_activity DESC";
-            $companyRows = $this->db->query($companySql)->fetchAll();
+            try {
+                $companySql = "SELECT c.id, c.name, c.code,
+                    COALESCE(s.plan, 'free') as plan,
+                    COALESCE(s.status, 'active') as billing_status,
+                    COUNT(i.id) as total_invoices,
+                    SUM(CASE WHEN i.status='completed' THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN i.status='failed' THEN 1 ELSE 0 END) as failed,
+                    MAX(i.created_at) as last_activity,
+                    MAX(i.ocr_sent_at) as last_ocr_sent_at,
+                    MAX(i.ocr_returned_at) as last_ocr_returned_at
+                    FROM companies c
+                    LEFT JOIN subscriptions s ON s.company_id = c.id
+                    LEFT JOIN invoices i ON i.company_id = c.id
+                    GROUP BY c.id, c.name, c.code, s.plan, s.status
+                    ORDER BY last_activity DESC";
+                $companyRows = $this->db->query($companySql)->fetchAll();
+            } catch (\Throwable $e) {
+                // Fallback for DBs without OCR lifecycle columns.
+                $companySql = "SELECT c.id, c.name, c.code,
+                    COALESCE(s.plan, 'free') as plan,
+                    COALESCE(s.status, 'active') as billing_status,
+                    COUNT(i.id) as total_invoices,
+                    SUM(CASE WHEN i.status='completed' THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN i.status='failed' THEN 1 ELSE 0 END) as failed,
+                    MAX(i.created_at) as last_activity
+                    FROM companies c
+                    LEFT JOIN subscriptions s ON s.company_id = c.id
+                    LEFT JOIN invoices i ON i.company_id = c.id
+                    GROUP BY c.id, c.name, c.code, s.plan, s.status
+                    ORDER BY last_activity DESC";
+                $companyRows = $this->db->query($companySql)->fetchAll();
+                foreach ($companyRows as &$companyRow) {
+                    $companyRow['last_ocr_sent_at'] = null;
+                    $companyRow['last_ocr_returned_at'] = null;
+                }
+                unset($companyRow);
+            }
 
             // Usage logs aggregated per company
-            $usageSql = "SELECT company_id, SUM(invoices_processed) as processed, SUM(api_calls_count) as api_calls, SUM(storage_used_bytes) as storage FROM usage_logs GROUP BY company_id";
-            $usageRows = $this->db->query($usageSql)->fetchAll();
+            try {
+                $usageSql = "SELECT
+                    company_id,
+                    SUM(invoices_processed) as processed,
+                    SUM(api_calls_count) as api_calls,
+                    SUM(storage_used_bytes) as storage,
+                    SUM(ocr_input_tokens) as ocr_input_tokens,
+                    SUM(ocr_output_tokens) as ocr_output_tokens,
+                    SUM(ocr_total_tokens) as ocr_total_tokens,
+                    SUM(ocr_cost_usd) as ocr_cost_usd
+                    FROM usage_logs
+                    GROUP BY company_id";
+                $usageRows = $this->db->query($usageSql)->fetchAll();
+            } catch (\Throwable $e) {
+                // Fallback for DBs without token/cost usage columns.
+                $usageSql = "SELECT
+                    company_id,
+                    SUM(invoices_processed) as processed,
+                    SUM(api_calls_count) as api_calls,
+                    SUM(storage_used_bytes) as storage
+                    FROM usage_logs
+                    GROUP BY company_id";
+                $usageRows = $this->db->query($usageSql)->fetchAll();
+                foreach ($usageRows as &$usageRow) {
+                    $usageRow['ocr_input_tokens'] = 0;
+                    $usageRow['ocr_output_tokens'] = 0;
+                    $usageRow['ocr_total_tokens'] = 0;
+                    $usageRow['ocr_cost_usd'] = 0;
+                }
+                unset($usageRow);
+            }
             $usageMap = [];
+            $totalInputTokens = 0;
+            $totalOutputTokens = 0;
+            $totalTokens = 0;
+            $totalOcrCostUsd = 0.0;
             foreach ($usageRows as $u) {
                 $usageMap[$u['company_id']] = $u;
+                $totalInputTokens += (int)($u['ocr_input_tokens'] ?? 0);
+                $totalOutputTokens += (int)($u['ocr_output_tokens'] ?? 0);
+                $totalTokens += (int)($u['ocr_total_tokens'] ?? 0);
+                $totalOcrCostUsd += (float)($u['ocr_cost_usd'] ?? 0);
             }
 
             $companies = [];
@@ -324,15 +472,33 @@ class Invoice extends BaseResource {
                     'companyId' => $c['id'],
                     'companyName' => $c['name'],
                     'companyCode' => $c['code'],
+                    'plan' => $c['plan'],
+                    'billingStatus' => $c['billing_status'],
                     'totalInvoices' => (int)($c['total_invoices'] ?? 0),
                     'completedCount' => (int)($c['completed'] ?? 0),
                     'failedCount' => (int)($c['failed'] ?? 0),
                     'apiCalls' => (int)($usage['api_calls'] ?? 0),
                     'storageUsedBytes' => (int)($usage['storage'] ?? 0),
+                    'inputTokens' => (int)($usage['ocr_input_tokens'] ?? 0),
+                    'outputTokens' => (int)($usage['ocr_output_tokens'] ?? 0),
+                    'totalTokens' => (int)($usage['ocr_total_tokens'] ?? 0),
+                    'tokenUsage' => (int)($usage['ocr_total_tokens'] ?? 0),
+                    'ocrCostUsd' => (float)($usage['ocr_cost_usd'] ?? 0),
+                    'costUsd' => (float)($usage['ocr_cost_usd'] ?? 0),
                     'lastActivity' => $c['last_activity'],
+                    'lastOcrSentAt' => $c['last_ocr_sent_at'],
+                    'lastOcrReturnedAt' => $c['last_ocr_returned_at'],
+                    'lastSentAt' => $c['last_ocr_sent_at'],
+                    'lastReturnedAt' => $c['last_ocr_returned_at'],
                 ];
             }
             $result['companies'] = $companies;
+            $result['tokenUsageTotals'] = [
+                'inputTokens' => $totalInputTokens,
+                'outputTokens' => $totalOutputTokens,
+                'totalTokens' => $totalTokens,
+                'ocrCostUsd' => round($totalOcrCostUsd, 6),
+            ];
         }
 
         sendJSON($result);
@@ -366,6 +532,7 @@ class Invoice extends BaseResource {
         if ($invoice['company_id']) requireCompanyAccess($user, $invoice['company_id']);
 
         $meta = [
+            'documentType' => $invoice['document_type'],
             'invoiceNumber' => $invoice['invoice_number'],
             'invoiceDate' => $invoice['invoice_date'],
             'dueDate' => $invoice['due_date'],

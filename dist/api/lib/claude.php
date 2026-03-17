@@ -3,6 +3,7 @@
 // All available extraction fields
 function getAllExtractionFields() {
     return [
+        'documentType' => ['type' => 'string', 'enum' => ['invoice', 'proforma', 'credit_note'], 'description' => 'Type of document: "invoice" for commercial/standard invoices, "proforma" for proforma/advance invoices (išankstinė sąskaita faktūra), "credit_note" for credit notes (kreditinė sąskaita faktūra)'],
         'invoiceNumber' => ['type' => 'string', 'description' => 'The invoice number/ID as printed on the document'],
         'invoiceDate' => ['type' => 'string', 'description' => 'Invoice issue date in YYYY-MM-DD format'],
         'dueDate' => ['type' => ['string', 'null'], 'description' => 'Payment due date in YYYY-MM-DD format, or null if not stated'],
@@ -111,7 +112,7 @@ Rules:
         $properties = $filteredProperties;
         $confidenceProps = $filteredConfidence;
         // Required: only fields that exist in enabled set
-        $defaultRequired = ['invoiceNumber', 'vendorName', 'totalAmount', 'currency'];
+        $defaultRequired = ['documentType', 'invoiceNumber', 'vendorName', 'totalAmount', 'currency'];
         $required = array_values(array_intersect($defaultRequired, $enabledFields));
         $required[] = 'confidence';
 
@@ -122,7 +123,7 @@ Rules:
         foreach (array_keys($allFields) as $k) {
             $confidenceProps[$k] = ['type' => 'number'];
         }
-        $required = ['invoiceNumber', 'vendorName', 'totalAmount', 'currency', 'confidence'];
+        $required = ['documentType', 'invoiceNumber', 'vendorName', 'totalAmount', 'currency', 'confidence'];
     }
 
     $properties['confidence'] = [

@@ -65,6 +65,22 @@ function getBillingVariant(status: string): "default" | "secondary" | "destructi
   return "secondary";
 }
 
+function getTokenUsage(company: any): number | string | null {
+  return company?.tokenUsage ?? company?.totalTokens ?? company?.tokensUsed ?? null;
+}
+
+function getOcrCost(company: any): number | string | null {
+  return company?.ocrCostUsd ?? company?.costUsd ?? null;
+}
+
+function getLastSent(company: any): string | null {
+  return company?.lastOcrSentAt ?? company?.lastSentAt ?? company?.ocrSentAt ?? company?.ocrStartedAt ?? null;
+}
+
+function getLastReturned(company: any): string | null {
+  return company?.lastOcrReturnedAt ?? company?.lastReturnedAt ?? company?.ocrReturnedAt ?? company?.returnedAt ?? null;
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const { selectedCompany } = useCompany();
@@ -240,10 +256,10 @@ export default function Dashboard() {
                     <TableCell>{plan}</TableCell>
                     <TableCell><Badge variant={getBillingVariant(billingStatus)}>{billingStatus}</Badge></TableCell>
                     <TableCell className="text-center font-mono">{formatNumber(c.totalInvoices)}</TableCell>
-                    <TableCell className="text-right font-mono">{formatNumber(c.tokenUsage ?? c.tokensUsed)}</TableCell>
-                    <TableCell className="text-right font-mono">{formatUsd(c.ocrCostUsd ?? c.costUsd)}</TableCell>
-                    <TableCell className="text-right text-sm text-gray-500">{formatDateTime(c.lastSentAt ?? c.ocrStartedAt)}</TableCell>
-                    <TableCell className="text-right text-sm text-gray-500">{formatDateTime(c.lastReturnedAt ?? c.returnedAt)}</TableCell>
+                    <TableCell className="text-right font-mono">{formatNumber(getTokenUsage(c))}</TableCell>
+                    <TableCell className="text-right font-mono">{formatUsd(getOcrCost(c))}</TableCell>
+                    <TableCell className="text-right text-sm text-gray-500">{formatDateTime(getLastSent(c))}</TableCell>
+                    <TableCell className="text-right text-sm text-gray-500">{formatDateTime(getLastReturned(c))}</TableCell>
                   </TableRow>
                 )})}
                 {filteredCompanies.length === 0 && (

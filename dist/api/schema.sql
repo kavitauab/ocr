@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS `invoices` (
   `processing_error` TEXT,
   `ocr_sent_at` DATETIME NULL,
   `ocr_returned_at` DATETIME NULL,
+  `document_type` VARCHAR(50) DEFAULT NULL,
   `invoice_number` VARCHAR(255),
   `invoice_date` VARCHAR(20),
   `due_date` VARCHAR(20),

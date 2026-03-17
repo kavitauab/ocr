@@ -41,6 +41,7 @@ export default function CompanyEdit() {
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const allExtractionFields: [string, string][] = [
+    ["documentType", "Document Type"],
     ["invoiceNumber", "Invoice Number"],
     ["invoiceDate", "Invoice Date"],
     ["dueDate", "Due Date"],

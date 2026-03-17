@@ -61,8 +61,15 @@ export default function InvoiceDetail() {
   if (isLoading) return <div className="p-8 text-center text-gray-500">Loading...</div>;
   if (!invoice) return <div className="p-8 text-center text-gray-500">Invoice not found</div>;
 
+  const documentTypeLabels: Record<string, string> = {
+    invoice: "Invoice",
+    proforma: "Proforma",
+    credit_note: "Credit Note",
+  };
+
   const startEdit = () => {
     setForm({
+      documentType: invoice.documentType || "",
       invoiceNumber: invoice.invoiceNumber || "",
       invoiceDate: invoice.invoiceDate || "",
       dueDate: invoice.dueDate || "",
@@ -84,6 +91,7 @@ export default function InvoiceDetail() {
   const confidence = invoice.confidenceScores || {};
 
   const fields: [string, string][] = [
+    ["documentType", "Document Type"],
     ["invoiceNumber", "Invoice Number"],
     ["invoiceDate", "Invoice Date"],
     ["dueDate", "Due Date"],
@@ -150,9 +158,32 @@ export default function InvoiceDetail() {
                     {label}
                   </span>
                   {editing ? (
-                    <Input value={form[key] || ""} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
+                    key === "documentType" ? (
+                      <select
+                        value={form[key] || ""}
+                        onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                        className="border rounded px-3 py-1.5 text-sm"
+                      >
+                        <option value="">—</option>
+                        <option value="invoice">Invoice</option>
+                        <option value="proforma">Proforma</option>
+                        <option value="credit_note">Credit Note</option>
+                      </select>
+                    ) : (
+                      <Input value={form[key] || ""} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
+                    )
                   ) : (
-                    <span className="text-sm font-medium">{value || "—"}</span>
+                    key === "documentType" && value ? (
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                        value === "credit_note" ? "bg-red-100 text-red-700" :
+                        value === "proforma" ? "bg-yellow-100 text-yellow-700" :
+                        "bg-blue-100 text-blue-700"
+                      }`}>
+                        {documentTypeLabels[value] || value}
+                      </span>
+                    ) : (
+                      <span className="text-sm font-medium">{value || "—"}</span>
+                    )
                   )}
                 </div>
               );

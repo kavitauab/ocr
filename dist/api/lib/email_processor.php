@@ -86,26 +86,25 @@ function processCompanyEmails($companyId) {
 
                     try {
                         $filePath = getFilePath($saved['storedFilename']);
+                        $ocrRequestStarted = false;
                         $ocrUsage = ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-20250514'];
                         $ocrJobId = startOcrJob($invoiceId, $companyId, 'anthropic', 'claude-sonnet-4-20250514');
-                        $db->prepare("UPDATE invoices SET ocr_sent_at = NOW(), updated_at = NOW() WHERE id = :id")
-                            ->execute(['id' => $invoiceId]);
+                        try {
+                            $db->prepare("UPDATE invoices SET ocr_sent_at = NOW(), updated_at = NOW() WHERE id = :id")
+                                ->execute(['id' => $invoiceId]);
+                        } catch (Throwable $e) {
+                            // Allow processing to continue on DBs not yet migrated with ocr_sent_at.
+                        }
 
+                        $ocrRequestStarted = true;
                         $extractionResult = extractInvoiceData($filePath, $saved['fileType'], null, true);
                         $extracted = $extractionResult['data'] ?? $extractionResult;
                         if (isset($extractionResult['usage']) && is_array($extractionResult['usage'])) {
                             $ocrUsage = $extractionResult['usage'];
                         }
 
-                        $stmt = $db->prepare("UPDATE invoices SET status = 'completed',
-                            invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
-                            vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
-                            buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
-                            total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
-                            subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
-                            bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
-                            ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id");
-                        $stmt->execute([
+                        $invoiceUpdateParams = [
+                            'documentType' => $extracted['documentType'] ?? null,
                             'invoiceNumber' => $extracted['invoiceNumber'] ?? null,
                             'invoiceDate' => $extracted['invoiceDate'] ?? null,
                             'dueDate' => $extracted['dueDate'] ?? null,
@@ -125,17 +124,53 @@ function processCompanyEmails($companyId) {
                             'confidence' => json_encode($extracted['confidence'] ?? []),
                             'raw' => json_encode($extracted),
                             'id' => $invoiceId,
-                        ]);
+                        ];
+                        try {
+                            $stmt = $db->prepare("UPDATE invoices SET status = 'completed',
+                                document_type = :documentType,
+                                invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
+                                vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
+                                buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
+                                total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
+                                subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
+                                bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
+                                ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id");
+                            $stmt->execute($invoiceUpdateParams);
+                        } catch (Throwable $e) {
+                            // Fallback for DBs without ocr_returned_at.
+                            $stmt = $db->prepare("UPDATE invoices SET status = 'completed',
+                                document_type = :documentType,
+                                invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
+                                vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
+                                buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
+                                total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
+                                subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
+                                bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
+                                updated_at = NOW() WHERE id = :id");
+                            $stmt->execute($invoiceUpdateParams);
+                        }
                         completeOcrJob($ocrJobId, $ocrUsage);
                         trackInvoiceProcessed($companyId, $attachment['size'] ?? strlen($buffer), $ocrUsage);
                         $processed++;
                     } catch (Exception $e) {
-                        $db->prepare("UPDATE invoices SET status = 'failed', processing_error = :error, ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id")
-                            ->execute(['error' => $e->getMessage(), 'id' => $invoiceId]);
-                        if (isset($ocrJobId)) {
-                            failOcrJob($ocrJobId, $e->getMessage(), $ocrUsage ?? null);
+                        try {
+                            $db->prepare("UPDATE invoices
+                                SET status = 'failed',
+                                    processing_error = :error,
+                                    ocr_returned_at = CASE WHEN ocr_sent_at IS NULL THEN ocr_returned_at ELSE NOW() END,
+                                    updated_at = NOW()
+                                WHERE id = :id")
+                                ->execute(['error' => $e->getMessage(), 'id' => $invoiceId]);
+                        } catch (Throwable $e2) {
+                            $db->prepare("UPDATE invoices SET status = 'failed', processing_error = :error, updated_at = NOW() WHERE id = :id")
+                                ->execute(['error' => $e->getMessage(), 'id' => $invoiceId]);
                         }
-                        trackApiCall($companyId, $ocrUsage ?? ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-20250514']);
+                        if (!empty($ocrRequestStarted)) {
+                            if (isset($ocrJobId)) {
+                                failOcrJob($ocrJobId, $e->getMessage(), $ocrUsage ?? null);
+                            }
+                            trackApiCall($companyId, $ocrUsage ?? ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-20250514']);
+                        }
                     }
                 } catch (Exception $e) {
                     $errors[] = "Attachment {$attachment['name']}: " . $e->getMessage();
