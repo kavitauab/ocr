@@ -3,6 +3,7 @@
 require_once __DIR__ . '/microsoft_graph.php';
 require_once __DIR__ . '/file_storage.php';
 require_once __DIR__ . '/claude.php';
+require_once __DIR__ . '/usage.php';
 
 $ALLOWED_ATTACHMENT_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
 
@@ -85,7 +86,16 @@ function processCompanyEmails($companyId) {
 
                     try {
                         $filePath = getFilePath($saved['storedFilename']);
-                        $extracted = extractInvoiceData($filePath, $saved['fileType']);
+                        $ocrUsage = ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-20250514'];
+                        $ocrJobId = startOcrJob($invoiceId, $companyId, 'anthropic', 'claude-sonnet-4-20250514');
+                        $db->prepare("UPDATE invoices SET ocr_sent_at = NOW(), updated_at = NOW() WHERE id = :id")
+                            ->execute(['id' => $invoiceId]);
+
+                        $extractionResult = extractInvoiceData($filePath, $saved['fileType'], null, true);
+                        $extracted = $extractionResult['data'] ?? $extractionResult;
+                        if (isset($extractionResult['usage']) && is_array($extractionResult['usage'])) {
+                            $ocrUsage = $extractionResult['usage'];
+                        }
 
                         $stmt = $db->prepare("UPDATE invoices SET status = 'completed',
                             invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
@@ -94,7 +104,7 @@ function processCompanyEmails($companyId) {
                             total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
                             subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
                             bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
-                            updated_at = NOW() WHERE id = :id");
+                            ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id");
                         $stmt->execute([
                             'invoiceNumber' => $extracted['invoiceNumber'] ?? null,
                             'invoiceDate' => $extracted['invoiceDate'] ?? null,
@@ -116,9 +126,16 @@ function processCompanyEmails($companyId) {
                             'raw' => json_encode($extracted),
                             'id' => $invoiceId,
                         ]);
+                        completeOcrJob($ocrJobId, $ocrUsage);
+                        trackInvoiceProcessed($companyId, $attachment['size'] ?? strlen($buffer), $ocrUsage);
                         $processed++;
                     } catch (Exception $e) {
-                        $db->prepare("UPDATE invoices SET status = 'failed', processing_error = :error WHERE id = :id")->execute(['error' => $e->getMessage(), 'id' => $invoiceId]);
+                        $db->prepare("UPDATE invoices SET status = 'failed', processing_error = :error, ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id")
+                            ->execute(['error' => $e->getMessage(), 'id' => $invoiceId]);
+                        if (isset($ocrJobId)) {
+                            failOcrJob($ocrJobId, $e->getMessage(), $ocrUsage ?? null);
+                        }
+                        trackApiCall($companyId, $ocrUsage ?? ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-20250514']);
                     }
                 } catch (Exception $e) {
                     $errors[] = "Attachment {$attachment['name']}: " . $e->getMessage();
