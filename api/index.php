@@ -14,12 +14,6 @@ $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $path = preg_replace('#^/api#', '', $path);
 $pathParts = array_values(array_filter(explode('/', $path)));
 
-// Temporary migration endpoint
-if (($pathParts[0] ?? '') === 'migrate-fix-varchar') {
-    require_once __DIR__ . '/fix_varchar.php';
-    exit;
-}
-
 // Health check
 if (($pathParts[0] ?? '') === 'health') {
     try {
