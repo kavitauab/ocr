@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DropdownMenu, DropdownItem, DropdownSeparator } from "@/components/ui/dropdown-menu";
 import { getStatusClasses, formatRelativeTime } from "@/lib/ui-utils";
 import { toast } from "sonner";
 import {
@@ -20,7 +19,6 @@ import {
   Download,
   Pencil,
   X,
-  MoreHorizontal,
   Clock,
   FileText,
   ExternalLink,
@@ -136,11 +134,11 @@ export default function InvoiceDetail() {
   });
 
   if (isLoading) return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       <Skeleton className="h-8 w-64" />
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <div className="lg:col-span-4"><Skeleton className="h-96 w-full" /></div>
-        <div className="lg:col-span-8"><Skeleton className="h-96 w-full" /></div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+        <div className="lg:col-span-5"><Skeleton className="h-96 w-full" /></div>
+        <div className="lg:col-span-7"><Skeleton className="h-96 w-full" /></div>
       </div>
     </div>
   );
@@ -189,8 +187,8 @@ export default function InvoiceDetail() {
   ];
 
   return (
-    <div className="space-y-3">
-      {/* Header: back + title + badges + actions — single row */}
+    <div className="space-y-2">
+      {/* Header: back + title + badges + action buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div className="flex items-center gap-2">
           <button onClick={() => navigate("/invoices")} className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted transition-colors shrink-0">
@@ -213,56 +211,49 @@ export default function InvoiceDetail() {
         </div>
 
         <div className="flex items-center gap-1.5">
-          {!editing ? (
-            <>
-              <Button variant="outline" size="sm" onClick={startEdit} className="gap-1 h-7 text-xs px-2.5">
-                <Pencil className="h-3 w-3" />Edit
-              </Button>
-              <DropdownMenu
-                trigger={
-                  <Button variant="outline" size="sm" className="h-7 w-7 p-0">
-                    <MoreHorizontal className="h-3.5 w-3.5" />
-                  </Button>
-                }
-              >
-                <DropdownItem onClick={() => { window.open(`/api/invoices/${id}/metadata?access_token=${encodeURIComponent(token || "")}`, "_blank"); }}>
-                  <Download className="h-3.5 w-3.5" />Download JSON
-                </DropdownItem>
-                <DropdownItem onClick={() => vecticumMutation.mutate()}>
-                  <Send className="h-3.5 w-3.5" />Send to Vecticum
-                </DropdownItem>
-                <DropdownSeparator />
-                <DropdownItem variant="destructive" onClick={() => { if (confirm("Delete this invoice?")) deleteMutation.mutate(); }}>
-                  <Trash2 className="h-3.5 w-3.5" />Delete
-                </DropdownItem>
-              </DropdownMenu>
-            </>
-          ) : (
-            <>
-              <Button size="sm" onClick={() => updateMutation.mutate(form)} disabled={updateMutation.isPending} className="gap-1 h-7 text-xs px-2.5">
-                <Save className="h-3 w-3" />Save
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setEditing(false)} className="gap-1 h-7 text-xs px-2.5">
-                <X className="h-3 w-3" />Cancel
-              </Button>
-            </>
-          )}
+          <Button variant="outline" size="sm" className="gap-1 h-7 text-xs px-2.5" onClick={() => { window.open(`/api/invoices/${id}/metadata?access_token=${encodeURIComponent(token || "")}`, "_blank"); }}>
+            <Download className="h-3 w-3" />JSON
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1 h-7 text-xs px-2.5" onClick={() => vecticumMutation.mutate()} disabled={vecticumMutation.isPending}>
+            <Send className="h-3 w-3" />Vecticum
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1 h-7 text-xs px-2.5 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => { if (confirm("Delete this invoice?")) deleteMutation.mutate(); }}>
+            <Trash2 className="h-3 w-3" />Delete
+          </Button>
         </div>
       </div>
 
       {/* Error banner */}
       {invoice.status === "failed" && invoice.processingError && (
-        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-          <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
-          <p className="text-sm text-red-700">{invoice.processingError}</p>
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+          <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+          <p className="text-xs text-red-700">{invoice.processingError}</p>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left: Details — compact */}
-        <div className={`lg:col-span-4 space-y-3 ${editing ? "ring-2 ring-primary/10 rounded-xl p-1 -m-1" : ""}`}>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+        {/* Left: Details */}
+        <div className="lg:col-span-5 space-y-3">
           <Card className="overflow-hidden">
             <CardContent className="p-0">
+              {/* Edit button row inside the card */}
+              <div className="flex items-center justify-end px-4 pt-2.5 pb-0">
+                {!editing ? (
+                  <Button variant="outline" size="sm" onClick={startEdit} className="gap-1 h-7 text-xs px-2.5">
+                    <Pencil className="h-3 w-3" />Edit
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <Button size="sm" onClick={() => updateMutation.mutate(form)} disabled={updateMutation.isPending} className="gap-1 h-7 text-xs px-2.5">
+                      <Save className="h-3 w-3" />Save
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setEditing(false)} className="gap-1 h-7 text-xs px-2.5">
+                      <X className="h-3 w-3" />Cancel
+                    </Button>
+                  </div>
+                )}
+              </div>
+
               {fieldSections.map((section, si) => (
                 <div key={section.title}>
                   {si > 0 && <div className="border-t border-border/50" />}
@@ -275,7 +266,7 @@ export default function InvoiceDetail() {
                       const conf = confidence[key];
                       return (
                         <div key={key} className="flex items-center gap-2">
-                          <div className="flex items-center gap-1 w-20 shrink-0">
+                          <div className="flex items-center gap-1 w-24 shrink-0">
                             {!editing && <ConfidenceDot score={conf} />}
                             <span className="text-[11px] text-muted-foreground">{label}</span>
                           </div>
@@ -287,7 +278,7 @@ export default function InvoiceDetail() {
                                   onChange={(e) => setForm({ ...form, [key]: e.target.value })}
                                   className="w-full h-7 rounded-md border border-border bg-card px-2 text-xs"
                                 >
-                                  <option value="">\u2014</option>
+                                  <option value="">{"\u2014"}</option>
                                   <option value="invoice">Invoice</option>
                                   <option value="proforma">Proforma</option>
                                   <option value="credit_note">Credit Note</option>
@@ -320,7 +311,7 @@ export default function InvoiceDetail() {
                   <div className="px-4 pb-3 space-y-1.5">
                     {invoice.bankDetails && (
                       <div className="flex items-start gap-2">
-                        <div className="flex items-center gap-1 w-20 shrink-0 pt-0.5">
+                        <div className="flex items-center gap-1 w-24 shrink-0 pt-0.5">
                           <ConfidenceDot score={confidence.bankDetails} />
                           <span className="text-[11px] text-muted-foreground">Bank</span>
                         </div>
@@ -329,7 +320,7 @@ export default function InvoiceDetail() {
                     )}
                     {invoice.paymentTerms && (
                       <div className="flex items-start gap-2">
-                        <div className="flex items-center gap-1 w-20 shrink-0 pt-0.5">
+                        <div className="flex items-center gap-1 w-24 shrink-0 pt-0.5">
                           <ConfidenceDot score={confidence.paymentTerms} />
                           <span className="text-[11px] text-muted-foreground">Terms</span>
                         </div>
@@ -342,7 +333,7 @@ export default function InvoiceDetail() {
             </CardContent>
           </Card>
 
-          {/* Timeline — compact */}
+          {/* Timeline */}
           <Card>
             <CardHeader className="pb-1 px-4 pt-3">
               <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
@@ -373,7 +364,7 @@ export default function InvoiceDetail() {
             </CardContent>
           </Card>
 
-          {/* Metadata — compact */}
+          {/* Metadata */}
           <Card>
             <CardContent className="py-3 px-4">
               <div className="space-y-1.5 text-[11px]">
@@ -385,10 +376,10 @@ export default function InvoiceDetail() {
           </Card>
         </div>
 
-        {/* Right: Preview — wider */}
-        <div className="lg:col-span-8">
-          <Card className="overflow-hidden sticky top-4">
-            <CardHeader className="pb-1 px-4 pt-3">
+        {/* Right: Preview */}
+        <div className="lg:col-span-7">
+          <Card className="overflow-hidden sticky top-2">
+            <CardHeader className="pb-1 px-4 pt-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-xs font-semibold">Preview</CardTitle>
                 <a href={fileUrl} target="_blank" rel="noreferrer" className="text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
@@ -398,7 +389,7 @@ export default function InvoiceDetail() {
             </CardHeader>
             <CardContent className="p-2">
               {invoice.fileType === "pdf" ? (
-                <iframe src={fileUrl} className="w-full h-[calc(100vh-10rem)] rounded-lg border border-border/50" />
+                <iframe src={fileUrl} className="w-full h-[calc(100vh-8rem)] rounded-lg border border-border/50" />
               ) : (
                 <img src={fileUrl} alt="Invoice" className="max-w-full rounded-lg" />
               )}
