@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import api from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Save, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, Search, UserPlus } from "lucide-react";
+
+interface SearchUser {
+  id: string;
+  name: string;
+  email: string;
+}
 
 export default function CompanyEdit() {
   const { id } = useParams<{ id: string }>();
@@ -17,7 +23,13 @@ export default function CompanyEdit() {
   const isNew = !id;
 
   const [showAddMember, setShowAddMember] = useState(false);
-  const [memberForm, setMemberForm] = useState({ email: "", role: "viewer" });
+  const [memberMode, setMemberMode] = useState<"search" | "create">("search");
+  const [memberForm, setMemberForm] = useState({ email: "", name: "", password: "", role: "manager" });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchUser[]>([]);
+  const [selectedUser, setSelectedUser] = useState<SearchUser | null>(null);
+  const [showResults, setShowResults] = useState(false);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   const [form, setForm] = useState({
     name: "", code: "", logoUrl: "",
@@ -58,7 +70,11 @@ export default function CompanyEdit() {
 
   const addMemberMutation = useMutation({
     mutationFn: (body: any) => api.post(`/companies/${id}/members`, body).then((r) => r.data),
-    onSuccess: () => { refetchMembers(); setShowAddMember(false); setMemberForm({ email: "", role: "viewer" }); toast.success("Member added"); },
+    onSuccess: () => {
+      refetchMembers();
+      resetMemberDialog();
+      toast.success("Member added");
+    },
     onError: (err: any) => toast.error(err.response?.data?.error || "Failed to add member"),
   });
 
@@ -76,6 +92,54 @@ export default function CompanyEdit() {
   });
 
   const set = (key: string, value: any) => setForm((prev) => ({ ...prev, [key]: value }));
+
+  const resetMemberDialog = () => {
+    setShowAddMember(false);
+    setMemberMode("search");
+    setMemberForm({ email: "", name: "", password: "", role: "manager" });
+    setSearchQuery("");
+    setSearchResults([]);
+    setSelectedUser(null);
+    setShowResults(false);
+  };
+
+  const handleSearch = (q: string) => {
+    setSearchQuery(q);
+    setSelectedUser(null);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    if (q.length < 2) { setSearchResults([]); setShowResults(false); return; }
+    searchTimeout.current = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/users/search?q=${encodeURIComponent(q)}`);
+        setSearchResults(data.users || []);
+        setShowResults(true);
+      } catch {
+        setSearchResults([]);
+      }
+    }, 300);
+  };
+
+  const selectUser = (u: SearchUser) => {
+    setSelectedUser(u);
+    setSearchQuery(u.email);
+    setMemberForm((prev) => ({ ...prev, email: u.email, name: u.name }));
+    setShowResults(false);
+  };
+
+  const handleAddMember = () => {
+    if (memberMode === "search" && selectedUser) {
+      addMemberMutation.mutate({ email: selectedUser.email, role: memberForm.role });
+    } else if (memberMode === "create") {
+      addMemberMutation.mutate({
+        email: memberForm.email,
+        name: memberForm.name,
+        password: memberForm.password,
+        role: memberForm.role,
+      });
+    }
+  };
+
+  const canAdd = memberMode === "search" ? !!selectedUser : (!!memberForm.email && !!memberForm.name && !!memberForm.password);
 
   const testEmail = async () => {
     try {
@@ -197,10 +261,85 @@ export default function CompanyEdit() {
         <Save className="h-3 w-3 mr-1" />{isNew ? "Create" : "Save Changes"}
       </Button>
 
-      <Dialog open={showAddMember} onClose={() => setShowAddMember(false)}>
+      {/* Add Member Dialog */}
+      <Dialog open={showAddMember} onClose={resetMemberDialog}>
         <DialogTitle>Add Member</DialogTitle>
-        <div className="space-y-3 mt-4">
-          <div><label className="text-sm font-medium">User Email</label><Input value={memberForm.email} onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })} placeholder="user@example.com" /></div>
+        <div className="space-y-4 mt-4">
+          {/* Mode tabs */}
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+            <button
+              onClick={() => { setMemberMode("search"); setSelectedUser(null); }}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded text-sm font-medium transition-colors ${memberMode === "search" ? "bg-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+            >
+              <Search className="h-3.5 w-3.5" />Existing User
+            </button>
+            <button
+              onClick={() => setMemberMode("create")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded text-sm font-medium transition-colors ${memberMode === "create" ? "bg-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+            >
+              <UserPlus className="h-3.5 w-3.5" />New User
+            </button>
+          </div>
+
+          {memberMode === "search" ? (
+            <div className="relative">
+              <label className="text-sm font-medium">Search by name or email</label>
+              <Input
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                onFocus={() => searchResults.length > 0 && setShowResults(true)}
+                placeholder="Type to search..."
+                autoFocus
+              />
+              {showResults && searchResults.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {searchResults.map((u) => (
+                    <button
+                      key={u.id}
+                      onClick={() => selectUser(u)}
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b last:border-b-0"
+                    >
+                      <div className="text-sm font-medium">{u.name}</div>
+                      <div className="text-xs text-gray-500">{u.email}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {showResults && searchResults.length === 0 && searchQuery.length >= 2 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg p-3">
+                  <p className="text-sm text-gray-500">No users found.</p>
+                  <button onClick={() => { setMemberMode("create"); setMemberForm((f) => ({ ...f, email: searchQuery })); }} className="text-sm text-blue-600 hover:underline mt-1">
+                    Create new user instead
+                  </button>
+                </div>
+              )}
+              {selectedUser && (
+                <div className="mt-2 p-2 bg-blue-50 rounded-lg flex items-center gap-2">
+                  <div className="flex-1">
+                    <span className="text-sm font-medium">{selectedUser.name}</span>
+                    <span className="text-xs text-gray-500 ml-2">{selectedUser.email}</span>
+                  </div>
+                  <button onClick={() => { setSelectedUser(null); setSearchQuery(""); }} className="text-xs text-gray-400 hover:text-gray-600">clear</button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="text-sm font-medium">Name</label>
+                <Input value={memberForm.name} onChange={(e) => setMemberForm({ ...memberForm, name: e.target.value })} placeholder="John Doe" autoFocus />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Email</label>
+                <Input value={memberForm.email} onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })} placeholder="user@example.com" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Password</label>
+                <Input type="password" value={memberForm.password} onChange={(e) => setMemberForm({ ...memberForm, password: e.target.value })} placeholder="Initial password" />
+              </div>
+            </>
+          )}
+
           <div>
             <label className="text-sm font-medium">Role</label>
             <select value={memberForm.role} onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })} className="w-full border rounded px-3 py-1.5 text-sm">
@@ -210,9 +349,12 @@ export default function CompanyEdit() {
               <option value="owner">Owner</option>
             </select>
           </div>
+
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowAddMember(false)}>Cancel</Button>
-            <Button onClick={() => addMemberMutation.mutate(memberForm)} disabled={addMemberMutation.isPending}>Add</Button>
+            <Button variant="outline" onClick={resetMemberDialog}>Cancel</Button>
+            <Button onClick={handleAddMember} disabled={addMemberMutation.isPending || !canAdd}>
+              {memberMode === "create" ? <><UserPlus className="h-3 w-3 mr-1" />Create & Add</> : "Add"}
+            </Button>
           </div>
         </div>
       </Dialog>

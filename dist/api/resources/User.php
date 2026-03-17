@@ -59,6 +59,15 @@ class User extends BaseResource {
         sendJSON(['success' => true]);
     }
 
+    public function search($id = null) {
+        requireRole('superadmin');
+        $q = $_GET['q'] ?? '';
+        if (strlen($q) < 2) sendJSON(['users' => []]);
+        $stmt = $this->db->prepare("SELECT id, name, email FROM users WHERE name LIKE :q OR email LIKE :q2 ORDER BY name LIMIT 10");
+        $stmt->execute(['q' => "%$q%", 'q2' => "%$q%"]);
+        sendJSON(['users' => $stmt->fetchAll()]);
+    }
+
     // Called for /api/user/companies
     public function companies($id = null) {
         $user = getAuthUser();

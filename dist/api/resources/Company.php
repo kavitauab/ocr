@@ -143,7 +143,20 @@ class Company extends BaseResource {
             $stmt = $this->db->prepare("SELECT * FROM users WHERE email = :email");
             $stmt->execute(['email' => $email]);
             $targetUser = $stmt->fetch();
-            if (!$targetUser) sendJSON(['error' => 'User not found. They must have an account first.'], 404);
+
+            // Auto-create user if not found and name+password provided
+            if (!$targetUser) {
+                $name = $data['name'] ?? '';
+                $password = $data['password'] ?? '';
+                if (!$name || !$password) {
+                    sendJSON(['error' => 'User not found. Provide name and password to create a new account.'], 404);
+                }
+                $newId = generateId();
+                $passwordHash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+                $this->db->prepare("INSERT INTO users (id, name, email, password_hash, role) VALUES (:id, :name, :email, :hash, 'user')")
+                    ->execute(['id' => $newId, 'name' => $name, 'email' => $email, 'hash' => $passwordHash]);
+                $targetUser = ['id' => $newId, 'name' => $name, 'email' => $email];
+            }
 
             $stmt = $this->db->prepare("SELECT id FROM user_companies WHERE user_id = :userId AND company_id = :companyId");
             $stmt->execute(['userId' => $targetUser['id'], 'companyId' => $id]);
