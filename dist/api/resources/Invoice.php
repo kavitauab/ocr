@@ -91,6 +91,7 @@ class Invoice extends BaseResource {
     }
 
     public function create() {
+        set_time_limit(120); // Claude API can take up to 60s for extraction
         $user = getAuthUser();
         $companyId = $_POST['companyId'] ?? '';
 
