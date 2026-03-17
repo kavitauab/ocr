@@ -3,18 +3,16 @@ set -e
 
 MSG=${1:-"deploy"}
 
+echo "Cleaning old dist..."
+rm -rf dist/assets dist/api
+
 echo "Building frontend..."
 npm run build
 
 echo "Copying API to dist..."
 mkdir -p dist/api
 cp -r api/* dist/api/
-rm -rf dist/api/node_modules
-
-echo "Restoring API .env..."
-if [ -f api/.env ]; then
-  cp api/.env dist/api/.env
-fi
+rm -f dist/api/.env
 
 echo "Copying .htaccess..."
 cp .htaccess dist/

@@ -1,0 +1,138 @@
+<?php
+
+function getVecticumToken($company) {
+    if (!empty($company['vecticum_access_token']) && !empty($company['vecticum_token_expires'])) {
+        $expires = strtotime($company['vecticum_token_expires']);
+        if ($expires > time() + 300) {
+            return $company['vecticum_access_token'];
+        }
+    }
+
+    if (empty($company['vecticum_api_base_url']) || empty($company['vecticum_client_id']) || empty($company['vecticum_client_secret'])) {
+        throw new Exception('Vecticum credentials not configured');
+    }
+
+    $ch = curl_init($company['vecticum_api_base_url'] . '/oauth/token');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            'Accept: application/json',
+            'Content-Type: application/json',
+            'Authorization: ' . json_encode(['client_id' => $company['vecticum_client_id'], 'client_secret' => $company['vecticum_client_secret']]),
+        ],
+        CURLOPT_TIMEOUT => 30,
+    ]);
+
+    $response = curl_exec($ch);
+    curl_close($ch);
+
+    $data = json_decode($response, true);
+    if (empty($data['success']) || empty($data['token'])) {
+        throw new Exception('Vecticum auth failed: ' . ($data['message'] ?? 'No token returned'));
+    }
+
+    $expiresAt = date('Y-m-d H:i:s', time() + 23 * 3600);
+    $db = getDBConnection();
+    $stmt = $db->prepare("UPDATE companies SET vecticum_access_token = :token, vecticum_token_expires = :expires WHERE id = :id");
+    $stmt->execute(['token' => $data['token'], 'expires' => $expiresAt, 'id' => $company['id']]);
+
+    return $data['token'];
+}
+
+function testVecticumConnection($company) {
+    try {
+        $token = getVecticumToken($company);
+        if (!empty($company['vecticum_company_id'])) {
+            $ch = curl_init($company['vecticum_api_base_url'] . '/' . $company['vecticum_company_id']);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => ['Accept: application/json', "Authorization: Bearer $token"],
+                CURLOPT_TIMEOUT => 15,
+            ]);
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($httpCode !== 200) return ['success' => false, 'error' => "Endpoint returned $httpCode"];
+            $data = json_decode($response, true);
+            $count = is_array($data) ? count($data) : 0;
+            return ['success' => true, 'message' => "Connected. Found $count records."];
+        }
+        return ['success' => true, 'message' => 'Authentication successful'];
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+function uploadToVecticum($company, $metadata) {
+    if (empty($company['vecticum_company_id'])) {
+        return ['success' => false, 'error' => 'Vecticum endpoint ID not configured'];
+    }
+
+    try {
+        $token = getVecticumToken($company);
+
+        $total = floatval($metadata['totalAmount'] ?? 0);
+        $tax = floatval($metadata['taxAmount'] ?? 0);
+        $subtotal = floatval($metadata['subtotalAmount'] ?? 0);
+        $totalInclVat = number_format($total && $tax ? $total + $tax : $total, 2, '.', '');
+
+        $body = [
+            'invoiceNo' => $metadata['invoiceNumber'] ?? null,
+            'invoiceDate' => $metadata['invoiceDate'] ?? null,
+            'paymentDate' => $metadata['dueDate'] ?? null,
+            'invoiceAmount' => $subtotal ?: $total,
+            'vatAmount' => $tax,
+            'totalAmount' => $subtotal ?: $total,
+            'totalInclVat' => $totalInclVat,
+        ];
+
+        if (!empty($metadata['vendorName'])) {
+            $body['description'] = $metadata['vendorName'];
+        }
+        if (!empty($metadata['vendorVatId'])) {
+            $body['counterpartyCode'] = $metadata['vendorVatId'];
+        }
+
+        $currency = $metadata['currency'] ?? 'EUR';
+        if (!$currency || $currency === 'EUR') {
+            $body['currency'] = ['id' => 'O18j5zeck1yHYb5W4H86', 'name' => 'EUR'];
+        }
+
+        if (!empty($company['vecticum_author_id'])) {
+            $body['author'] = ['id' => $company['vecticum_author_id'], 'name' => $company['vecticum_author_name'] ?? ''];
+        }
+
+        // Remove null values
+        $body = array_filter($body, fn($v) => $v !== null);
+
+        $ch = curl_init($company['vecticum_api_base_url'] . '/' . $company['vecticum_company_id']);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($body),
+            CURLOPT_HTTPHEADER => [
+                'Accept: application/json',
+                'Content-Type: application/json',
+                "Authorization: Bearer $token",
+            ],
+            CURLOPT_TIMEOUT => 30,
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode < 200 || $httpCode >= 300) {
+            $errData = json_decode($response, true);
+            $errorMsg = $errData['message'] ?? "Vecticum API error: HTTP $httpCode";
+            return ['success' => false, 'error' => $errorMsg];
+        }
+
+        $data = json_decode($response, true);
+        return ['success' => true, 'externalId' => $data['id'] ?? null];
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}

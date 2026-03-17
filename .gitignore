@@ -1,12 +1,11 @@
 # dependencies
 /node_modules
-/api/node_modules
 
 # env files
-.env
-.env.*
-!.env.example
+/.env
 api/.env
+dist/api/.env
+!.env.example
 
 # misc
 .DS_Store
@@ -18,6 +17,6 @@ npm-debug.log*
 
 # uploads
 /uploads/
-/api/uploads/
 
 # keep dist/ committed for Plesk deployment
+# dist/api/.env must be committed (production secrets)

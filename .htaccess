@@ -1,11 +1,20 @@
 RewriteEngine On
 
-# API requests → Node.js (handled by Plesk proxy)
-RewriteRule ^api/ - [L]
+# Pass Authorization header to PHP
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
-# If file exists, serve it
-RewriteCond %{REQUEST_FILENAME} -f
+# API requests → PHP router
+RewriteRule ^api/(.*)$ api/index.php [QSA,L]
+
+# Serve existing files/dirs
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
 # SPA fallback
 RewriteRule ^ index.html [L]
+
+# PHP limits for file uploads
+php_value upload_max_filesize 20M
+php_value post_max_size 25M
