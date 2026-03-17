@@ -2,7 +2,7 @@
 -- Database: admin_ocr
 
 CREATE TABLE IF NOT EXISTS `companies` (
-  `id` VARCHAR(21) NOT NULL PRIMARY KEY,
+  `id` VARCHAR(30) NOT NULL PRIMARY KEY,
   `name` VARCHAR(255) NOT NULL,
   `code` VARCHAR(50) NOT NULL UNIQUE,
   `logo_url` VARCHAR(2048),
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS `companies` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `users` (
-  `id` VARCHAR(21) NOT NULL PRIMARY KEY,
+  `id` VARCHAR(30) NOT NULL PRIMARY KEY,
   `name` VARCHAR(255) NOT NULL,
   `email` VARCHAR(255) NOT NULL UNIQUE,
   `password_hash` VARCHAR(255) NOT NULL,
@@ -39,9 +39,9 @@ CREATE TABLE IF NOT EXISTS `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `user_companies` (
-  `id` VARCHAR(21) NOT NULL PRIMARY KEY,
-  `user_id` VARCHAR(21) NOT NULL,
-  `company_id` VARCHAR(21) NOT NULL,
+  `id` VARCHAR(30) NOT NULL PRIMARY KEY,
+  `user_id` VARCHAR(30) NOT NULL,
+  `company_id` VARCHAR(30) NOT NULL,
   `role` ENUM('owner','admin','manager','viewer') NOT NULL DEFAULT 'viewer',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY `uk_user_company` (`user_id`, `company_id`),
@@ -50,9 +50,9 @@ CREATE TABLE IF NOT EXISTS `user_companies` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `invoices` (
-  `id` VARCHAR(21) NOT NULL PRIMARY KEY,
-  `company_id` VARCHAR(21),
-  `email_inbox_id` VARCHAR(21),
+  `id` VARCHAR(30) NOT NULL PRIMARY KEY,
+  `company_id` VARCHAR(30),
+  `email_inbox_id` VARCHAR(30),
   `source` ENUM('upload','email') DEFAULT 'upload',
   `original_filename` VARCHAR(500) NOT NULL,
   `stored_filename` VARCHAR(500) NOT NULL,
@@ -86,8 +86,8 @@ CREATE TABLE IF NOT EXISTS `invoices` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `line_items` (
-  `id` VARCHAR(21) NOT NULL PRIMARY KEY,
-  `invoice_id` VARCHAR(21) NOT NULL,
+  `id` VARCHAR(30) NOT NULL PRIMARY KEY,
+  `invoice_id` VARCHAR(30) NOT NULL,
   `line_number` INT NOT NULL,
   `description` TEXT,
   `quantity` DECIMAL(12,4),
@@ -100,8 +100,8 @@ CREATE TABLE IF NOT EXISTS `line_items` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `email_inbox` (
-  `id` VARCHAR(21) NOT NULL PRIMARY KEY,
-  `company_id` VARCHAR(21) NOT NULL,
+  `id` VARCHAR(30) NOT NULL PRIMARY KEY,
+  `company_id` VARCHAR(30) NOT NULL,
   `message_id` VARCHAR(500) NOT NULL,
   `subject` TEXT,
   `from_email` VARCHAR(255),
@@ -122,8 +122,8 @@ CREATE TABLE IF NOT EXISTS `settings` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `usage_logs` (
-  `id` VARCHAR(21) NOT NULL PRIMARY KEY,
-  `company_id` VARCHAR(21) NOT NULL,
+  `id` VARCHAR(30) NOT NULL PRIMARY KEY,
+  `company_id` VARCHAR(30) NOT NULL,
   `month` VARCHAR(7) NOT NULL,
   `invoices_processed` INT NOT NULL DEFAULT 0,
   `storage_used_bytes` BIGINT NOT NULL DEFAULT 0,
@@ -134,20 +134,20 @@ CREATE TABLE IF NOT EXISTS `usage_logs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `audit_log` (
-  `id` VARCHAR(21) NOT NULL PRIMARY KEY,
-  `user_id` VARCHAR(21),
-  `company_id` VARCHAR(21),
+  `id` VARCHAR(30) NOT NULL PRIMARY KEY,
+  `user_id` VARCHAR(30),
+  `company_id` VARCHAR(30),
   `action` VARCHAR(50) NOT NULL,
   `resource_type` VARCHAR(50) NOT NULL,
-  `resource_id` VARCHAR(21),
+  `resource_id` VARCHAR(30),
   `metadata` JSON,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX `idx_company_created` (`company_id`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `subscriptions` (
-  `id` VARCHAR(21) NOT NULL PRIMARY KEY,
-  `company_id` VARCHAR(21) NOT NULL UNIQUE,
+  `id` VARCHAR(30) NOT NULL PRIMARY KEY,
+  `company_id` VARCHAR(30) NOT NULL UNIQUE,
   `plan` ENUM('free','starter','professional','enterprise') NOT NULL DEFAULT 'free',
   `status` ENUM('active','suspended','cancelled') NOT NULL DEFAULT 'active',
   `invoice_limit` INT,

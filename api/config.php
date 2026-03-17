@@ -102,9 +102,9 @@ function sendJSON($data, $statusCode = 200) {
     exit;
 }
 
-// ID generation (replacement for nanoid)
+// ID generation (replacement for nanoid) - 20 hex chars, fits VARCHAR(21)
 function generateId() {
-    return bin2hex(random_bytes(11));
+    return bin2hex(random_bytes(10));
 }
 
 // Base64 URL-safe encoding
