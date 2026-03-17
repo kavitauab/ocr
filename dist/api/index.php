@@ -24,6 +24,32 @@ if (($pathParts[0] ?? '') === 'health') {
     }
 }
 
+// Setup - create tables (remove after first run)
+if (($pathParts[0] ?? '') === 'setup') {
+    $db = getDBConnection();
+    $sql = file_get_contents(__DIR__ . '/schema.sql');
+    $statements = array_filter(array_map('trim', explode(';', $sql)));
+    $created = [];
+    foreach ($statements as $stmt) {
+        if (!empty($stmt)) {
+            $db->exec($stmt);
+            if (preg_match('/CREATE TABLE.*?`(\w+)`/i', $stmt, $m)) {
+                $created[] = $m[1];
+            }
+        }
+    }
+    // Seed superadmin if users table is empty
+    $count = $db->query("SELECT COUNT(*) FROM users")->fetchColumn();
+    if ($count == 0) {
+        $id = generateId();
+        $hash = password_hash('admin123', PASSWORD_BCRYPT, ['cost' => 12]);
+        $db->prepare("INSERT INTO users (id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)")
+            ->execute([$id, 'Admin', 'admin@ocr.lt', $hash, 'superadmin']);
+        $created[] = 'seeded admin user';
+    }
+    sendJSON(['tables' => $created]);
+}
+
 // Auth routes
 if (($pathParts[0] ?? '') === 'auth') {
     $action = $pathParts[1] ?? '';
