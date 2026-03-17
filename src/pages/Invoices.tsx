@@ -118,7 +118,7 @@ export default function Invoices() {
     return Object.values(groups);
   }, [invoices, groupByCompany, isSuperadmin]);
 
-  const handleExportCsv = () => {
+  const handleExport = (format: "csv" | "json") => {
     const token = localStorage.getItem("token");
     const exportParams = new URLSearchParams(searchParams);
 
@@ -127,6 +127,9 @@ export default function Invoices() {
     }
     if (token) {
       exportParams.set("access_token", token);
+    }
+    if (format === "json") {
+      exportParams.set("format", "json");
     }
 
     const query = exportParams.toString();
@@ -139,9 +142,13 @@ export default function Invoices() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Invoices</h1>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleExportCsv}>
+          <Button variant="outline" onClick={() => handleExport("csv")}>
             <Download className="h-4 w-4 mr-1" />
-            Export CSV
+            CSV
+          </Button>
+          <Button variant="outline" onClick={() => handleExport("json")}>
+            <Download className="h-4 w-4 mr-1" />
+            JSON
           </Button>
           <Link to="/upload"><Button>Upload Invoice</Button></Link>
         </div>

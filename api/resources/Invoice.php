@@ -396,6 +396,49 @@ class Invoice extends BaseResource {
         $stmt->execute($params);
         $rows = $stmt->fetchAll();
 
+        $format = $_GET['format'] ?? 'csv';
+
+        if ($format === 'json') {
+            $jsonRows = [];
+            foreach ($rows as $row) {
+                $jsonRows[] = [
+                    'id' => $row['id'] ?? null,
+                    'company' => $row['company_name'] ?? null,
+                    'source' => $row['source'] ?? null,
+                    'status' => $row['status'] ?? null,
+                    'documentType' => $row['document_type'] ?? null,
+                    'createdAt' => $row['created_at'] ?? null,
+                    'ocrSentAt' => $row['ocr_sent_at'] ?? null,
+                    'ocrReturnedAt' => $row['ocr_returned_at'] ?? null,
+                    'processingSeconds' => $row['processing_seconds'] !== null ? (int)$row['processing_seconds'] : null,
+                    'invoiceNumber' => $row['invoice_number'] ?? null,
+                    'invoiceDate' => $row['invoice_date'] ?? null,
+                    'dueDate' => $row['due_date'] ?? null,
+                    'vendorName' => $row['vendor_name'] ?? null,
+                    'vendorAddress' => $row['vendor_address'] ?? null,
+                    'vendorVatId' => $row['vendor_vat_id'] ?? null,
+                    'buyerName' => $row['buyer_name'] ?? null,
+                    'buyerAddress' => $row['buyer_address'] ?? null,
+                    'buyerVatId' => $row['buyer_vat_id'] ?? null,
+                    'subtotalAmount' => $row['subtotal_amount'] ?? null,
+                    'taxAmount' => $row['tax_amount'] ?? null,
+                    'totalAmount' => $row['total_amount'] ?? null,
+                    'currency' => $row['currency'] ?? null,
+                    'poNumber' => $row['po_number'] ?? null,
+                    'paymentTerms' => $row['payment_terms'] ?? null,
+                    'bankDetails' => $row['bank_details'] ?? null,
+                    'originalFilename' => $row['original_filename'] ?? null,
+                ];
+            }
+            $filename = 'invoices-export-' . date('Ymd-His') . '.json';
+            header('Content-Type: application/json; charset=UTF-8');
+            header("Content-Disposition: attachment; filename=\"$filename\"");
+            header('Pragma: no-cache');
+            header('Expires: 0');
+            echo json_encode($jsonRows, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
         $filename = 'invoices-export-' . date('Ymd-His') . '.csv';
         header('Content-Type: text/csv; charset=UTF-8');
         header("Content-Disposition: attachment; filename=\"$filename\"");
