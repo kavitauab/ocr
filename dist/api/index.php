@@ -14,6 +14,18 @@ $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $path = preg_replace('#^/api#', '', $path);
 $pathParts = array_values(array_filter(explode('/', $path)));
 
+// One-time migration (temporary)
+if (($pathParts[0] ?? '') === 'run-migrate') {
+    try {
+        $db = getDBConnection();
+        $db->exec("ALTER TABLE invoices ADD COLUMN document_type VARCHAR(50) DEFAULT NULL AFTER processing_error");
+        echo "OK: document_type column added\n";
+    } catch (\Throwable $e) {
+        echo "Note: " . $e->getMessage() . "\n";
+    }
+    exit;
+}
+
 // Health check
 if (($pathParts[0] ?? '') === 'health') {
     try {
