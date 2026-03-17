@@ -37,38 +37,41 @@ export default function SystemSettings() {
 
   return (
     <div className="space-y-4 max-w-2xl">
-      <h2 className="text-xl font-semibold">System Settings</h2>
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight text-foreground">System Settings</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">Global configuration for the OCR system</p>
+      </div>
 
       <Card>
         <CardHeader>
           <CardTitle>API Configuration</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div>
-            <label className="text-sm font-medium">Anthropic API Key</label>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Anthropic API Key</label>
             <Input
               type="password"
               value={form.anthropic_api_key}
               onChange={(e) => setForm({ ...form, anthropic_api_key: e.target.value })}
               placeholder="sk-ant-..."
             />
-            <p className="text-xs text-gray-500 mt-1">Used for Claude invoice extraction</p>
+            <p className="text-xs text-muted-foreground mt-1">Used for Claude invoice extraction</p>
           </div>
-          <div>
-            <label className="text-sm font-medium">Cron Secret</label>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Cron Secret</label>
             <Input
               type="password"
               value={form.cron_secret}
               onChange={(e) => setForm({ ...form, cron_secret: e.target.value })}
               placeholder="Secret key for cron endpoints"
             />
-            <p className="text-xs text-gray-500 mt-1">Required for automated email fetch</p>
+            <p className="text-xs text-muted-foreground mt-1">Required for automated email fetch</p>
           </div>
         </CardContent>
       </Card>
 
       <Button onClick={() => saveMutation.mutate(form)} disabled={saveMutation.isPending}>
-        <Save className="h-3 w-3 mr-1" />Save Settings
+        <Save className="h-3.5 w-3.5" /><span className="ml-1">Save Settings</span>
       </Button>
     </div>
   );

@@ -5,7 +5,8 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { Plus } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Plus, Building2 } from "lucide-react";
 
 export default function Companies() {
   const { user } = useAuth();
@@ -19,49 +20,80 @@ export default function Companies() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Companies</h2>
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">Companies</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Manage your organization companies</p>
+        </div>
         {isSuperadmin && (
-          <Link to="/settings/companies/new"><Button size="sm"><Plus className="h-3 w-3 mr-1" />Add Company</Button></Link>
+          <Link to="/settings/companies/new"><Button size="sm"><Plus className="h-3.5 w-3.5" /><span className="ml-1">Add Company</span></Button></Link>
         )}
       </div>
 
-      <Card>
+      <Card className="overflow-hidden">
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Code</TableHead>
-                <TableHead>Your Role</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Vecticum</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data?.companies?.map((c: any) => (
-                <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell>{c.code}</TableCell>
-                  <TableCell>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 capitalize">
-                      {c.companyRole || c.company_role || "—"}
-                    </span>
-                  </TableCell>
-                  <TableCell>{c.msFetchEnabled ? "Enabled" : "—"}</TableCell>
-                  <TableCell>{c.vecticumEnabled ? "Enabled" : "—"}</TableCell>
-                  <TableCell>
-                    <Link to={`/settings/companies/${c.id}`}>
-                      <Button variant="outline" size="sm">
-                        {isSuperadmin || ["admin", "owner"].includes(c.companyRole || c.company_role) ? "Edit" : "View"}
-                      </Button>
-                    </Link>
-                  </TableCell>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30">
+                  <TableHead className="font-semibold">Name</TableHead>
+                  <TableHead className="font-semibold">Code</TableHead>
+                  <TableHead className="font-semibold">Your Role</TableHead>
+                  <TableHead className="font-semibold">Email</TableHead>
+                  <TableHead className="font-semibold">Vecticum</TableHead>
+                  <TableHead></TableHead>
                 </TableRow>
-              ))}
-              {isLoading && <TableRow><TableCell colSpan={6} className="text-center">Loading...</TableCell></TableRow>}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {data?.companies?.map((c: any) => (
+                  <TableRow key={c.id} className="hover:bg-primary/[0.03] transition-colors duration-150">
+                    <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{c.code}</TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium bg-muted/50 text-foreground capitalize">
+                        {c.companyRole || c.company_role || "—"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{c.msFetchEnabled ? "Enabled" : "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{c.vecticumEnabled ? "Enabled" : "—"}</TableCell>
+                    <TableCell>
+                      <Link to={`/settings/companies/${c.id}`}>
+                        <Button variant="outline" size="sm">
+                          {isSuperadmin || ["admin", "owner"].includes(c.companyRole || c.company_role) ? "Edit" : "View"}
+                        </Button>
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {isLoading && (
+                  <>
+                    {[...Array(3)].map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-8 w-14" /></TableCell>
+                      </TableRow>
+                    ))}
+                  </>
+                )}
+                {!isLoading && (!data?.companies || data.companies.length === 0) && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-12">
+                      <div className="flex flex-col items-center justify-center text-center">
+                        <div className="rounded-full bg-muted p-3 mb-3">
+                          <Building2 className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                        <p className="text-sm font-medium text-foreground">No companies yet</p>
+                        <p className="text-sm text-muted-foreground mt-0.5">Get started by adding your first company</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

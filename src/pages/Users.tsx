@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
+import { getStatusClasses } from "@/lib/ui-utils";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Users as UsersIcon } from "lucide-react";
 
 export default function Users() {
   const queryClient = useQueryClient();
@@ -42,53 +43,87 @@ export default function Users() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Users</h2>
-        <Button size="sm" onClick={() => setShowCreate(true)}><Plus className="h-3 w-3 mr-1" />Add User</Button>
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">Users</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Manage system users and their roles</p>
+        </div>
+        <Button size="sm" onClick={() => setShowCreate(true)}><Plus className="h-3.5 w-3.5" /><span className="ml-1">Add User</span></Button>
       </div>
 
-      <Card>
+      <Card className="overflow-hidden">
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data?.users?.map((u: any) => (
-                <TableRow key={u.id}>
-                  <TableCell>{u.name}</TableCell>
-                  <TableCell>{u.email}</TableCell>
-                  <TableCell><Badge variant={u.role === "superadmin" ? "default" : "secondary"}>{u.role}</Badge></TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="icon" onClick={() => { if (confirm("Delete user?")) deleteMutation.mutate(u.id); }}>
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </TableCell>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30">
+                  <TableHead className="font-semibold">Name</TableHead>
+                  <TableHead className="font-semibold">Email</TableHead>
+                  <TableHead className="font-semibold">Role</TableHead>
+                  <TableHead></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {data?.users?.map((u: any) => (
+                  <TableRow key={u.id} className="hover:bg-primary/[0.03] transition-colors duration-150">
+                    <TableCell className="font-medium">{u.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{u.email}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getStatusClasses(u.role === "superadmin" ? "active" : "")}`}>
+                        {u.role}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon" onClick={() => { if (confirm("Delete user?")) deleteMutation.mutate(u.id); }}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {isLoading && (
+                  <>
+                    {[...Array(3)].map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                        <TableCell><Skeleton className="h-8 w-8" /></TableCell>
+                      </TableRow>
+                    ))}
+                  </>
+                )}
+                {!isLoading && (!data?.users || data.users.length === 0) && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="py-12">
+                      <div className="flex flex-col items-center justify-center text-center">
+                        <div className="rounded-full bg-muted p-3 mb-3">
+                          <UsersIcon className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                        <p className="text-sm font-medium text-foreground">No users yet</p>
+                        <p className="text-sm text-muted-foreground mt-0.5">Add your first user to get started</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
       <Dialog open={showCreate} onClose={() => setShowCreate(false)}>
         <DialogTitle>Create User</DialogTitle>
-        <div className="space-y-3 mt-4">
-          <div><label className="text-sm font-medium">Name</label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-          <div><label className="text-sm font-medium">Email</label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-          <div><label className="text-sm font-medium">Password</label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
-          <div>
-            <label className="text-sm font-medium">Role</label>
-            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="w-full border rounded px-3 py-1.5 text-sm">
+        <div className="space-y-4 mt-4">
+          <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Name</label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+          <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Email</label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+          <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Password</label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Role</label>
+            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background text-foreground">
               <option value="user">User</option>
               <option value="superadmin">Superadmin</option>
             </select>
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button onClick={() => createMutation.mutate(form)} disabled={createMutation.isPending}>Create</Button>
           </div>

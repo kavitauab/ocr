@@ -8,59 +8,47 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { FileText, CheckCircle, Loader2, AlertTriangle, Building2 } from "lucide-react";
-
-
-function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
-}
-
-function formatNumber(value: number | string | null | undefined): string {
-  if (value === null || value === undefined || value === "") return "—";
-  const num = typeof value === "number" ? value : Number(value);
-  if (Number.isNaN(num)) return "—";
-  return new Intl.NumberFormat("en-US").format(num);
-}
-
-function formatUsd(value: number | string | null | undefined): string {
-  if (value === null || value === undefined || value === "") return "—";
-  const num = typeof value === "number" ? value : Number(value);
-  if (Number.isNaN(num)) return "—";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 4 }).format(num);
-}
+import { Skeleton } from "@/components/ui/skeleton";
+import { formatDateTime, formatNumber, formatUsd, getStatusClasses } from "@/lib/ui-utils";
+import {
+  FileText,
+  CheckCircle,
+  Loader2,
+  AlertTriangle,
+  Building2,
+  Search,
+  BarChart3,
+  ArrowRight,
+} from "lucide-react";
 
 function getCompanyId(company: any): string {
   return String(company?.companyId ?? company?.id ?? "");
 }
-
 function getCompanyName(company: any): string {
   return String(company?.companyName ?? company?.name ?? "Unknown company");
 }
-
 function getCompanyCode(company: any): string {
   return String(company?.companyCode ?? company?.code ?? "");
 }
-
-
 function getTokenUsage(company: any): number | string | null {
   return company?.tokenUsage ?? company?.totalTokens ?? company?.tokensUsed ?? null;
 }
-
 function getOcrCost(company: any): number | string | null {
   return company?.ocrCostUsd ?? company?.costUsd ?? null;
 }
-
 function getLastSent(company: any): string | null {
   return company?.lastOcrSentAt ?? company?.lastSentAt ?? company?.ocrSentAt ?? company?.ocrStartedAt ?? null;
 }
-
 function getLastReturned(company: any): string | null {
   return company?.lastOcrReturnedAt ?? company?.lastReturnedAt ?? company?.ocrReturnedAt ?? company?.returnedAt ?? null;
 }
+
+const statConfig = [
+  { key: "totalInvoices", label: "Total Invoices", icon: FileText, borderColor: "border-l-blue-500", iconBg: "bg-blue-50", iconColor: "text-blue-600" },
+  { key: "completedCount", label: "Completed", icon: CheckCircle, borderColor: "border-l-emerald-500", iconBg: "bg-emerald-50", iconColor: "text-emerald-600" },
+  { key: "processingCount", label: "Processing", icon: Loader2, borderColor: "border-l-amber-500", iconBg: "bg-amber-50", iconColor: "text-amber-600" },
+  { key: "failedCount", label: "Failed", icon: AlertTriangle, borderColor: "border-l-red-500", iconBg: "bg-red-50", iconColor: "text-red-600" },
+] as const;
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -77,7 +65,7 @@ export default function Dashboard() {
     : selectedCompany?.id || "";
   const companyParam = effectiveCompanyId ? `?companyId=${effectiveCompanyId}` : "";
 
-  const { data: stats } = useQuery({
+  const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ["stats", effectiveCompanyId, superadminMode],
     queryFn: () => api.get(`/invoices/stats${companyParam}`).then((r) => r.data),
   });
@@ -87,13 +75,6 @@ export default function Dashboard() {
     queryFn: () => api.get(`/invoices?companyId=${effectiveCompanyId}&limit=5`).then((r) => r.data),
     enabled: !!effectiveCompanyId,
   });
-
-  const statCards = [
-    { label: "Total Invoices", value: stats?.totalInvoices || 0, icon: FileText, color: "text-blue-600" },
-    { label: "Completed", value: stats?.completedCount || 0, icon: CheckCircle, color: "text-green-600" },
-    { label: "Processing", value: stats?.processingCount || 0, icon: Loader2, color: "text-yellow-600" },
-    { label: "Failed", value: stats?.failedCount || 0, icon: AlertTriangle, color: "text-red-600" },
-  ];
 
   const showCompanyOverview = isSuperadmin && superadminMode === "global";
   const companies: any[] = stats?.companies || [];
@@ -107,157 +88,249 @@ export default function Dashboard() {
   }, [companies, companySearch]);
   const showRecentInvoices = !!effectiveCompanyId && (!isSuperadmin || superadminMode === "company");
 
+  const greeting = (() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  })();
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+      {/* Page header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            {greeting}, {user?.email?.split("@")[0] || "there"}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+          </p>
+        </div>
         {isSuperadmin && (
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant={superadminMode === "global" ? "default" : "outline"}
+          <div className="flex items-center rounded-lg border border-border bg-card p-0.5">
+            <button
               onClick={() => setSuperadminMode("global")}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
+                superadminMode === "global"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               Global Clients
-            </Button>
-            <Button
-              size="sm"
-              variant={superadminMode === "company" ? "default" : "outline"}
+            </button>
+            <button
               onClick={() => setSuperadminMode("company")}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
+                superadminMode === "company"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               Selected Company
-            </Button>
+            </button>
           </div>
         )}
       </div>
 
-      {/* Stats cards */}
+      {/* Stat cards */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        {statCards.map(({ label, value, icon: Icon, color }) => (
-          <Card key={label}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500">{label}</p>
-                  <p className="text-2xl font-bold">{value}</p>
-                </div>
-                <Icon className={`h-8 w-8 ${color}`} />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {statsLoading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i}>
+                <CardContent className="p-5">
+                  <Skeleton className="h-4 w-20 mb-3" />
+                  <Skeleton className="h-8 w-16" />
+                </CardContent>
+              </Card>
+            ))
+          : statConfig.map(({ key, label, icon: Icon, borderColor, iconBg, iconColor }) => (
+              <Card
+                key={key}
+                className={`border-l-4 ${borderColor} hover:shadow-md transition-shadow duration-200`}
+              >
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {label}
+                      </p>
+                      <p className="text-3xl font-bold tabular-nums mt-1 text-foreground">
+                        {(stats as any)?.[key] || 0}
+                      </p>
+                    </div>
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconBg}`}>
+                      <Icon className={`h-5 w-5 ${iconColor}`} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
       </div>
 
-      {/* Superadmin: Customers overview table */}
+      {/* Company overview */}
       {showCompanyOverview && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Building2 className="h-5 w-5" />
-              Global Client Overview
-            </CardTitle>
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Building2 className="h-5 w-5 text-muted-foreground" />
+                Client Overview
+              </CardTitle>
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={companySearch}
+                  onChange={(e) => setCompanySearch(e.target.value)}
+                  placeholder="Search clients..."
+                  className="pl-9"
+                />
+              </div>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <Input
-              value={companySearch}
-              onChange={(e) => setCompanySearch(e.target.value)}
-              placeholder="Search by company or code..."
-              className="w-full sm:w-80"
-            />
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Company</TableHead>
-                  <TableHead className="text-center">Scanned</TableHead>
-                  <TableHead className="text-right">Tokens</TableHead>
-                  <TableHead className="text-right">OCR Cost</TableHead>
-                  <TableHead className="text-right">Last Sent</TableHead>
-                  <TableHead className="text-right">Last Returned</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredCompanies.map((c: any) => {
-                  const companyId = getCompanyId(c);
-                  return (
-                  <TableRow
-                    key={companyId || `${getCompanyName(c)}-${getCompanyCode(c)}`}
-                    className={companyId ? "cursor-pointer hover:bg-gray-50" : ""}
-                    onClick={() => companyId && navigate(`/invoices?companyId=${companyId}`)}
-                  >
-                    <TableCell>
-                      <div>
-                        <span className="font-medium">{getCompanyName(c)}</span>
-                        {getCompanyCode(c) && <span className="text-xs text-gray-400 ml-2">{getCompanyCode(c)}</span>}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center font-mono">{formatNumber(c.totalInvoices)}</TableCell>
-                    <TableCell className="text-right font-mono">{formatNumber(getTokenUsage(c))}</TableCell>
-                    <TableCell className="text-right font-mono">{formatUsd(getOcrCost(c))}</TableCell>
-                    <TableCell className="text-right text-sm text-gray-500">{formatDateTime(getLastSent(c))}</TableCell>
-                    <TableCell className="text-right text-sm text-gray-500">{formatDateTime(getLastReturned(c))}</TableCell>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30">
+                    <TableHead className="font-semibold">Company</TableHead>
+                    <TableHead className="text-center font-semibold">Scanned</TableHead>
+                    <TableHead className="text-right font-semibold">Tokens</TableHead>
+                    <TableHead className="text-right font-semibold">OCR Cost</TableHead>
+                    <TableHead className="text-right font-semibold hidden md:table-cell">Last Sent</TableHead>
+                    <TableHead className="text-right font-semibold hidden md:table-cell">Last Returned</TableHead>
                   </TableRow>
-                )})}
-                {filteredCompanies.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-gray-500 py-8">
-                      No companies match current filters
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredCompanies.map((c: any) => {
+                    const companyId = getCompanyId(c);
+                    return (
+                      <TableRow
+                        key={companyId || `${getCompanyName(c)}-${getCompanyCode(c)}`}
+                        className={`transition-colors duration-150 ${companyId ? "cursor-pointer hover:bg-primary/[0.03]" : ""}`}
+                        onClick={() => companyId && navigate(`/invoices?companyId=${companyId}`)}
+                      >
+                        <TableCell>
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-semibold text-muted-foreground">
+                              {getCompanyName(c)[0].toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="font-medium text-foreground">{getCompanyName(c)}</div>
+                              {getCompanyCode(c) && (
+                                <div className="text-xs text-muted-foreground">{getCompanyCode(c)}</div>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center tabular-nums font-medium">{formatNumber(c.totalInvoices)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatNumber(getTokenUsage(c))}</TableCell>
+                        <TableCell className="text-right tabular-nums font-medium">{formatUsd(getOcrCost(c))}</TableCell>
+                        <TableCell className="text-right text-sm text-muted-foreground hidden md:table-cell">{formatDateTime(getLastSent(c))}</TableCell>
+                        <TableCell className="text-right text-sm text-muted-foreground hidden md:table-cell">{formatDateTime(getLastReturned(c))}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {filteredCompanies.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-12">
+                        <div className="flex flex-col items-center justify-center text-center">
+                          <div className="rounded-full bg-muted p-3 mb-3">
+                            <Building2 className="h-6 w-6 text-muted-foreground" />
+                          </div>
+                          <p className="text-sm font-medium text-foreground">No clients found</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Try a different search term</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}
 
+      {/* No company selected */}
       {isSuperadmin && superadminMode === "company" && !selectedCompany && (
         <Card>
-          <CardContent className="py-6 text-sm text-gray-600">
-            Select a company in the sidebar to view company-specific metrics and recent invoices.
+          <CardContent className="py-12">
+            <div className="flex flex-col items-center justify-center text-center">
+              <div className="rounded-full bg-muted p-3 mb-3">
+                <Building2 className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <p className="text-sm font-medium text-foreground">No company selected</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Select a company in the sidebar to view metrics</p>
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Company-specific view: Recent Invoices */}
+      {/* Recent invoices */}
       {showRecentInvoices && (
-        <Card>
-          <CardHeader><CardTitle>Recent Invoices</CardTitle></CardHeader>
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Recent Invoices</CardTitle>
+              <Link to="/invoices">
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground gap-1">
+                  View all
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Invoice #</TableHead>
-                  <TableHead>Vendor</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {invoicesData?.invoices?.map((inv: any) => (
-                  <TableRow key={inv.id}>
-                    <TableCell>
-                      <Link to={`/invoices/${inv.id}`} className="text-blue-600 hover:underline font-medium">
-                        {inv.invoiceNumber || inv.originalFilename}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{inv.vendorName || "—"}</TableCell>
-                    <TableCell>{inv.invoiceDate || "—"}</TableCell>
-                    <TableCell>{inv.totalAmount ? `${inv.totalAmount} ${inv.currency || ""}` : "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={inv.status === "completed" ? "default" : inv.status === "failed" ? "destructive" : "secondary"}>
-                        {inv.status}
-                      </Badge>
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30">
+                    <TableHead className="font-semibold">Invoice #</TableHead>
+                    <TableHead className="font-semibold">Vendor</TableHead>
+                    <TableHead className="font-semibold hidden sm:table-cell">Date</TableHead>
+                    <TableHead className="font-semibold text-right">Amount</TableHead>
+                    <TableHead className="font-semibold">Status</TableHead>
                   </TableRow>
-                ))}
-                {(!invoicesData?.invoices || invoicesData.invoices.length === 0) && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-gray-500 py-8">No invoices yet</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {invoicesData?.invoices?.map((inv: any) => (
+                    <TableRow key={inv.id} className="transition-colors duration-150 hover:bg-primary/[0.03]">
+                      <TableCell>
+                        <Link to={`/invoices/${inv.id}`} className="text-primary hover:text-primary-dark font-medium hover:underline">
+                          {inv.invoiceNumber || inv.originalFilename}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-foreground">{inv.vendorName || "\u2014"}</TableCell>
+                      <TableCell className="text-muted-foreground hidden sm:table-cell">{inv.invoiceDate || "\u2014"}</TableCell>
+                      <TableCell className="text-right tabular-nums font-medium">
+                        {inv.totalAmount ? `${inv.totalAmount} ${inv.currency || ""}` : "\u2014"}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getStatusClasses(inv.status)}`}>
+                          {inv.status}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {(!invoicesData?.invoices || invoicesData.invoices.length === 0) && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-12">
+                        <div className="flex flex-col items-center justify-center text-center">
+                          <div className="rounded-full bg-muted p-3 mb-3">
+                            <BarChart3 className="h-6 w-6 text-muted-foreground" />
+                          </div>
+                          <p className="text-sm font-medium text-foreground">No invoices yet</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Upload your first invoice to get started</p>
+                          <Link to="/upload">
+                            <Button size="sm" className="mt-3">Upload Invoice</Button>
+                          </Link>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}

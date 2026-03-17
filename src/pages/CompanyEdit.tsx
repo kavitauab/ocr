@@ -199,20 +199,28 @@ export default function CompanyEdit() {
     <div className="space-y-4 max-w-2xl">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-4 w-4" /></Button>
-        <h2 className="text-xl font-semibold">{pageTitle}</h2>
-        {!isNew && !canEdit && (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-            <Eye className="h-3 w-3" />Read-only
-          </span>
-        )}
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">{pageTitle}</h2>
+          {!isNew && !canEdit && (
+            <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground mt-1">
+              <Eye className="h-3 w-3" />Read-only
+            </span>
+          )}
+        </div>
       </div>
 
       {/* General */}
       <Card>
         <CardHeader><CardTitle>General</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <div><label className="text-sm font-medium">Name</label><Input value={form.name} onChange={(e) => set("name", e.target.value)} disabled={!isNew && !canEdit} /></div>
-          <div><label className="text-sm font-medium">Code</label><Input value={form.code} onChange={(e) => set("code", e.target.value)} disabled={!isNew && !canEdit} /></div>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Name</label>
+            <Input value={form.name} onChange={(e) => set("name", e.target.value)} disabled={!isNew && !canEdit} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Code</label>
+            <Input value={form.code} onChange={(e) => set("code", e.target.value)} disabled={!isNew && !canEdit} />
+          </div>
         </CardContent>
       </Card>
 
@@ -223,7 +231,7 @@ export default function CompanyEdit() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Extraction Fields</CardTitle>
-                <label className="flex items-center gap-2 text-sm text-gray-500">
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={form.extractionFields === null || form.extractionFields === undefined}
@@ -239,13 +247,13 @@ export default function CompanyEdit() {
                 </label>
               </CardHeader>
               <CardContent>
-                <p className="text-xs text-gray-500 mb-3">Select which fields to extract from invoices for this company. Unchecked fields will be skipped during AI extraction.</p>
+                <p className="text-xs text-muted-foreground mb-3">Select which fields to extract from invoices for this company. Unchecked fields will be skipped during AI extraction.</p>
                 <div className="grid grid-cols-2 gap-2">
                   {allExtractionFields.map(([key, label]) => {
                     const isAllMode = form.extractionFields === null || form.extractionFields === undefined;
                     const isChecked = isAllMode || (Array.isArray(form.extractionFields) && form.extractionFields.includes(key));
                     return (
-                      <label key={key} className="flex items-center gap-2 text-sm py-1">
+                      <label key={key} className="flex items-center gap-2 text-sm py-1 text-foreground">
                         <input
                           type="checkbox"
                           checked={isChecked}
@@ -272,56 +280,58 @@ export default function CompanyEdit() {
 
           {/* Members - manager can view, admin+ can manage */}
           {canViewIntegrations && (
-            <Card>
+            <Card className="overflow-hidden">
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Members</CardTitle>
                 {canManageMembers && (
                   <Button size="sm" variant="outline" onClick={() => setShowAddMember(true)}>
-                    <Plus className="h-3 w-3 mr-1" />Add Member
+                    <Plus className="h-3.5 w-3.5" /><span className="ml-1">Add Member</span>
                   </Button>
                 )}
               </CardHeader>
               <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Role</TableHead>
-                      {canManageMembers && <TableHead></TableHead>}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(membersData?.members || []).map((m: any) => (
-                      <TableRow key={m.userId || m.user_id}>
-                        <TableCell>{m.name || m.userName}</TableCell>
-                        <TableCell>{m.email || m.userEmail}</TableCell>
-                        <TableCell>
-                          {canManageMembers ? (
-                            <select value={m.role} onChange={(e) => updateRoleMutation.mutate({ userId: m.userId || m.user_id, role: e.target.value })} className="border rounded px-2 py-1 text-sm">
-                              <option value="viewer">Viewer</option>
-                              <option value="manager">Manager</option>
-                              <option value="admin">Admin</option>
-                              <option value="owner">Owner</option>
-                            </select>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 capitalize">{m.role}</span>
-                          )}
-                        </TableCell>
-                        {canManageMembers && (
-                          <TableCell>
-                            <Button variant="ghost" size="icon" onClick={() => { if (confirm("Remove this member?")) removeMemberMutation.mutate(m.userId || m.user_id); }}>
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </TableCell>
-                        )}
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="font-semibold">Name</TableHead>
+                        <TableHead className="font-semibold">Email</TableHead>
+                        <TableHead className="font-semibold">Role</TableHead>
+                        {canManageMembers && <TableHead></TableHead>}
                       </TableRow>
-                    ))}
-                    {(membersData?.members || []).length === 0 && (
-                      <TableRow><TableCell colSpan={canManageMembers ? 4 : 3} className="text-center text-gray-500">No members yet</TableCell></TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {(membersData?.members || []).map((m: any) => (
+                        <TableRow key={m.userId || m.user_id} className="hover:bg-primary/[0.03] transition-colors duration-150">
+                          <TableCell className="font-medium">{m.name || m.userName}</TableCell>
+                          <TableCell className="text-muted-foreground">{m.email || m.userEmail}</TableCell>
+                          <TableCell>
+                            {canManageMembers ? (
+                              <select value={m.role} onChange={(e) => updateRoleMutation.mutate({ userId: m.userId || m.user_id, role: e.target.value })} className="border border-border rounded-md px-2 py-1 text-sm bg-background text-foreground">
+                                <option value="viewer">Viewer</option>
+                                <option value="manager">Manager</option>
+                                <option value="admin">Admin</option>
+                                <option value="owner">Owner</option>
+                              </select>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium bg-muted/50 text-foreground capitalize">{m.role}</span>
+                            )}
+                          </TableCell>
+                          {canManageMembers && (
+                            <TableCell>
+                              <Button variant="ghost" size="icon" onClick={() => { if (confirm("Remove this member?")) removeMemberMutation.mutate(m.userId || m.user_id); }}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      ))}
+                      {(membersData?.members || []).length === 0 && (
+                        <TableRow><TableCell colSpan={canManageMembers ? 4 : 3} className="text-center text-muted-foreground py-8">No members yet</TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -332,22 +342,22 @@ export default function CompanyEdit() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Microsoft 365 Email</CardTitle>
                 {canEditIntegrations ? (
-                  <label className="flex items-center gap-2 text-sm">
+                  <label className="flex items-center gap-2 text-sm text-foreground">
                     <input type="checkbox" checked={form.msFetchEnabled as boolean} onChange={(e) => set("msFetchEnabled", e.target.checked)} />
                     Enabled
                   </label>
                 ) : (
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${form.msFetchEnabled ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${form.msFetchEnabled ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-muted text-muted-foreground border-border"}`}>
                     {form.msFetchEnabled ? "Enabled" : "Disabled"}
                   </span>
                 )}
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div><label className="text-sm font-medium">Tenant ID</label><Input value={form.msTenantId} onChange={(e) => set("msTenantId", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div><label className="text-sm font-medium">Client ID</label><Input value={form.msClientId} onChange={(e) => set("msClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div><label className="text-sm font-medium">Client Secret</label><Input type="password" value={form.msClientSecret} onChange={(e) => set("msClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div><label className="text-sm font-medium">Sender Email</label><Input value={form.msSenderEmail} onChange={(e) => set("msSenderEmail", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div><label className="text-sm font-medium">Folder</label><Input value={form.msFetchFolder} onChange={(e) => set("msFetchFolder", e.target.value)} disabled={!canEditIntegrations} /></div>
+              <CardContent className="space-y-4">
+                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Tenant ID</label><Input value={form.msTenantId} onChange={(e) => set("msTenantId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client ID</label><Input value={form.msClientId} onChange={(e) => set("msClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client Secret</label><Input type="password" value={form.msClientSecret} onChange={(e) => set("msClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Sender Email</label><Input value={form.msSenderEmail} onChange={(e) => set("msSenderEmail", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Folder</label><Input value={form.msFetchFolder} onChange={(e) => set("msFetchFolder", e.target.value)} disabled={!canEditIntegrations} /></div>
                 {canEditIntegrations && <Button variant="outline" size="sm" onClick={testEmail}>Test Connection</Button>}
               </CardContent>
             </Card>
@@ -359,23 +369,23 @@ export default function CompanyEdit() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Vecticum</CardTitle>
                 {canEditIntegrations ? (
-                  <label className="flex items-center gap-2 text-sm">
+                  <label className="flex items-center gap-2 text-sm text-foreground">
                     <input type="checkbox" checked={form.vecticumEnabled as boolean} onChange={(e) => set("vecticumEnabled", e.target.checked)} />
                     Enabled
                   </label>
                 ) : (
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${form.vecticumEnabled ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${form.vecticumEnabled ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-muted text-muted-foreground border-border"}`}>
                     {form.vecticumEnabled ? "Enabled" : "Disabled"}
                   </span>
                 )}
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div><label className="text-sm font-medium">API Base URL</label><Input value={form.vecticumApiBaseUrl} onChange={(e) => set("vecticumApiBaseUrl", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div><label className="text-sm font-medium">Client ID</label><Input value={form.vecticumClientId} onChange={(e) => set("vecticumClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div><label className="text-sm font-medium">Client Secret</label><Input type="password" value={form.vecticumClientSecret} onChange={(e) => set("vecticumClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div><label className="text-sm font-medium">Company ID (Endpoint)</label><Input value={form.vecticumCompanyId} onChange={(e) => set("vecticumCompanyId", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div><label className="text-sm font-medium">Author ID</label><Input value={form.vecticumAuthorId} onChange={(e) => set("vecticumAuthorId", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div><label className="text-sm font-medium">Author Name</label><Input value={form.vecticumAuthorName} onChange={(e) => set("vecticumAuthorName", e.target.value)} disabled={!canEditIntegrations} /></div>
+              <CardContent className="space-y-4">
+                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">API Base URL</label><Input value={form.vecticumApiBaseUrl} onChange={(e) => set("vecticumApiBaseUrl", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client ID</label><Input value={form.vecticumClientId} onChange={(e) => set("vecticumClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client Secret</label><Input type="password" value={form.vecticumClientSecret} onChange={(e) => set("vecticumClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Company ID (Endpoint)</label><Input value={form.vecticumCompanyId} onChange={(e) => set("vecticumCompanyId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Author ID</label><Input value={form.vecticumAuthorId} onChange={(e) => set("vecticumAuthorId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Author Name</label><Input value={form.vecticumAuthorName} onChange={(e) => set("vecticumAuthorName", e.target.value)} disabled={!canEditIntegrations} /></div>
                 {canEditIntegrations && <Button variant="outline" size="sm" onClick={testVecticum}>Test Connection</Button>}
               </CardContent>
             </Card>
@@ -386,7 +396,7 @@ export default function CompanyEdit() {
       {/* Save button - only for admin+ or new company */}
       {(isNew || canEdit) && (
         <Button onClick={() => saveMutation.mutate(form)} disabled={saveMutation.isPending}>
-          <Save className="h-3 w-3 mr-1" />{isNew ? "Create" : "Save Changes"}
+          <Save className="h-3.5 w-3.5" /><span className="ml-1">{isNew ? "Create" : "Save Changes"}</span>
         </Button>
       )}
 
@@ -395,16 +405,16 @@ export default function CompanyEdit() {
         <DialogTitle>Add Member</DialogTitle>
         <div className="space-y-4 mt-4">
           {/* Mode tabs */}
-          <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+          <div className="flex gap-1 bg-muted p-1 rounded-lg">
             <button
               onClick={() => { setMemberMode("search"); setSelectedUser(null); }}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded text-sm font-medium transition-colors ${memberMode === "search" ? "bg-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded text-sm font-medium transition-colors ${memberMode === "search" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
               <Search className="h-3.5 w-3.5" />Existing User
             </button>
             <button
               onClick={() => setMemberMode("create")}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded text-sm font-medium transition-colors ${memberMode === "create" ? "bg-white shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded text-sm font-medium transition-colors ${memberMode === "create" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
               <UserPlus className="h-3.5 w-3.5" />New User
             </button>
@@ -412,66 +422,68 @@ export default function CompanyEdit() {
 
           {memberMode === "search" ? (
             <div className="relative">
-              <label className="text-sm font-medium">Search by name or email</label>
-              <Input
-                value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
-                onFocus={() => searchResults.length > 0 && setShowResults(true)}
-                placeholder="Type to search..."
-                autoFocus
-              />
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Search by name or email</label>
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  onFocus={() => searchResults.length > 0 && setShowResults(true)}
+                  placeholder="Type to search..."
+                  autoFocus
+                />
+              </div>
               {showResults && searchResults.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
                   {searchResults.map((u) => (
                     <button
                       key={u.id}
                       onClick={() => selectUser(u)}
-                      className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b last:border-b-0"
+                      className="w-full text-left px-3 py-2 hover:bg-primary/[0.05] border-b border-border last:border-b-0 transition-colors"
                     >
-                      <div className="text-sm font-medium">{u.name}</div>
-                      <div className="text-xs text-gray-500">{u.email}</div>
+                      <div className="text-sm font-medium text-foreground">{u.name}</div>
+                      <div className="text-xs text-muted-foreground">{u.email}</div>
                     </button>
                   ))}
                 </div>
               )}
               {showResults && searchResults.length === 0 && searchQuery.length >= 2 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg p-3">
-                  <p className="text-sm text-gray-500">No users found.</p>
-                  <button onClick={() => { setMemberMode("create"); setMemberForm((f) => ({ ...f, email: searchQuery })); }} className="text-sm text-blue-600 hover:underline mt-1">
+                <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg p-3">
+                  <p className="text-sm text-muted-foreground">No users found.</p>
+                  <button onClick={() => { setMemberMode("create"); setMemberForm((f) => ({ ...f, email: searchQuery })); }} className="text-sm text-primary hover:underline mt-1">
                     Create new user instead
                   </button>
                 </div>
               )}
               {selectedUser && (
-                <div className="mt-2 p-2 bg-blue-50 rounded-lg flex items-center gap-2">
+                <div className="mt-2 p-2 bg-primary/[0.05] rounded-lg flex items-center gap-2 border border-primary/20">
                   <div className="flex-1">
-                    <span className="text-sm font-medium">{selectedUser.name}</span>
-                    <span className="text-xs text-gray-500 ml-2">{selectedUser.email}</span>
+                    <span className="text-sm font-medium text-foreground">{selectedUser.name}</span>
+                    <span className="text-xs text-muted-foreground ml-2">{selectedUser.email}</span>
                   </div>
-                  <button onClick={() => { setSelectedUser(null); setSearchQuery(""); }} className="text-xs text-gray-400 hover:text-gray-600">clear</button>
+                  <button onClick={() => { setSelectedUser(null); setSearchQuery(""); }} className="text-xs text-muted-foreground hover:text-foreground transition-colors">clear</button>
                 </div>
               )}
             </div>
           ) : (
             <>
-              <div>
-                <label className="text-sm font-medium">Name</label>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Name</label>
                 <Input value={memberForm.name} onChange={(e) => setMemberForm({ ...memberForm, name: e.target.value })} placeholder="John Doe" autoFocus />
               </div>
-              <div>
-                <label className="text-sm font-medium">Email</label>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Email</label>
                 <Input value={memberForm.email} onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })} placeholder="user@example.com" />
               </div>
-              <div>
-                <label className="text-sm font-medium">Password</label>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Password</label>
                 <Input type="password" value={memberForm.password} onChange={(e) => setMemberForm({ ...memberForm, password: e.target.value })} placeholder="Initial password" />
               </div>
             </>
           )}
 
-          <div>
-            <label className="text-sm font-medium">Role</label>
-            <select value={memberForm.role} onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })} className="w-full border rounded px-3 py-1.5 text-sm">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Role</label>
+            <select value={memberForm.role} onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })} className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background text-foreground">
               <option value="viewer">Viewer</option>
               <option value="manager">Manager</option>
               <option value="admin">Admin</option>
@@ -479,10 +491,10 @@ export default function CompanyEdit() {
             </select>
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={resetMemberDialog}>Cancel</Button>
             <Button onClick={handleAddMember} disabled={addMemberMutation.isPending || !canAdd}>
-              {memberMode === "create" ? <><UserPlus className="h-3 w-3 mr-1" />Create & Add</> : "Add"}
+              {memberMode === "create" ? <><UserPlus className="h-3.5 w-3.5" /><span className="ml-1">Create & Add</span></> : "Add"}
             </Button>
           </div>
         </div>

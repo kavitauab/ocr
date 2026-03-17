@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
+import { getStatusClasses } from "@/lib/ui-utils";
 import { toast } from "sonner";
-import { Pencil } from "lucide-react";
+import { Pencil, CreditCard } from "lucide-react";
 
 type JsonRecord = Record<string, unknown>;
 type SubscriptionRow = JsonRecord;
@@ -167,14 +168,6 @@ function getOveragePerInvoice(row: SubscriptionRow): number | null {
   );
 }
 
-function getStatusBadge(status: string): "default" | "secondary" | "destructive" | "outline" {
-  const normalized = status.toLowerCase();
-  if (normalized === "active") return "default";
-  if (normalized === "suspended" || normalized === "cancelled") return "destructive";
-  if (normalized === "—") return "outline";
-  return "secondary";
-}
-
 function parseInputNumber(raw: string, label: string, integer = false): number | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
@@ -306,14 +299,16 @@ export default function Billing() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xl font-semibold">Billing</h2>
-        <div className="text-xs text-gray-500">
-          {isFetching && !isLoading ? "Refreshing..." : `${rows.length} clients`}
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">Billing</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {isFetching && !isLoading ? "Refreshing..." : `${rows.length} clients`}
+          </p>
         </div>
       </div>
 
-      <Card>
-        <CardContent className="p-4 border-b">
+      <Card className="overflow-hidden">
+        <CardContent className="p-4 border-b border-border">
           <div className="flex flex-wrap items-center gap-2">
             <Input
               value={search}
@@ -329,98 +324,121 @@ export default function Billing() {
           </div>
         </CardContent>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Client</TableHead>
-                <TableHead>Plan</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Invoice Limit</TableHead>
-                <TableHead className="text-right">Storage Limit</TableHead>
-                <TableHead className="text-right">Included Tokens</TableHead>
-                <TableHead className="text-right">Used Tokens</TableHead>
-                <TableHead className="text-right">Overage / 1k Tokens</TableHead>
-                <TableHead className="text-right">Overage / Invoice</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading && (
-                <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8 text-gray-500">
-                    Loading billing settings...
-                  </TableCell>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30">
+                  <TableHead className="font-semibold">Client</TableHead>
+                  <TableHead className="font-semibold">Plan</TableHead>
+                  <TableHead className="font-semibold">Status</TableHead>
+                  <TableHead className="text-right font-semibold">Invoice Limit</TableHead>
+                  <TableHead className="text-right font-semibold">Storage Limit</TableHead>
+                  <TableHead className="text-right font-semibold">Included Tokens</TableHead>
+                  <TableHead className="text-right font-semibold">Used Tokens</TableHead>
+                  <TableHead className="text-right font-semibold">Overage / 1k Tokens</TableHead>
+                  <TableHead className="text-right font-semibold">Overage / Invoice</TableHead>
+                  <TableHead />
                 </TableRow>
-              )}
+              </TableHeader>
+              <TableBody>
+                {isLoading && (
+                  <>
+                    {[...Array(4)].map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-32" /><Skeleton className="h-3 w-16 mt-1" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
+                        <TableCell><Skeleton className="h-8 w-14" /></TableCell>
+                      </TableRow>
+                    ))}
+                  </>
+                )}
 
-              {!isLoading && isError && (
-                <TableRow>
-                  <TableCell colSpan={10} className="py-6">
-                    <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-red-600">
-                      <span>{getErrorMessage(error, "Failed to load billing settings")}</span>
-                      <Button variant="outline" size="sm" onClick={() => refetch()}>
-                        Retry
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )}
-
-              {!isLoading &&
-                !isError &&
-                filteredRows.map((row, index) => {
-                  const companyId = getCompanyId(row);
-                  const companyCode = getCompanyCode(row);
-                  const status = getStatus(row);
-                  return (
-                    <TableRow key={companyId || `${getCompanyName(row)}-${index}`}>
-                      <TableCell>
-                        <div className="font-medium">{getCompanyName(row)}</div>
-                        {companyCode && <div className="text-xs text-gray-500">{companyCode}</div>}
-                      </TableCell>
-                      <TableCell>{getPlan(row)}</TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusBadge(status)}>{status}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">{formatNumber(getInvoiceLimit(row))}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatBytes(getStorageLimitBytes(row))}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatNumber(getIncludedTokens(row))}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatNumber(getTokenUsage(row))}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatRate(getOveragePer1kTokens(row))}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatRate(getOveragePerInvoice(row))}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="outline" size="sm" onClick={() => openEditDialog(row)}>
-                          <Pencil className="h-3.5 w-3.5 mr-1" />
-                          Edit
+                {!isLoading && isError && (
+                  <TableRow>
+                    <TableCell colSpan={10} className="py-6">
+                      <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-destructive">
+                        <span>{getErrorMessage(error, "Failed to load billing settings")}</span>
+                        <Button variant="outline" size="sm" onClick={() => refetch()}>
+                          Retry
                         </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
 
-              {!isLoading && !isError && filteredRows.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8 text-gray-500">
-                    {rows.length === 0
-                      ? "No client billing data found."
-                      : "No clients match your search."}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                {!isLoading &&
+                  !isError &&
+                  filteredRows.map((row, index) => {
+                    const companyId = getCompanyId(row);
+                    const companyCode = getCompanyCode(row);
+                    const status = getStatus(row);
+                    return (
+                      <TableRow key={companyId || `${getCompanyName(row)}-${index}`} className="hover:bg-primary/[0.03] transition-colors duration-150">
+                        <TableCell>
+                          <div className="font-medium text-foreground">{getCompanyName(row)}</div>
+                          {companyCode && <div className="text-xs text-muted-foreground">{companyCode}</div>}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{getPlan(row)}</TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getStatusClasses(status)}`}>
+                            {status}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">{formatNumber(getInvoiceLimit(row))}</TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">{formatBytes(getStorageLimitBytes(row))}</TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">{formatNumber(getIncludedTokens(row))}</TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">{formatNumber(getTokenUsage(row))}</TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">{formatRate(getOveragePer1kTokens(row))}</TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">{formatRate(getOveragePerInvoice(row))}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="outline" size="sm" onClick={() => openEditDialog(row)}>
+                            <Pencil className="h-3.5 w-3.5" />
+                            <span className="ml-1">Edit</span>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+
+                {!isLoading && !isError && filteredRows.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={10} className="py-12">
+                      <div className="flex flex-col items-center justify-center text-center">
+                        <div className="rounded-full bg-muted p-3 mb-3">
+                          <CreditCard className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                        <p className="text-sm font-medium text-foreground">
+                          {rows.length === 0 ? "No client billing data found" : "No clients match your search"}
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-0.5">
+                          {rows.length === 0 ? "Billing data will appear once companies are created" : "Try adjusting your search terms"}
+                        </p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
       <Dialog open={!!editingRow} onClose={closeEditDialog}>
         <DialogTitle>Edit Billing</DialogTitle>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           {editingRow ? getCompanyName(editingRow) : "Client"}
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-          <div>
-            <label className="text-sm font-medium">Plan</label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Plan</label>
             <Select value={form.plan} onChange={(event) => setForm((prev) => ({ ...prev, plan: event.target.value }))}>
               {planOptions.map((plan) => (
                 <option key={plan} value={plan}>
@@ -430,8 +448,8 @@ export default function Billing() {
             </Select>
           </div>
 
-          <div>
-            <label className="text-sm font-medium">Status</label>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Status</label>
             <Select
               value={form.status}
               onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}
@@ -444,8 +462,8 @@ export default function Billing() {
             </Select>
           </div>
 
-          <div>
-            <label className="text-sm font-medium">Invoice Limit</label>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Invoice Limit</label>
             <Input
               type="number"
               value={form.invoiceLimit}
@@ -454,8 +472,8 @@ export default function Billing() {
             />
           </div>
 
-          <div>
-            <label className="text-sm font-medium">Storage Limit (bytes)</label>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Storage Limit (bytes)</label>
             <Input
               type="number"
               value={form.storageLimitBytes}
@@ -464,8 +482,8 @@ export default function Billing() {
             />
           </div>
 
-          <div>
-            <label className="text-sm font-medium">Included Tokens</label>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Included Tokens</label>
             <Input
               type="number"
               value={form.includedTokens}
@@ -474,8 +492,8 @@ export default function Billing() {
             />
           </div>
 
-          <div>
-            <label className="text-sm font-medium">Overage per 1k Tokens (USD)</label>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Overage per 1k Tokens (USD)</label>
             <Input
               type="number"
               step="0.000001"
@@ -485,8 +503,8 @@ export default function Billing() {
             />
           </div>
 
-          <div>
-            <label className="text-sm font-medium">Overage per Invoice (USD)</label>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Overage per Invoice (USD)</label>
             <Input
               type="number"
               step="0.000001"

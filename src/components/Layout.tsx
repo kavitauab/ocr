@@ -1,7 +1,11 @@
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useCompany } from "@/lib/company";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { Sheet } from "@/components/ui/sheet";
+import { Tooltip } from "@/components/ui/tooltip";
+import { Avatar } from "@/components/ui/avatar";
+import { DropdownMenu, DropdownItem, DropdownSeparator } from "@/components/ui/dropdown-menu";
 import {
   LayoutDashboard,
   FileText,
@@ -14,7 +18,13 @@ import {
   ChevronDown,
   Wrench,
   CreditCard,
+  Menu,
+  PanelLeftClose,
+  PanelLeft,
+  X,
 } from "lucide-react";
+
+const COLLAPSED_KEY = "sidebar-collapsed";
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -24,10 +34,25 @@ export default function Layout() {
 
   const isSettingsPath = location.pathname.startsWith("/settings");
   const [settingsOpen, setSettingsOpen] = useState(isSettingsPath);
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSED_KEY) === "true");
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     if (isSettingsPath) setSettingsOpen(true);
   }, [isSettingsPath]);
+
+  // Close mobile drawer on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  const toggleCollapse = useCallback(() => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem(COLLAPSED_KEY, String(next));
+      return next;
+    });
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -60,109 +85,317 @@ export default function Layout() {
       : []),
   ];
 
+  const navContent = (isCollapsed: boolean) => (
+    <>
+      {/* Logo */}
+      <div className={`flex items-center gap-2.5 border-b border-border/60 ${isCollapsed ? "justify-center p-3" : "px-4 py-3.5"}`}>
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 text-white font-bold text-sm shadow-sm">
+          S
+        </div>
+        {!isCollapsed && (
+          <span className="font-semibold text-sm tracking-tight text-foreground">ScanInvoice</span>
+        )}
+      </div>
+
+      {/* Company switcher */}
+      {companies.length > 1 && (
+        <div className={`border-b border-border/60 ${isCollapsed ? "p-2" : "px-3 py-2.5"}`}>
+          {isCollapsed ? (
+            <Tooltip content={selectedCompany?.name || "Select company"} side="right">
+              <div className="flex h-8 w-8 mx-auto items-center justify-center rounded-md bg-muted text-xs font-semibold text-muted-foreground cursor-default">
+                {(selectedCompany?.name || "?")[0].toUpperCase()}
+              </div>
+            </Tooltip>
+          ) : (
+            <select
+              value={selectedCompany?.id || ""}
+              onChange={(e) => switchCompany(e.target.value)}
+              className="w-full text-sm border border-border rounded-md px-2.5 py-1.5 bg-card text-foreground focus:ring-2 focus:ring-ring/20 focus:border-primary-light transition-colors"
+            >
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto custom-scrollbar px-2 py-2 space-y-0.5">
+        {mainNavItems.map(({ to, label, icon: Icon }) =>
+          isCollapsed ? (
+            <Tooltip key={to} content={label} side="right">
+              <NavLink
+                to={to}
+                className={({ isActive }) =>
+                  `flex items-center justify-center h-9 w-9 mx-auto rounded-lg transition-all duration-150 ${
+                    isActive
+                      ? "bg-primary/10 text-primary shadow-sm"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`
+                }
+              >
+                <Icon className="h-[18px] w-[18px]" />
+              </NavLink>
+            </Tooltip>
+          ) : (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
+                  isActive
+                    ? "bg-primary/10 text-primary font-medium shadow-sm"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`
+              }
+            >
+              <Icon className="h-[18px] w-[18px] shrink-0" />
+              {label}
+            </NavLink>
+          )
+        )}
+
+        {/* Settings */}
+        {settingsSubItems.length > 0 && (
+          <>
+            <div className="pt-2 pb-1">
+              {!isCollapsed && (
+                <div className="px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+                  Settings
+                </div>
+              )}
+              {isCollapsed && <div className="mx-auto w-6 border-t border-border/60" />}
+            </div>
+
+            {isCollapsed ? (
+              settingsSubItems.map(({ to, label, icon: Icon }) => (
+                <Tooltip key={to} content={label} side="right">
+                  <NavLink
+                    to={to}
+                    className={({ isActive }) =>
+                      `flex items-center justify-center h-9 w-9 mx-auto rounded-lg transition-all duration-150 ${
+                        isActive
+                          ? "bg-primary/10 text-primary shadow-sm"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`
+                    }
+                  >
+                    <Icon className="h-[18px] w-[18px]" />
+                  </NavLink>
+                </Tooltip>
+              ))
+            ) : (
+              <>
+                <button
+                  onClick={() => setSettingsOpen(!settingsOpen)}
+                  className={`flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
+                    isSettingsPath
+                      ? "bg-primary/10 text-primary font-medium"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Settings className="h-[18px] w-[18px]" />
+                    Settings
+                  </span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform duration-200 ${settingsOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+                <div
+                  className={`overflow-hidden transition-all duration-200 ${
+                    settingsOpen ? "max-h-60 opacity-100" : "max-h-0 opacity-0"
+                  }`}
+                >
+                  <div className="ml-3 pl-3 border-l border-border/60 space-y-0.5 py-0.5">
+                    {settingsSubItems.map(({ to, label, icon: Icon }) => (
+                      <NavLink
+                        key={to}
+                        to={to}
+                        className={({ isActive }) =>
+                          `flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-all duration-150 ${
+                            isActive
+                              ? "bg-primary/8 text-primary font-medium"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                          }`
+                        }
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        {label}
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </nav>
+
+      {/* User section */}
+      <div className={`border-t border-border/60 ${isCollapsed ? "p-2" : "px-3 py-3"}`}>
+        {isCollapsed ? (
+          <Tooltip content={user?.email || "User"} side="right">
+            <button onClick={handleLogout} className="flex items-center justify-center mx-auto">
+              <Avatar email={user?.email} size="sm" />
+            </button>
+          </Tooltip>
+        ) : (
+          <DropdownMenu
+            trigger={
+              <button className="flex items-center gap-2.5 w-full px-2 py-1.5 rounded-lg hover:bg-muted transition-colors text-left">
+                <Avatar email={user?.email} size="sm" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium text-foreground truncate">{user?.email}</div>
+                  <div className="text-[10px] text-muted-foreground capitalize">{user?.role || "user"}</div>
+                </div>
+                <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
+              </button>
+            }
+            align="left"
+          >
+            <DropdownItem onClick={handleLogout} variant="destructive">
+              <LogOut className="h-3.5 w-3.5" />
+              Sign out
+            </DropdownItem>
+          </DropdownMenu>
+        )}
+      </div>
+    </>
+  );
+
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <aside className="w-56 border-r bg-white flex flex-col">
-        <div className="p-4 border-b">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-white font-bold text-sm">
+    <div className="flex min-h-screen bg-background">
+      {/* Desktop sidebar */}
+      <aside
+        className={`hidden lg:flex lg:flex-col fixed inset-y-0 left-0 z-30 bg-card border-r border-border/60 sidebar-transition ${
+          collapsed ? "w-[4.5rem]" : "w-64"
+        }`}
+      >
+        {navContent(collapsed)}
+
+        {/* Collapse toggle */}
+        <button
+          onClick={toggleCollapse}
+          className="absolute -right-3 top-7 flex h-6 w-6 items-center justify-center rounded-full border bg-card text-muted-foreground shadow-sm hover:text-foreground hover:shadow transition-all"
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? <PanelLeft className="h-3 w-3" /> : <PanelLeftClose className="h-3 w-3" />}
+        </button>
+      </aside>
+
+      {/* Mobile header */}
+      <header className="lg:hidden fixed top-0 inset-x-0 z-40 h-14 bg-card/95 backdrop-blur-sm border-b border-border/60 flex items-center px-4 gap-3">
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="flex items-center justify-center h-9 w-9 rounded-lg hover:bg-muted transition-colors"
+        >
+          <Menu className="h-5 w-5 text-foreground" />
+        </button>
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-blue-600 to-blue-700 text-white font-bold text-xs">
+          S
+        </div>
+        <span className="font-semibold text-sm text-foreground">ScanInvoice</span>
+        <div className="flex-1" />
+        <Avatar email={user?.email} size="sm" />
+      </header>
+
+      {/* Mobile drawer */}
+      <Sheet open={mobileOpen} onClose={() => setMobileOpen(false)} side="left">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 text-white font-bold text-sm">
               S
             </div>
             <span className="font-semibold text-sm">ScanInvoice</span>
           </div>
+          <button
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center justify-center h-8 w-8 rounded-lg hover:bg-muted transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
+        {/* Company switcher for mobile */}
         {companies.length > 1 && (
-          <div className="p-3 border-b">
+          <div className="px-3 py-2.5 border-b border-border/60">
             <select
               value={selectedCompany?.id || ""}
               onChange={(e) => switchCompany(e.target.value)}
-              className="w-full text-sm border rounded px-2 py-1.5"
+              className="w-full text-sm border border-border rounded-md px-2.5 py-1.5 bg-card text-foreground"
             >
               {companies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
+                <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
           </div>
         )}
 
-        <nav className="flex-1 p-2">
+        <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
           {mainNavItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
               className={({ isActive }) =>
-                `flex items-center gap-2 px-3 py-2 rounded-md text-sm ${
+                `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                   isActive
-                    ? "bg-blue-50 text-blue-700 font-medium"
-                    : "text-gray-600 hover:bg-gray-100"
+                    ? "bg-primary/10 text-primary font-medium"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`
               }
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-[18px] w-[18px]" />
               {label}
             </NavLink>
           ))}
 
-          {/* Settings expandable - only show if there are sub-items */}
           {settingsSubItems.length > 0 && (
             <>
-              <button
-                onClick={() => setSettingsOpen(!settingsOpen)}
-                className={`flex items-center justify-between w-full px-3 py-2 rounded-md text-sm mt-1 ${
-                  isSettingsPath
-                    ? "bg-blue-50 text-blue-700 font-medium"
-                    : "text-gray-600 hover:bg-gray-100"
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <Settings className="h-4 w-4" />
-                  Settings
-                </span>
-                <ChevronDown
-                  className={`h-3 w-3 transition-transform ${settingsOpen ? "rotate-180" : ""}`}
-                />
-              </button>
-              {settingsOpen && (
-                <div className="ml-4 mt-0.5 space-y-0.5">
-                  {settingsSubItems.map(({ to, label, icon: Icon }) => (
-                    <NavLink
-                      key={to}
-                      to={to}
-                      className={({ isActive }) =>
-                        `flex items-center gap-2 px-3 py-1.5 rounded-md text-sm ${
-                          isActive
-                            ? "bg-blue-50 text-blue-700 font-medium"
-                            : "text-gray-500 hover:bg-gray-100"
-                        }`
-                      }
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      {label}
-                    </NavLink>
-                  ))}
-                </div>
-              )}
+              <div className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+                Settings
+              </div>
+              {settingsSubItems.map(({ to, label, icon: Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                      isActive
+                        ? "bg-primary/10 text-primary font-medium"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }`
+                  }
+                >
+                  <Icon className="h-[18px] w-[18px]" />
+                  {label}
+                </NavLink>
+              ))}
             </>
           )}
         </nav>
 
-        <div className="p-3 border-t">
-          <div className="flex items-center justify-between">
-            <div className="text-xs text-gray-500 truncate">
-              {user?.email}
-            </div>
-            <button onClick={handleLogout} className="p-1 text-gray-400 hover:text-gray-600">
-              <LogOut className="h-4 w-4" />
-            </button>
-          </div>
+        <div className="border-t border-border/60 px-3 py-3">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <LogOut className="h-[18px] w-[18px]" />
+            Sign out
+          </button>
         </div>
-      </aside>
+      </Sheet>
 
-      <main className="flex-1 p-6 overflow-auto">
-        <Outlet />
+      {/* Main content */}
+      <main
+        className={`flex-1 min-h-screen sidebar-transition pt-14 lg:pt-0 ${
+          collapsed ? "lg:ml-[4.5rem]" : "lg:ml-64"
+        }`}
+      >
+        <div className="p-4 md:p-6 lg:p-8 max-w-[1400px] mx-auto animate-fade-in">
+          <Outlet />
+        </div>
       </main>
     </div>
   );
