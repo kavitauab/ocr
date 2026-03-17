@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS `companies` (
   `vecticum_author_name` VARCHAR(255),
   `vecticum_access_token` TEXT,
   `vecticum_token_expires` VARCHAR(50),
+  `extraction_fields` JSON DEFAULT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

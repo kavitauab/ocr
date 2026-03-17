@@ -1,6 +1,28 @@
 <?php
 
-function extractInvoiceData($filePath, $fileType) {
+// All available extraction fields
+function getAllExtractionFields() {
+    return [
+        'invoiceNumber' => ['type' => 'string', 'description' => 'The invoice number/ID as printed on the document'],
+        'invoiceDate' => ['type' => 'string', 'description' => 'Invoice issue date in YYYY-MM-DD format'],
+        'dueDate' => ['type' => ['string', 'null'], 'description' => 'Payment due date in YYYY-MM-DD format, or null if not stated'],
+        'vendorName' => ['type' => 'string', 'description' => 'Name of the company/person issuing the invoice'],
+        'vendorAddress' => ['type' => ['string', 'null'], 'description' => 'Full address of the vendor'],
+        'vendorVatId' => ['type' => ['string', 'null'], 'description' => 'VAT/tax ID of the vendor'],
+        'buyerName' => ['type' => ['string', 'null'], 'description' => 'Name of the buyer/recipient'],
+        'buyerAddress' => ['type' => ['string', 'null'], 'description' => 'Full address of the buyer'],
+        'buyerVatId' => ['type' => ['string', 'null'], 'description' => 'VAT/tax ID of the buyer'],
+        'subtotalAmount' => ['type' => ['number', 'null'], 'description' => 'Subtotal before tax'],
+        'taxAmount' => ['type' => ['number', 'null'], 'description' => 'Total tax/VAT amount'],
+        'totalAmount' => ['type' => 'number', 'description' => 'Grand total amount including tax'],
+        'currency' => ['type' => 'string', 'description' => 'Three-letter currency code (EUR, USD, GBP, etc.)'],
+        'poNumber' => ['type' => ['string', 'null'], 'description' => 'Purchase order number, or null if not present'],
+        'paymentTerms' => ['type' => ['string', 'null'], 'description' => 'Payment terms, or null if not stated'],
+        'bankDetails' => ['type' => ['string', 'null'], 'description' => 'Bank/payment details including IBAN, account number, etc.'],
+    ];
+}
+
+function extractInvoiceData($filePath, $fileType, $enabledFields = null) {
     $fileData = file_get_contents($filePath);
     if ($fileData === false) {
         throw new Exception('Cannot read file: ' . $filePath);
@@ -52,44 +74,50 @@ Rules:
 7. If the document is not an invoice, still try to extract whatever relevant data you can, but set confidence scores low.
 8. For multi-page documents, examine ALL pages.";
 
+    // Build tool properties based on enabled fields
+    $allFields = getAllExtractionFields();
+
+    // Filter to enabled fields only (null = all fields)
+    if ($enabledFields !== null && is_array($enabledFields) && !empty($enabledFields)) {
+        // Always include confidence
+        $filteredProperties = [];
+        $filteredConfidence = [];
+        foreach ($enabledFields as $fieldKey) {
+            if (isset($allFields[$fieldKey])) {
+                $filteredProperties[$fieldKey] = $allFields[$fieldKey];
+                $filteredConfidence[$fieldKey] = ['type' => 'number'];
+            }
+        }
+        $properties = $filteredProperties;
+        $confidenceProps = $filteredConfidence;
+        // Required: only fields that exist in enabled set
+        $defaultRequired = ['invoiceNumber', 'vendorName', 'totalAmount', 'currency'];
+        $required = array_values(array_intersect($defaultRequired, $enabledFields));
+        $required[] = 'confidence';
+
+        $systemPrompt .= "\n9. Only extract these specific fields: " . implode(', ', $enabledFields) . ". Ignore all other fields.";
+    } else {
+        $properties = $allFields;
+        $confidenceProps = [];
+        foreach (array_keys($allFields) as $k) {
+            $confidenceProps[$k] = ['type' => 'number'];
+        }
+        $required = ['invoiceNumber', 'vendorName', 'totalAmount', 'currency', 'confidence'];
+    }
+
+    $properties['confidence'] = [
+        'type' => 'object',
+        'description' => 'Confidence score (0.0 to 1.0) for each extracted field',
+        'properties' => $confidenceProps,
+    ];
+
     $tool = [
         'name' => 'save_invoice_data',
         'description' => 'Save the extracted invoice data. Call this tool with all extracted fields from the invoice document.',
         'input_schema' => [
             'type' => 'object',
-            'properties' => [
-                'invoiceNumber' => ['type' => 'string', 'description' => 'The invoice number/ID as printed on the document'],
-                'invoiceDate' => ['type' => 'string', 'description' => 'Invoice issue date in YYYY-MM-DD format'],
-                'dueDate' => ['type' => ['string', 'null'], 'description' => 'Payment due date in YYYY-MM-DD format, or null if not stated'],
-                'vendorName' => ['type' => 'string', 'description' => 'Name of the company/person issuing the invoice'],
-                'vendorAddress' => ['type' => ['string', 'null'], 'description' => 'Full address of the vendor'],
-                'vendorVatId' => ['type' => ['string', 'null'], 'description' => 'VAT/tax ID of the vendor'],
-                'buyerName' => ['type' => ['string', 'null'], 'description' => 'Name of the buyer/recipient'],
-                'buyerAddress' => ['type' => ['string', 'null'], 'description' => 'Full address of the buyer'],
-                'buyerVatId' => ['type' => ['string', 'null'], 'description' => 'VAT/tax ID of the buyer'],
-                'subtotalAmount' => ['type' => ['number', 'null'], 'description' => 'Subtotal before tax'],
-                'taxAmount' => ['type' => ['number', 'null'], 'description' => 'Total tax/VAT amount'],
-                'totalAmount' => ['type' => 'number', 'description' => 'Grand total amount including tax'],
-                'currency' => ['type' => 'string', 'description' => 'Three-letter currency code (EUR, USD, GBP, etc.)'],
-                'poNumber' => ['type' => ['string', 'null'], 'description' => 'Purchase order number, or null if not present'],
-                'paymentTerms' => ['type' => ['string', 'null'], 'description' => 'Payment terms, or null if not stated'],
-                'bankDetails' => ['type' => ['string', 'null'], 'description' => 'Bank/payment details including IBAN, account number, etc.'],
-                'confidence' => [
-                    'type' => 'object',
-                    'description' => 'Confidence score (0.0 to 1.0) for each extracted field',
-                    'properties' => [
-                        'invoiceNumber' => ['type' => 'number'], 'invoiceDate' => ['type' => 'number'],
-                        'dueDate' => ['type' => 'number'], 'vendorName' => ['type' => 'number'],
-                        'vendorAddress' => ['type' => 'number'], 'vendorVatId' => ['type' => 'number'],
-                        'buyerName' => ['type' => 'number'], 'buyerAddress' => ['type' => 'number'],
-                        'buyerVatId' => ['type' => 'number'], 'totalAmount' => ['type' => 'number'],
-                        'currency' => ['type' => 'number'], 'taxAmount' => ['type' => 'number'],
-                        'subtotalAmount' => ['type' => 'number'], 'poNumber' => ['type' => 'number'],
-                        'paymentTerms' => ['type' => 'number'], 'bankDetails' => ['type' => 'number'],
-                    ],
-                ],
-            ],
-            'required' => ['invoiceNumber', 'vendorName', 'totalAmount', 'currency', 'confidence'],
+            'properties' => $properties,
+            'required' => $required,
         ],
     ];
 

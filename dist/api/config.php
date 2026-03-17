@@ -228,5 +228,9 @@ function maskCompanySecrets($company) {
             }
         }
     }
+    // Decode JSON columns
+    if (isset($company['extraction_fields']) && is_string($company['extraction_fields'])) {
+        $company['extraction_fields'] = json_decode($company['extraction_fields'], true);
+    }
     return $company;
 }

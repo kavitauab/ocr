@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Save, Send, Trash2, CheckCircle, AlertTriangle, AlertCircle } from "lucide-react";
+import { ArrowLeft, Save, Send, Trash2, CheckCircle, AlertTriangle, AlertCircle, Download } from "lucide-react";
 
 function ConfidenceDot({ score }: { score?: number }) {
   if (score == null) return null;
@@ -195,7 +195,12 @@ export default function InvoiceDetail() {
           {/* Actions */}
           <Card>
             <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
-            <CardContent className="flex gap-2">
+            <CardContent className="flex gap-2 flex-wrap">
+              <a href={`/api/invoices/${id}/metadata?access_token=${encodeURIComponent(token || "")}`} download>
+                <Button variant="outline">
+                  <Download className="h-3 w-3 mr-1" />Download JSON
+                </Button>
+              </a>
               <Button variant="outline" onClick={() => vecticumMutation.mutate()} disabled={vecticumMutation.isPending}>
                 <Send className="h-3 w-3 mr-1" />Send to Vecticum
               </Button>

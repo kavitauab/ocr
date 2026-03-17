@@ -120,8 +120,17 @@ class Invoice extends BaseResource {
 
         // Extract with Claude
         try {
+            // Load company extraction field preferences
+            $companyStmt = $this->db->prepare("SELECT extraction_fields FROM companies WHERE id = :id");
+            $companyStmt->execute(['id' => $companyId]);
+            $companyRow = $companyStmt->fetch();
+            $enabledFields = null;
+            if ($companyRow && $companyRow['extraction_fields']) {
+                $enabledFields = json_decode($companyRow['extraction_fields'], true);
+            }
+
             $filePath = getFilePath($saved['storedFilename']);
-            $extracted = extractInvoiceData($filePath, $saved['fileType']);
+            $extracted = extractInvoiceData($filePath, $saved['fileType'], $enabledFields);
 
             $stmt = $this->db->prepare("UPDATE invoices SET status = 'completed',
                 invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
@@ -345,6 +354,49 @@ class Invoice extends BaseResource {
         header("Content-Type: $contentType");
         header("Content-Disposition: inline; filename=\"{$invoice['original_filename']}\"");
         readfile($filePath);
+        exit;
+    }
+
+    public function metadata($id) {
+        $user = getAuthUser();
+        $stmt = $this->db->prepare("SELECT * FROM invoices WHERE id = :id");
+        $stmt->execute(['id' => $id]);
+        $invoice = $stmt->fetch();
+        if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
+        if ($invoice['company_id']) requireCompanyAccess($user, $invoice['company_id']);
+
+        $meta = [
+            'invoiceNumber' => $invoice['invoice_number'],
+            'invoiceDate' => $invoice['invoice_date'],
+            'dueDate' => $invoice['due_date'],
+            'vendorName' => $invoice['vendor_name'],
+            'vendorAddress' => $invoice['vendor_address'],
+            'vendorVatId' => $invoice['vendor_vat_id'],
+            'buyerName' => $invoice['buyer_name'],
+            'buyerAddress' => $invoice['buyer_address'],
+            'buyerVatId' => $invoice['buyer_vat_id'],
+            'totalAmount' => $invoice['total_amount'] !== null ? (float)$invoice['total_amount'] : null,
+            'taxAmount' => $invoice['tax_amount'] !== null ? (float)$invoice['tax_amount'] : null,
+            'subtotalAmount' => $invoice['subtotal_amount'] !== null ? (float)$invoice['subtotal_amount'] : null,
+            'currency' => $invoice['currency'],
+            'poNumber' => $invoice['po_number'],
+            'paymentTerms' => $invoice['payment_terms'],
+            'bankDetails' => $invoice['bank_details'],
+        ];
+
+        // Remove null values for cleaner output
+        $meta = array_filter($meta, fn($v) => $v !== null);
+
+        if ($invoice['confidence_scores']) {
+            $meta['confidenceScores'] = json_decode($invoice['confidence_scores'], true);
+        }
+
+        $filename = ($invoice['invoice_number'] ?: 'invoice-' . $id) . '.json';
+        $filename = preg_replace('/[^a-zA-Z0-9._-]/', '_', $filename);
+
+        header('Content-Type: application/json');
+        header("Content-Disposition: attachment; filename=\"$filename\"");
+        echo json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         exit;
     }
 

@@ -31,13 +31,33 @@ export default function CompanyEdit() {
   const [showResults, setShowResults] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
 
-  const [form, setForm] = useState({
+  const allExtractionFields: [string, string][] = [
+    ["invoiceNumber", "Invoice Number"],
+    ["invoiceDate", "Invoice Date"],
+    ["dueDate", "Due Date"],
+    ["vendorName", "Vendor Name"],
+    ["vendorAddress", "Vendor Address"],
+    ["vendorVatId", "Vendor VAT ID"],
+    ["buyerName", "Buyer Name"],
+    ["buyerAddress", "Buyer Address"],
+    ["buyerVatId", "Buyer VAT ID"],
+    ["subtotalAmount", "Subtotal"],
+    ["taxAmount", "Tax Amount"],
+    ["totalAmount", "Total Amount"],
+    ["currency", "Currency"],
+    ["poNumber", "PO Number"],
+    ["paymentTerms", "Payment Terms"],
+    ["bankDetails", "Bank Details"],
+  ];
+
+  const [form, setForm] = useState<Record<string, any>>({
     name: "", code: "", logoUrl: "",
     msClientId: "", msClientSecret: "", msTenantId: "", msSenderEmail: "",
     msFetchEnabled: false, msFetchFolder: "INBOX",
     vecticumEnabled: false, vecticumApiBaseUrl: "", vecticumClientId: "",
     vecticumClientSecret: "", vecticumCompanyId: "",
     vecticumAuthorId: "", vecticumAuthorName: "",
+    extractionFields: null, // null = all fields enabled
   });
 
   const { data } = useQuery({
@@ -172,6 +192,56 @@ export default function CompanyEdit() {
 
       {!isNew && (
         <>
+          {/* Extraction Fields */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Extraction Fields</CardTitle>
+              <label className="flex items-center gap-2 text-sm text-gray-500">
+                <input
+                  type="checkbox"
+                  checked={form.extractionFields === null || form.extractionFields === undefined}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      set("extractionFields", null);
+                    } else {
+                      set("extractionFields", allExtractionFields.map(([k]) => k));
+                    }
+                  }}
+                />
+                All fields
+              </label>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-gray-500 mb-3">Select which fields to extract from invoices for this company. Unchecked fields will be skipped during AI extraction.</p>
+              <div className="grid grid-cols-2 gap-2">
+                {allExtractionFields.map(([key, label]) => {
+                  const isAllMode = form.extractionFields === null || form.extractionFields === undefined;
+                  const isChecked = isAllMode || (Array.isArray(form.extractionFields) && form.extractionFields.includes(key));
+                  return (
+                    <label key={key} className="flex items-center gap-2 text-sm py-1">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        disabled={isAllMode}
+                        onChange={(e) => {
+                          const current: string[] = Array.isArray(form.extractionFields) ? [...form.extractionFields] : allExtractionFields.map(([k]) => k);
+                          if (e.target.checked) {
+                            if (!current.includes(key)) current.push(key);
+                          } else {
+                            const idx = current.indexOf(key);
+                            if (idx > -1) current.splice(idx, 1);
+                          }
+                          set("extractionFields", current);
+                        }}
+                      />
+                      {label}
+                    </label>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Members */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
