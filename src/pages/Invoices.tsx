@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { useCompany } from "@/lib/company";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { X } from "lucide-react";
+import { Download, X } from "lucide-react";
 
 function getSentToOcrAt(invoice: any): string | null {
   return invoice?.ocrSentAt ?? invoice?.ocrStartedAt ?? invoice?.sentToOcrAt ?? invoice?.sentAt ?? invoice?.lastSentAt ?? null;
@@ -101,13 +101,50 @@ export default function Invoices() {
 
   const hasLifecycleFilters = lifecycle !== "all" || !!sentFrom || !!sentTo || !!returnedFrom || !!returnedTo;
 
+  const [groupByCompany, setGroupByCompany] = useState(false);
   const invoices = Array.isArray(data?.invoices) ? data.invoices : [];
+
+  // Group invoices by company for superadmin grouped view
+  const groupedInvoices = useMemo(() => {
+    if (!groupByCompany || !isSuperadmin) return null;
+    const groups: Record<string, { name: string; code: string; companyId: string; invoices: any[] }> = {};
+    for (const inv of invoices) {
+      const key = inv.companyId || "unknown";
+      if (!groups[key]) {
+        groups[key] = { name: inv.companyName || "Unknown", code: inv.companyCode || "", companyId: key, invoices: [] };
+      }
+      groups[key].invoices.push(inv);
+    }
+    return Object.values(groups);
+  }, [invoices, groupByCompany, isSuperadmin]);
+
+  const handleExportCsv = () => {
+    const token = localStorage.getItem("token");
+    const exportParams = new URLSearchParams(searchParams);
+
+    if (!exportParams.get("companyId") && effectiveCompanyId) {
+      exportParams.set("companyId", effectiveCompanyId);
+    }
+    if (token) {
+      exportParams.set("access_token", token);
+    }
+
+    const query = exportParams.toString();
+    const url = query ? `/api/invoices/export?${query}` : "/api/invoices/export";
+    window.location.href = url;
+  };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Invoices</h1>
-        <Link to="/upload"><Button>Upload Invoice</Button></Link>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleExportCsv}>
+            <Download className="h-4 w-4 mr-1" />
+            Export CSV
+          </Button>
+          <Link to="/upload"><Button>Upload Invoice</Button></Link>
+        </div>
       </div>
 
       {filterCompany && (
@@ -177,11 +214,25 @@ export default function Invoices() {
         )}
       </div>
 
+      {isSuperadmin && !urlCompanyId && (
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={groupByCompany}
+              onChange={(e) => setGroupByCompany(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            Group by company
+          </label>
+        </div>
+      )}
+
       <Table>
         <TableHeader>
           <TableRow>
+            {isSuperadmin && !groupByCompany && <TableHead>Company</TableHead>}
             <TableHead>Invoice #</TableHead>
-            {isSuperadmin && <TableHead>Company</TableHead>}
             <TableHead>Vendor</TableHead>
             <TableHead>Date</TableHead>
             <TableHead>Amount</TableHead>
@@ -192,35 +243,69 @@ export default function Invoices() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {invoices.map((inv: any) => (
-            <TableRow key={inv.id}>
-              <TableCell>
-                <Link to={`/invoices/${inv.id}`} className="text-blue-600 hover:underline font-medium">
-                  {inv.invoiceNumber || inv.originalFilename}
-                </Link>
-              </TableCell>
-              {isSuperadmin && (
+          {groupByCompany && groupedInvoices ? (
+            groupedInvoices.map((group) => (
+              <>
+                <TableRow key={`group-${group.companyId}`} className="bg-gray-50 border-t-2">
+                  <TableCell colSpan={8} className="py-2">
+                    <span className="font-semibold text-sm">{group.name}</span>
+                    {group.code && <span className="text-xs text-gray-400 ml-2">{group.code}</span>}
+                    <span className="text-xs text-gray-400 ml-2">({group.invoices.length} invoice{group.invoices.length !== 1 ? "s" : ""})</span>
+                  </TableCell>
+                </TableRow>
+                {group.invoices.map((inv: any) => (
+                  <TableRow key={inv.id}>
+                    <TableCell>
+                      <Link to={`/invoices/${inv.id}`} className="text-blue-600 hover:underline font-medium">
+                        {inv.invoiceNumber || inv.originalFilename}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{inv.vendorName || "—"}</TableCell>
+                    <TableCell>{inv.invoiceDate || "—"}</TableCell>
+                    <TableCell>{inv.totalAmount ? `${inv.totalAmount} ${inv.currency || ""}` : "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant={inv.status === "completed" ? "default" : inv.status === "failed" ? "destructive" : "secondary"}>
+                        {inv.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell><Badge variant="outline">{inv.source}</Badge></TableCell>
+                    <TableCell className="text-sm text-gray-600">{formatDateTime(getSentToOcrAt(inv))}</TableCell>
+                    <TableCell className="text-sm text-gray-600">{formatDateTime(getReturnedAt(inv))}</TableCell>
+                  </TableRow>
+                ))}
+              </>
+            ))
+          ) : (
+            invoices.map((inv: any) => (
+              <TableRow key={inv.id}>
+                {isSuperadmin && (
+                  <TableCell>
+                    <span className="text-sm">{inv.companyName || "—"}</span>
+                    {inv.companyCode && <span className="text-xs text-gray-400 ml-1">({inv.companyCode})</span>}
+                  </TableCell>
+                )}
                 <TableCell>
-                  <span className="text-sm">{inv.companyName || "—"}</span>
-                  {inv.companyCode && <span className="text-xs text-gray-400 ml-1">({inv.companyCode})</span>}
+                  <Link to={`/invoices/${inv.id}`} className="text-blue-600 hover:underline font-medium">
+                    {inv.invoiceNumber || inv.originalFilename}
+                  </Link>
                 </TableCell>
-              )}
-              <TableCell>{inv.vendorName || "—"}</TableCell>
-              <TableCell>{inv.invoiceDate || "—"}</TableCell>
-              <TableCell>{inv.totalAmount ? `${inv.totalAmount} ${inv.currency || ""}` : "—"}</TableCell>
-              <TableCell>
-                <Badge variant={inv.status === "completed" ? "default" : inv.status === "failed" ? "destructive" : "secondary"}>
-                  {inv.status}
-                </Badge>
-              </TableCell>
-              <TableCell><Badge variant="outline">{inv.source}</Badge></TableCell>
-              <TableCell className="text-sm text-gray-600">{formatDateTime(getSentToOcrAt(inv))}</TableCell>
-              <TableCell className="text-sm text-gray-600">{formatDateTime(getReturnedAt(inv))}</TableCell>
-            </TableRow>
-          ))}
-          {isLoading && <TableRow><TableCell colSpan={isSuperadmin ? 9 : 8} className="text-center">Loading...</TableCell></TableRow>}
+                <TableCell>{inv.vendorName || "—"}</TableCell>
+                <TableCell>{inv.invoiceDate || "—"}</TableCell>
+                <TableCell>{inv.totalAmount ? `${inv.totalAmount} ${inv.currency || ""}` : "—"}</TableCell>
+                <TableCell>
+                  <Badge variant={inv.status === "completed" ? "default" : inv.status === "failed" ? "destructive" : "secondary"}>
+                    {inv.status}
+                  </Badge>
+                </TableCell>
+                <TableCell><Badge variant="outline">{inv.source}</Badge></TableCell>
+                <TableCell className="text-sm text-gray-600">{formatDateTime(getSentToOcrAt(inv))}</TableCell>
+                <TableCell className="text-sm text-gray-600">{formatDateTime(getReturnedAt(inv))}</TableCell>
+              </TableRow>
+            ))
+          )}
+          {isLoading && <TableRow><TableCell colSpan={isSuperadmin && !groupByCompany ? 9 : 8} className="text-center">Loading...</TableCell></TableRow>}
           {!isLoading && invoices.length === 0 && (
-            <TableRow><TableCell colSpan={isSuperadmin ? 9 : 8} className="text-center text-gray-500">No invoices found</TableCell></TableRow>
+            <TableRow><TableCell colSpan={isSuperadmin && !groupByCompany ? 9 : 8} className="text-center text-gray-500">No invoices found</TableCell></TableRow>
           )}
         </TableBody>
       </Table>

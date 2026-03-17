@@ -11,9 +11,69 @@ import { ArrowLeft, Save, Send, Trash2, CheckCircle, AlertTriangle, AlertCircle,
 
 function ConfidenceDot({ score }: { score?: number }) {
   if (score == null) return null;
-  if (score >= 0.8) return <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" title={`Confidence: ${(score * 100).toFixed(0)}%`} />;
-  if (score >= 0.5) return <AlertTriangle className="h-3.5 w-3.5 text-yellow-500 shrink-0" title={`Confidence: ${(score * 100).toFixed(0)}%`} />;
-  return <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" title={`Confidence: ${(score * 100).toFixed(0)}%`} />;
+  const title = `Confidence: ${(score * 100).toFixed(0)}%`;
+  if (score >= 0.8) return <span title={title}><CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" /></span>;
+  if (score >= 0.5) return <span title={title}><AlertTriangle className="h-3.5 w-3.5 text-yellow-500 shrink-0" /></span>;
+  return <span title={title}><AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" /></span>;
+}
+
+function getUploadedAt(invoice: any): string | null {
+  return invoice?.uploadedAt ?? invoice?.createdAt ?? null;
+}
+
+function getSentToOcrAt(invoice: any): string | null {
+  return invoice?.ocrSentAt ?? invoice?.ocrStartedAt ?? invoice?.sentToOcrAt ?? invoice?.sentAt ?? invoice?.lastSentAt ?? null;
+}
+
+function getReturnedAt(invoice: any): string | null {
+  return invoice?.ocrReturnedAt ?? invoice?.returnedAt ?? invoice?.lastReturnedAt ?? invoice?.completedAt ?? null;
+}
+
+function parseDateTime(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function formatDateTime(value: string | null | undefined): string {
+  const parsed = parseDateTime(value);
+  if (!parsed) return "—";
+  return parsed.toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
+}
+
+function formatDuration(ms: number | null): string {
+  if (ms === null || !Number.isFinite(ms) || ms < 0) return "—";
+  const totalSeconds = Math.round(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
+function getProcessingDurationMs(invoice: any): number | null {
+  const msCandidates = [invoice?.processingDurationMs, invoice?.ocrProcessingDurationMs, invoice?.durationMs];
+  for (const candidate of msCandidates) {
+    const value = Number(candidate);
+    if (Number.isFinite(value) && value >= 0) return value;
+  }
+
+  const secondCandidates = [invoice?.processingDurationSeconds, invoice?.ocrProcessingDurationSeconds, invoice?.durationSeconds];
+  for (const candidate of secondCandidates) {
+    const value = Number(candidate);
+    if (Number.isFinite(value) && value >= 0) return value * 1000;
+  }
+
+  const sentAt = parseDateTime(getSentToOcrAt(invoice));
+  const returnedAt = parseDateTime(getReturnedAt(invoice));
+  if (sentAt && returnedAt) {
+    const diff = returnedAt.getTime() - sentAt.getTime();
+    if (diff >= 0) return diff;
+  }
+
+  return null;
 }
 
 export default function InvoiceDetail() {
@@ -111,6 +171,18 @@ export default function InvoiceDetail() {
   const statusColor = invoice.status === "completed" ? "default"
     : invoice.status === "failed" ? "destructive"
     : "secondary";
+  const uploadedAt = getUploadedAt(invoice);
+  const sentToOcrAt = getSentToOcrAt(invoice);
+  const returnedAt = getReturnedAt(invoice);
+  const uploadedDate = parseDateTime(uploadedAt);
+  const sentToOcrDate = parseDateTime(sentToOcrAt);
+  const returnedDate = parseDateTime(returnedAt);
+  const processingDurationMs = getProcessingDurationMs(invoice);
+  const processingDuration = processingDurationMs !== null
+    ? formatDuration(processingDurationMs)
+    : sentToOcrDate && !returnedDate
+      ? "In progress"
+      : "—";
 
   return (
     <div className="space-y-4">
@@ -223,6 +295,35 @@ export default function InvoiceDetail() {
             </CardContent>
           </Card>
 
+          {/* Lifecycle Timeline */}
+          <Card>
+            <CardHeader><CardTitle>Lifecycle Timeline</CardTitle></CardHeader>
+            <CardContent>
+              <div className="ml-1 space-y-4 border-l border-gray-200 pl-4">
+                <div className="relative flex items-start justify-between gap-4">
+                  <span className={`absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full ${uploadedDate ? "bg-gray-500" : "bg-gray-300"}`} />
+                  <span className="text-sm text-gray-500">Uploaded / Created</span>
+                  <span className="text-sm font-medium text-right">{formatDateTime(uploadedAt)}</span>
+                </div>
+                <div className="relative flex items-start justify-between gap-4">
+                  <span className={`absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full ${sentToOcrDate ? "bg-blue-500" : "bg-gray-300"}`} />
+                  <span className="text-sm text-gray-500">OCR Sent</span>
+                  <span className="text-sm font-medium text-right">{formatDateTime(sentToOcrAt)}</span>
+                </div>
+                <div className="relative flex items-start justify-between gap-4">
+                  <span className={`absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full ${returnedDate ? "bg-green-500" : "bg-gray-300"}`} />
+                  <span className="text-sm text-gray-500">OCR Returned</span>
+                  <span className="text-sm font-medium text-right">{formatDateTime(returnedAt)}</span>
+                </div>
+                <div className="relative flex items-start justify-between gap-4">
+                  <span className={`absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full ${processingDurationMs !== null ? "bg-amber-500" : "bg-gray-300"}`} />
+                  <span className="text-sm text-gray-500">Processing Duration</span>
+                  <span className="text-sm font-medium text-right">{processingDuration}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Actions */}
           <Card>
             <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
@@ -252,7 +353,7 @@ export default function InvoiceDetail() {
               <div className="flex justify-between"><span>Source</span><span className="font-medium">{invoice.source}</span></div>
               <div className="flex justify-between"><span>File</span><span className="font-medium">{invoice.originalFilename}</span></div>
               <div className="flex justify-between"><span>Size</span><span className="font-medium">{invoice.fileSize ? `${(invoice.fileSize / 1024).toFixed(1)} KB` : "—"}</span></div>
-              <div className="flex justify-between"><span>Uploaded</span><span className="font-medium">{invoice.createdAt}</span></div>
+              <div className="flex justify-between"><span>Uploaded</span><span className="font-medium">{formatDateTime(uploadedAt)}</span></div>
             </CardContent>
           </Card>
         </div>

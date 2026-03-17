@@ -11,6 +11,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Badge } from "@/components/ui/badge";
 import { FileText, CheckCircle, Loader2, AlertTriangle, Building2 } from "lucide-react";
 
+
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
@@ -44,26 +45,6 @@ function getCompanyCode(company: any): string {
   return String(company?.companyCode ?? company?.code ?? "");
 }
 
-function getCompanyStatus(company: any): string {
-  if (typeof company?.isActive === "boolean") return company.isActive ? "active" : "inactive";
-  return String(company?.status ?? company?.companyStatus ?? "—");
-}
-
-function getCompanyPlan(company: any): string {
-  return String(company?.plan ?? company?.subscriptionPlan ?? "—");
-}
-
-function getBillingStatus(company: any): string {
-  return String(company?.billingStatus ?? company?.subscriptionStatus ?? "—");
-}
-
-function getBillingVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
-  const normalized = status.toLowerCase();
-  if (["active", "paid", "current", "ok"].includes(normalized)) return "default";
-  if (["past_due", "overdue", "failed", "unpaid"].includes(normalized)) return "destructive";
-  if (normalized === "—") return "outline";
-  return "secondary";
-}
 
 function getTokenUsage(company: any): number | string | null {
   return company?.tokenUsage ?? company?.totalTokens ?? company?.tokensUsed ?? null;
@@ -87,8 +68,6 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [superadminMode, setSuperadminMode] = useState<"global" | "company">("global");
   const [companySearch, setCompanySearch] = useState("");
-  const [companyStatusFilter, setCompanyStatusFilter] = useState("all");
-  const [billingFilter, setBillingFilter] = useState("all");
 
   const isSuperadmin = user?.role === "superadmin";
   const effectiveCompanyId = isSuperadmin
@@ -118,27 +97,14 @@ export default function Dashboard() {
 
   const showCompanyOverview = isSuperadmin && superadminMode === "global";
   const companies: any[] = stats?.companies || [];
-  const statusOptions = useMemo(() => {
-    const allStatuses = companies.map(getCompanyStatus).filter((value) => value && value !== "—");
-    return [...new Set(allStatuses)].sort((a, b) => a.localeCompare(b));
-  }, [companies]);
-  const billingOptions = useMemo(() => {
-    const allStatuses = companies.map(getBillingStatus).filter((value) => value && value !== "—");
-    return [...new Set(allStatuses)].sort((a, b) => a.localeCompare(b));
-  }, [companies]);
   const filteredCompanies = useMemo(() => {
     const term = companySearch.trim().toLowerCase();
+    if (!term) return companies;
     return companies.filter((company) => {
-      const status = getCompanyStatus(company);
-      const plan = getCompanyPlan(company);
-      const billingStatus = getBillingStatus(company);
-      const searchable = [getCompanyName(company), getCompanyCode(company), status, plan].join(" ").toLowerCase();
-      const matchesSearch = !term || searchable.includes(term);
-      const matchesStatus = companyStatusFilter === "all" || status.toLowerCase() === companyStatusFilter.toLowerCase();
-      const matchesBilling = billingFilter === "all" || billingStatus.toLowerCase() === billingFilter.toLowerCase();
-      return matchesSearch && matchesStatus && matchesBilling;
+      const searchable = [getCompanyName(company), getCompanyCode(company)].join(" ").toLowerCase();
+      return searchable.includes(term);
     });
-  }, [companies, companySearch, companyStatusFilter, billingFilter]);
+  }, [companies, companySearch]);
   const showRecentInvoices = !!effectiveCompanyId && (!isSuperadmin || superadminMode === "company");
 
   return (
@@ -192,41 +158,16 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <Input
-                value={companySearch}
-                onChange={(e) => setCompanySearch(e.target.value)}
-                placeholder="Search by company, code, status, plan..."
-                className="w-full sm:w-80"
-              />
-              <select
-                value={companyStatusFilter}
-                onChange={(e) => setCompanyStatusFilter(e.target.value)}
-                className="h-10 rounded-md border px-3 text-sm"
-              >
-                <option value="all">All statuses</option>
-                {statusOptions.map((status) => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
-              <select
-                value={billingFilter}
-                onChange={(e) => setBillingFilter(e.target.value)}
-                className="h-10 rounded-md border px-3 text-sm"
-              >
-                <option value="all">All billing states</option>
-                {billingOptions.map((status) => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
-            </div>
+            <Input
+              value={companySearch}
+              onChange={(e) => setCompanySearch(e.target.value)}
+              placeholder="Search by company or code..."
+              className="w-full sm:w-80"
+            />
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Company</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Billing</TableHead>
                   <TableHead className="text-center">Scanned</TableHead>
                   <TableHead className="text-right">Tokens</TableHead>
                   <TableHead className="text-right">OCR Cost</TableHead>
@@ -237,9 +178,6 @@ export default function Dashboard() {
               <TableBody>
                 {filteredCompanies.map((c: any) => {
                   const companyId = getCompanyId(c);
-                  const status = getCompanyStatus(c);
-                  const plan = getCompanyPlan(c);
-                  const billingStatus = getBillingStatus(c);
                   return (
                   <TableRow
                     key={companyId || `${getCompanyName(c)}-${getCompanyCode(c)}`}
@@ -252,9 +190,6 @@ export default function Dashboard() {
                         {getCompanyCode(c) && <span className="text-xs text-gray-400 ml-2">{getCompanyCode(c)}</span>}
                       </div>
                     </TableCell>
-                    <TableCell><Badge variant="outline">{status}</Badge></TableCell>
-                    <TableCell>{plan}</TableCell>
-                    <TableCell><Badge variant={getBillingVariant(billingStatus)}>{billingStatus}</Badge></TableCell>
                     <TableCell className="text-center font-mono">{formatNumber(c.totalInvoices)}</TableCell>
                     <TableCell className="text-right font-mono">{formatNumber(getTokenUsage(c))}</TableCell>
                     <TableCell className="text-right font-mono">{formatUsd(getOcrCost(c))}</TableCell>
@@ -264,7 +199,7 @@ export default function Dashboard() {
                 )})}
                 {filteredCompanies.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-gray-500 py-8">
+                    <TableCell colSpan={6} className="text-center text-gray-500 py-8">
                       No companies match current filters
                     </TableCell>
                   </TableRow>

@@ -31,6 +31,19 @@ class Invoice extends BaseResource {
         'jpeg' => 'image/jpeg',
     ];
 
+    private function csvSafeValue($value) {
+        if ($value === null) return '';
+        if (is_array($value) || is_object($value)) {
+            $value = json_encode($value, JSON_UNESCAPED_UNICODE);
+        }
+        $value = (string)$value;
+        // Prevent spreadsheet formula injection when opening CSV files.
+        if ($value !== '' && preg_match('/^[=\-+@]/', $value)) {
+            return "'" . $value;
+        }
+        return $value;
+    }
+
     public function list() {
         $user = getAuthUser();
         $search = $_GET['search'] ?? '';
@@ -269,6 +282,11 @@ class Invoice extends BaseResource {
     }
 
     public function get($id) {
+        if ($id === 'export') {
+            $this->export();
+            return;
+        }
+
         $user = getAuthUser();
         $stmt = $this->db->prepare("SELECT * FROM invoices WHERE id = :id");
         $stmt->execute(['id' => $id]);
@@ -278,6 +296,153 @@ class Invoice extends BaseResource {
         if ($invoice['company_id']) requireCompanyAccess($user, $invoice['company_id']);
 
         sendJSON(['invoice' => $this->formatInvoice($invoice)]);
+    }
+
+    public function export($id = null) {
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') sendJSON(['error' => 'Method not allowed'], 405);
+
+        $user = getAuthUser();
+        $search = $_GET['search'] ?? '';
+        $status = $_GET['status'] ?? '';
+        $companyId = $_GET['companyId'] ?? '';
+        $lifecycle = $_GET['lifecycle'] ?? '';
+        $sentFrom = $_GET['sentFrom'] ?? '';
+        $sentTo = $_GET['sentTo'] ?? '';
+        $returnedFrom = $_GET['returnedFrom'] ?? '';
+        $returnedTo = $_GET['returnedTo'] ?? '';
+
+        $conditions = [];
+        $params = [];
+
+        if ($companyId) {
+            requireCompanyAccess($user, $companyId);
+            $conditions[] = "i.company_id = :companyId";
+            $params['companyId'] = $companyId;
+        } elseif ($user['role'] !== 'superadmin') {
+            $companies = getUserCompanies($user);
+            $ids = array_column($companies, 'id');
+            if (empty($ids)) {
+                $filename = 'invoices-export-' . date('Ymd-His') . '.csv';
+                header('Content-Type: text/csv; charset=UTF-8');
+                header("Content-Disposition: attachment; filename=\"$filename\"");
+                header('Pragma: no-cache');
+                header('Expires: 0');
+                $out = fopen('php://output', 'w');
+                fputcsv($out, [
+                    'company', 'source', 'status', 'document type', 'createdAt', 'ocrSentAt', 'ocrReturnedAt', 'processingSeconds',
+                    'invoiceNumber', 'invoiceDate', 'dueDate', 'vendorName', 'vendorAddress', 'vendorVatId',
+                    'buyerName', 'buyerAddress', 'buyerVatId', 'subtotalAmount', 'taxAmount', 'totalAmount',
+                    'currency', 'poNumber', 'paymentTerms', 'bankDetails', 'originalFilename', 'id'
+                ]);
+                fclose($out);
+                exit;
+            }
+            $placeholders = [];
+            foreach ($ids as $idx => $cid) {
+                $placeholders[] = ":cid$idx";
+                $params["cid$idx"] = $cid;
+            }
+            $conditions[] = "i.company_id IN (" . implode(',', $placeholders) . ")";
+        }
+
+        if ($search) {
+            $conditions[] = "(i.invoice_number LIKE :search OR i.vendor_name LIKE :search2 OR i.buyer_name LIKE :search3 OR i.original_filename LIKE :search4)";
+            $params['search'] = "%$search%";
+            $params['search2'] = "%$search%";
+            $params['search3'] = "%$search%";
+            $params['search4'] = "%$search%";
+        }
+
+        if ($status) {
+            $conditions[] = "i.status = :status";
+            $params['status'] = $status;
+        }
+
+        if ($lifecycle === 'sent') {
+            $conditions[] = "i.ocr_sent_at IS NOT NULL";
+        } elseif ($lifecycle === 'not-sent') {
+            $conditions[] = "i.ocr_sent_at IS NULL";
+        } elseif ($lifecycle === 'returned') {
+            $conditions[] = "i.ocr_returned_at IS NOT NULL";
+        } elseif ($lifecycle === 'pending-return') {
+            $conditions[] = "i.ocr_sent_at IS NOT NULL AND i.ocr_returned_at IS NULL";
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $sentFrom)) {
+            $conditions[] = "i.ocr_sent_at >= :sentFrom";
+            $params['sentFrom'] = $sentFrom . ' 00:00:00';
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $sentTo)) {
+            $conditions[] = "i.ocr_sent_at <= :sentTo";
+            $params['sentTo'] = $sentTo . ' 23:59:59';
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $returnedFrom)) {
+            $conditions[] = "i.ocr_returned_at >= :returnedFrom";
+            $params['returnedFrom'] = $returnedFrom . ' 00:00:00';
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $returnedTo)) {
+            $conditions[] = "i.ocr_returned_at <= :returnedTo";
+            $params['returnedTo'] = $returnedTo . ' 23:59:59';
+        }
+
+        $where = $conditions ? 'WHERE ' . implode(' AND ', $conditions) : '';
+
+        $sql = "SELECT i.*, c.name as company_name, TIMESTAMPDIFF(SECOND, i.ocr_sent_at, i.ocr_returned_at) as processing_seconds
+            FROM invoices i
+            LEFT JOIN companies c ON c.id = i.company_id
+            $where
+            ORDER BY i.created_at DESC";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+
+        $filename = 'invoices-export-' . date('Ymd-His') . '.csv';
+        header('Content-Type: text/csv; charset=UTF-8');
+        header("Content-Disposition: attachment; filename=\"$filename\"");
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $out = fopen('php://output', 'w');
+        fputcsv($out, [
+            'company', 'source', 'status', 'document type', 'createdAt', 'ocrSentAt', 'ocrReturnedAt', 'processingSeconds',
+            'invoiceNumber', 'invoiceDate', 'dueDate', 'vendorName', 'vendorAddress', 'vendorVatId',
+            'buyerName', 'buyerAddress', 'buyerVatId', 'subtotalAmount', 'taxAmount', 'totalAmount',
+            'currency', 'poNumber', 'paymentTerms', 'bankDetails', 'originalFilename', 'id'
+        ]);
+
+        foreach ($rows as $row) {
+            fputcsv($out, array_map([$this, 'csvSafeValue'], [
+                $row['company_name'] ?? '',
+                $row['source'] ?? '',
+                $row['status'] ?? '',
+                $row['document_type'] ?? '',
+                $row['created_at'] ?? '',
+                $row['ocr_sent_at'] ?? '',
+                $row['ocr_returned_at'] ?? '',
+                $row['processing_seconds'] !== null ? (int)$row['processing_seconds'] : '',
+                $row['invoice_number'] ?? '',
+                $row['invoice_date'] ?? '',
+                $row['due_date'] ?? '',
+                $row['vendor_name'] ?? '',
+                $row['vendor_address'] ?? '',
+                $row['vendor_vat_id'] ?? '',
+                $row['buyer_name'] ?? '',
+                $row['buyer_address'] ?? '',
+                $row['buyer_vat_id'] ?? '',
+                $row['subtotal_amount'] ?? '',
+                $row['tax_amount'] ?? '',
+                $row['total_amount'] ?? '',
+                $row['currency'] ?? '',
+                $row['po_number'] ?? '',
+                $row['payment_terms'] ?? '',
+                $row['bank_details'] ?? '',
+                $row['original_filename'] ?? '',
+                $row['id'] ?? '',
+            ]));
+        }
+
+        fclose($out);
+        exit;
     }
 
     public function update($id) {
