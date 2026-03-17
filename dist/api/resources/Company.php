@@ -156,7 +156,7 @@ class Company extends BaseResource {
         }
 
         // GET members list
-        $stmt = $this->db->prepare("SELECT u.id, u.name, u.email, uc.role as companyRole, uc.created_at as joinedAt FROM user_companies uc INNER JOIN users u ON u.id = uc.user_id WHERE uc.company_id = :companyId");
+        $stmt = $this->db->prepare("SELECT u.id as userId, u.name, u.email, uc.role, uc.created_at as joinedAt FROM user_companies uc INNER JOIN users u ON u.id = uc.user_id WHERE uc.company_id = :companyId");
         $stmt->execute(['companyId' => $id]);
         sendJSON(['members' => $stmt->fetchAll()]);
     }

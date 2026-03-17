@@ -11,7 +11,7 @@ import Emails from "@/pages/Emails";
 import Companies from "@/pages/Companies";
 import CompanyEdit from "@/pages/CompanyEdit";
 import Users from "@/pages/Users";
-import Settings from "@/pages/Settings";
+import SystemSettings from "@/pages/SystemSettings";
 
 export default function App() {
   return (
@@ -33,11 +33,12 @@ export default function App() {
           <Route path="/invoices/:id" element={<InvoiceDetail />} />
           <Route path="/upload" element={<Upload />} />
           <Route path="/emails" element={<Emails />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/settings" element={<Navigate to="/settings/companies" replace />} />
           <Route path="/settings/companies" element={<Companies />} />
           <Route path="/settings/companies/new" element={<CompanyEdit />} />
           <Route path="/settings/companies/:id" element={<CompanyEdit />} />
           <Route path="/settings/users" element={<Users />} />
+          <Route path="/settings/system" element={<SystemSettings />} />
         </Route>
       </Routes>
     </AuthProvider>

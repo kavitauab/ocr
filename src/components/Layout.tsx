@@ -1,6 +1,7 @@
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useCompany } from "@/lib/company";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   FileText,
@@ -9,25 +10,45 @@ import {
   Settings,
   LogOut,
   Building2,
+  Users,
+  ChevronDown,
+  Wrench,
 } from "lucide-react";
 
-const navItems = [
+const mainNavItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/invoices", label: "Invoices", icon: FileText },
   { to: "/upload", label: "Upload", icon: Upload },
   { to: "/emails", label: "Emails", icon: Mail },
-  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 export default function Layout() {
   const { user, logout } = useAuth();
   const { companies, selectedCompany, switchCompany } = useCompany();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const isSettingsPath = location.pathname.startsWith("/settings");
+  const [settingsOpen, setSettingsOpen] = useState(isSettingsPath);
+
+  useEffect(() => {
+    if (isSettingsPath) setSettingsOpen(true);
+  }, [isSettingsPath]);
 
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
+
+  const settingsSubItems = [
+    { to: "/settings/companies", label: "Companies", icon: Building2 },
+    ...(user?.role === "superadmin"
+      ? [
+          { to: "/settings/users", label: "Users", icon: Users },
+          { to: "/settings/system", label: "System", icon: Wrench },
+        ]
+      : []),
+  ];
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -58,7 +79,7 @@ export default function Layout() {
         )}
 
         <nav className="flex-1 p-2">
-          {navItems.map(({ to, label, icon: Icon }) => (
+          {mainNavItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -74,6 +95,44 @@ export default function Layout() {
               {label}
             </NavLink>
           ))}
+
+          {/* Settings expandable */}
+          <button
+            onClick={() => setSettingsOpen(!settingsOpen)}
+            className={`flex items-center justify-between w-full px-3 py-2 rounded-md text-sm mt-1 ${
+              isSettingsPath
+                ? "bg-blue-50 text-blue-700 font-medium"
+                : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              Settings
+            </span>
+            <ChevronDown
+              className={`h-3 w-3 transition-transform ${settingsOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+          {settingsOpen && (
+            <div className="ml-4 mt-0.5 space-y-0.5">
+              {settingsSubItems.map(({ to, label, icon: Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2 px-3 py-1.5 rounded-md text-sm ${
+                      isActive
+                        ? "bg-blue-50 text-blue-700 font-medium"
+                        : "text-gray-500 hover:bg-gray-100"
+                    }`
+                  }
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                </NavLink>
+              ))}
+            </div>
+          )}
         </nav>
 
         <div className="p-3 border-t">
