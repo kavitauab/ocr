@@ -22,8 +22,8 @@ interface BillingFormState {
   invoiceLimit: string;
   storageLimitBytes: string;
   includedTokens: string;
-  overageRateInputUsd: string;
-  overageRateOutputUsd: string;
+  overagePer1kTokensUsd: string;
+  overagePerInvoiceUsd: string;
 }
 
 const PLAN_OPTIONS = ["free", "starter", "professional", "enterprise"];
@@ -155,17 +155,15 @@ function getTokenUsage(row: SubscriptionRow): number | null {
   return toNullableNumber(pickFirst(row, ["tokenUsage", "totalTokens", "tokensUsed", "tokens_used"]));
 }
 
-function getOverageRateInput(row: SubscriptionRow): number | null {
-  return (
-    toNullableNumber(pickFirst(row, ["overageRateInputUsd", "overage_rate_input_usd"])) ??
-    toNullableNumber(pickFirst(row, ["overageRateUsd", "overage_rate_usd", "overageRate", "overage_rate"]))
+function getOveragePer1kTokens(row: SubscriptionRow): number | null {
+  return toNullableNumber(
+    pickFirst(row, ["overagePer1kTokensUsd", "overage_per_1k_tokens_usd", "overageRateUsd", "overage_rate_usd"])
   );
 }
 
-function getOverageRateOutput(row: SubscriptionRow): number | null {
-  return (
-    toNullableNumber(pickFirst(row, ["overageRateOutputUsd", "overage_rate_output_usd"])) ??
-    toNullableNumber(pickFirst(row, ["overageRateUsd", "overage_rate_usd", "overageRate", "overage_rate"]))
+function getOveragePerInvoice(row: SubscriptionRow): number | null {
+  return toNullableNumber(
+    pickFirst(row, ["overagePerInvoiceUsd", "overage_per_invoice_usd", "overageRatePerInvoiceUsd"])
   );
 }
 
@@ -193,8 +191,8 @@ const EMPTY_FORM: BillingFormState = {
   invoiceLimit: "",
   storageLimitBytes: "",
   includedTokens: "",
-  overageRateInputUsd: "",
-  overageRateOutputUsd: "",
+  overagePer1kTokensUsd: "",
+  overagePerInvoiceUsd: "",
 };
 
 export default function Billing() {
@@ -270,8 +268,8 @@ export default function Billing() {
       invoiceLimit: toInputValue(getInvoiceLimit(row)),
       storageLimitBytes: toInputValue(getStorageLimitBytes(row)),
       includedTokens: toInputValue(getIncludedTokens(row)),
-      overageRateInputUsd: toInputValue(getOverageRateInput(row)),
-      overageRateOutputUsd: toInputValue(getOverageRateOutput(row)),
+      overagePer1kTokensUsd: toInputValue(getOveragePer1kTokens(row)),
+      overagePerInvoiceUsd: toInputValue(getOveragePerInvoice(row)),
     });
   };
 
@@ -296,8 +294,8 @@ export default function Billing() {
         invoice_limit: parseInputNumber(form.invoiceLimit, "Invoice limit", true),
         storage_limit_bytes: parseInputNumber(form.storageLimitBytes, "Storage limit", true),
         included_tokens: parseInputNumber(form.includedTokens, "Included tokens", true),
-        overage_rate_input_usd: parseInputNumber(form.overageRateInputUsd, "Overage input rate"),
-        overage_rate_output_usd: parseInputNumber(form.overageRateOutputUsd, "Overage output rate"),
+        overage_per_1k_tokens_usd: parseInputNumber(form.overagePer1kTokensUsd, "Overage per 1k tokens"),
+        overage_per_invoice_usd: parseInputNumber(form.overagePerInvoiceUsd, "Overage per invoice"),
       };
       updateMutation.mutate({ companyId, payload });
     } catch (saveError) {
@@ -341,8 +339,8 @@ export default function Billing() {
                 <TableHead className="text-right">Storage Limit</TableHead>
                 <TableHead className="text-right">Included Tokens</TableHead>
                 <TableHead className="text-right">Used Tokens</TableHead>
-                <TableHead className="text-right">Overage In</TableHead>
-                <TableHead className="text-right">Overage Out</TableHead>
+                <TableHead className="text-right">Overage / 1k Tokens</TableHead>
+                <TableHead className="text-right">Overage / Invoice</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
@@ -388,8 +386,8 @@ export default function Billing() {
                       <TableCell className="text-right tabular-nums">{formatBytes(getStorageLimitBytes(row))}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatNumber(getIncludedTokens(row))}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatNumber(getTokenUsage(row))}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatRate(getOverageRateInput(row))}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatRate(getOverageRateOutput(row))}</TableCell>
+                      <TableCell className="text-right tabular-nums">{formatRate(getOveragePer1kTokens(row))}</TableCell>
+                      <TableCell className="text-right tabular-nums">{formatRate(getOveragePerInvoice(row))}</TableCell>
                       <TableCell className="text-right">
                         <Button variant="outline" size="sm" onClick={() => openEditDialog(row)}>
                           <Pencil className="h-3.5 w-3.5 mr-1" />
@@ -477,24 +475,24 @@ export default function Billing() {
           </div>
 
           <div>
-            <label className="text-sm font-medium">Overage In Rate (USD)</label>
+            <label className="text-sm font-medium">Overage per 1k Tokens (USD)</label>
             <Input
               type="number"
               step="0.000001"
-              value={form.overageRateInputUsd}
-              onChange={(event) => setForm((prev) => ({ ...prev, overageRateInputUsd: event.target.value }))}
+              value={form.overagePer1kTokensUsd}
+              onChange={(event) => setForm((prev) => ({ ...prev, overagePer1kTokensUsd: event.target.value }))}
               placeholder="e.g. 0.005"
             />
           </div>
 
           <div>
-            <label className="text-sm font-medium">Overage Out Rate (USD)</label>
+            <label className="text-sm font-medium">Overage per Invoice (USD)</label>
             <Input
               type="number"
               step="0.000001"
-              value={form.overageRateOutputUsd}
-              onChange={(event) => setForm((prev) => ({ ...prev, overageRateOutputUsd: event.target.value }))}
-              placeholder="e.g. 0.015"
+              value={form.overagePerInvoiceUsd}
+              onChange={(event) => setForm((prev) => ({ ...prev, overagePerInvoiceUsd: event.target.value }))}
+              placeholder="e.g. 0.50"
             />
           </div>
         </div>

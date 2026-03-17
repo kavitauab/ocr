@@ -31,17 +31,48 @@
 # Iteration 2 - Billing Management Module
 
 ## Plan
-- [ ] Add backend `subscriptions` management API for super admin (list + upsert by company).
-- [ ] Support editable billing fields: plan, status, invoice limit, storage limit, included tokens, overage rates.
-- [ ] Add frontend Billing settings page with search and row editing dialog.
-- [ ] Wire new Billing page into settings navigation/routes.
+- [x] Add backend `subscriptions` management API for super admin (list + upsert by company).
+- [x] Support editable billing fields: plan, status, invoice limit, storage limit, included tokens, overage rates.
+- [x] Add frontend Billing settings page with search and row editing dialog.
+- [x] Wire new Billing page into settings navigation/routes.
+- [x] Verify via PHP syntax checks + frontend build.
+
+## Verification Checklist
+- [x] `php -l` passes for new/updated backend files.
+- [x] `npm run build` passes.
+- [x] Super-admin can view all clients with billing fields on one screen.
+- [x] Super-admin can edit and save billing values per company.
+
+## Review
+- Added dedicated `subscriptions` API resource for super-admin billing management:
+  - `GET /api/subscriptions`
+  - `GET /api/subscriptions/{companyId}`
+  - `PATCH /api/subscriptions/{companyId}` (upsert by company)
+- Added `Billing` settings page with search, table view, and edit dialog for plan/status/limits/overage fields.
+- Wired billing route and sidebar entry (`/settings/billing`) for superadmins.
+- Added schema columns for advanced overage configuration in `subscriptions`.
+- Compatibility: backend safely tolerates missing newer subscription columns and falls back without hard failures.
+- Verification run:
+  - `php -l api/resources/Subscriptions.php`
+  - `php -l api/resources/Invoice.php`
+  - `npm run build`
+
+---
+
+# Iteration 3 - Lifecycle Timeline + Export
+
+## Plan
+- [ ] Add backend invoice export endpoint supporting existing filters (status/company/search/lifecycle/date ranges).
+- [ ] Ensure export includes lifecycle fields (OCR sent, OCR returned, processing duration where available).
+- [ ] Add frontend export action in invoice list using active filters.
+- [ ] Improve invoice detail with explicit lifecycle timeline block for operations visibility.
 - [ ] Verify via PHP syntax checks + frontend build.
 
 ## Verification Checklist
-- [ ] `php -l` passes for new/updated backend files.
+- [ ] `php -l` passes for changed backend files.
 - [ ] `npm run build` passes.
-- [ ] Super-admin can view all clients with billing fields on one screen.
-- [ ] Super-admin can edit and save billing values per company.
+- [ ] Invoices page can export filtered data.
+- [ ] Invoice detail shows lifecycle milestones clearly.
 
 ## Review
 - Pending
