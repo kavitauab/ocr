@@ -17,10 +17,17 @@ $pathParts = array_values(array_filter(explode('/', $path)));
 // Health check
 if (($pathParts[0] ?? '') === 'health') {
     try {
-        getDBConnection();
-        sendJSON(['status' => 'ok']);
-    } catch (Exception $e) {
-        sendJSON(['status' => 'error'], 500);
+        $db = getDBConnection();
+        $info = ['status' => 'ok', 'php' => PHP_VERSION, 'upload_max' => ini_get('upload_max_filesize'), 'post_max' => ini_get('post_max_size'), 'max_exec' => ini_get('max_execution_time')];
+        // Check uploads dir
+        $uploadDir = UPLOAD_DIR;
+        $info['upload_dir'] = $uploadDir;
+        $info['upload_dir_exists'] = is_dir($uploadDir);
+        $info['upload_dir_writable'] = is_writable($uploadDir);
+        $info['api_key_set'] = !empty(ANTHROPIC_API_KEY) && ANTHROPIC_API_KEY !== 'your-anthropic-api-key';
+        sendJSON($info);
+    } catch (\Throwable $e) {
+        sendJSON(['status' => 'error', 'message' => $e->getMessage()], 500);
     }
 }
 
