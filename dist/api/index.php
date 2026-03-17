@@ -14,18 +14,6 @@ $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $path = preg_replace('#^/api#', '', $path);
 $pathParts = array_values(array_filter(explode('/', $path)));
 
-// One-time migration
-if (($pathParts[0] ?? '') === 'run-migrate') {
-    try {
-        $db = getDBConnection();
-        $db->exec("ALTER TABLE companies ADD COLUMN extraction_fields JSON DEFAULT NULL");
-        echo "OK: extraction_fields column added\n";
-    } catch (\Throwable $e) {
-        echo "Note: " . $e->getMessage() . "\n";
-    }
-    exit;
-}
-
 // Health check
 if (($pathParts[0] ?? '') === 'health') {
     try {
