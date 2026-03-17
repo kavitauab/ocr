@@ -7,7 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Save, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Save, Send, Trash2, CheckCircle, AlertTriangle, AlertCircle } from "lucide-react";
+
+function ConfidenceDot({ score }: { score?: number }) {
+  if (score == null) return null;
+  if (score >= 0.8) return <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" title={`Confidence: ${(score * 100).toFixed(0)}%`} />;
+  if (score >= 0.5) return <AlertTriangle className="h-3.5 w-3.5 text-yellow-500 shrink-0" title={`Confidence: ${(score * 100).toFixed(0)}%`} />;
+  return <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" title={`Confidence: ${(score * 100).toFixed(0)}%`} />;
+}
 
 export default function InvoiceDetail() {
   const { id } = useParams<{ id: string }>();
@@ -15,6 +22,9 @@ export default function InvoiceDetail() {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Record<string, any>>({});
+
+  const token = localStorage.getItem("token");
+  const fileUrl = `/api/invoices/${id}/file?access_token=${encodeURIComponent(token || "")}`;
 
   const { data, isLoading } = useQuery({
     queryKey: ["invoice", id],
@@ -48,8 +58,8 @@ export default function InvoiceDetail() {
     onError: (err: any) => toast.error(err.response?.data?.error || "Failed"),
   });
 
-  if (isLoading) return <div>Loading...</div>;
-  if (!invoice) return <div>Invoice not found</div>;
+  if (isLoading) return <div className="p-8 text-center text-gray-500">Loading...</div>;
+  if (!invoice) return <div className="p-8 text-center text-gray-500">Invoice not found</div>;
 
   const startEdit = () => {
     setForm({
@@ -57,8 +67,10 @@ export default function InvoiceDetail() {
       invoiceDate: invoice.invoiceDate || "",
       dueDate: invoice.dueDate || "",
       vendorName: invoice.vendorName || "",
+      vendorAddress: invoice.vendorAddress || "",
       vendorVatId: invoice.vendorVatId || "",
       buyerName: invoice.buyerName || "",
+      buyerAddress: invoice.buyerAddress || "",
       buyerVatId: invoice.buyerVatId || "",
       totalAmount: invoice.totalAmount || "",
       taxAmount: invoice.taxAmount || "",
@@ -69,32 +81,49 @@ export default function InvoiceDetail() {
     setEditing(true);
   };
 
-  const fields = [
+  const confidence = invoice.confidenceScores || {};
+
+  const fields: [string, string][] = [
     ["invoiceNumber", "Invoice Number"],
     ["invoiceDate", "Invoice Date"],
     ["dueDate", "Due Date"],
     ["vendorName", "Vendor"],
+    ["vendorAddress", "Vendor Address"],
     ["vendorVatId", "Vendor VAT ID"],
     ["buyerName", "Buyer"],
+    ["buyerAddress", "Buyer Address"],
     ["buyerVatId", "Buyer VAT ID"],
     ["totalAmount", "Total Amount"],
     ["taxAmount", "Tax Amount"],
     ["subtotalAmount", "Subtotal"],
     ["currency", "Currency"],
     ["poNumber", "PO Number"],
-  ] as const;
+  ];
+
+  const statusColor = invoice.status === "completed" ? "default"
+    : invoice.status === "failed" ? "destructive"
+    : "secondary";
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
         <h1 className="text-2xl font-bold flex-1">{invoice.invoiceNumber || invoice.originalFilename}</h1>
-        <Badge variant={invoice.status === "completed" ? "default" : invoice.status === "failed" ? "destructive" : "secondary"}>
-          {invoice.status}
-        </Badge>
+        <Badge variant={statusColor}>{invoice.status}</Badge>
       </div>
 
+      {invoice.status === "failed" && invoice.processingError && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="py-3">
+            <p className="text-sm text-red-700"><strong>Error:</strong> {invoice.processingError}</p>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Invoice Details */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Invoice Details</CardTitle>
@@ -110,32 +139,60 @@ export default function InvoiceDetail() {
               )}
             </div>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {fields.map(([key, label]) => (
-              <div key={key} className="grid grid-cols-3 gap-2 items-center">
-                <span className="text-sm text-gray-500">{label}</span>
-                {editing ? (
-                  <Input className="col-span-2" value={form[key] || ""} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
-                ) : (
-                  <span className="col-span-2 text-sm">{(invoice as any)[key] || "—"}</span>
-                )}
+          <CardContent className="space-y-2">
+            {fields.map(([key, label]) => {
+              const value = (invoice as any)[key];
+              const conf = confidence[key];
+              return (
+                <div key={key} className="grid grid-cols-[140px_1fr] gap-2 items-center">
+                  <span className="text-sm text-gray-500 flex items-center gap-1.5">
+                    {!editing && <ConfidenceDot score={conf} />}
+                    {label}
+                  </span>
+                  {editing ? (
+                    <Input value={form[key] || ""} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
+                  ) : (
+                    <span className="text-sm font-medium">{value || "—"}</span>
+                  )}
+                </div>
+              );
+            })}
+            {invoice.bankDetails && (
+              <div className="grid grid-cols-[140px_1fr] gap-2 items-start pt-2 border-t">
+                <span className="text-sm text-gray-500 flex items-center gap-1.5">
+                  <ConfidenceDot score={confidence.bankDetails} />
+                  Bank Details
+                </span>
+                <span className="text-sm font-medium whitespace-pre-wrap">{invoice.bankDetails}</span>
               </div>
-            ))}
+            )}
+            {invoice.paymentTerms && (
+              <div className="grid grid-cols-[140px_1fr] gap-2 items-start">
+                <span className="text-sm text-gray-500 flex items-center gap-1.5">
+                  <ConfidenceDot score={confidence.paymentTerms} />
+                  Payment Terms
+                </span>
+                <span className="text-sm font-medium">{invoice.paymentTerms}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
 
+        {/* Right column */}
         <div className="space-y-4">
+          {/* File Preview */}
           <Card>
             <CardHeader><CardTitle>File Preview</CardTitle></CardHeader>
             <CardContent>
               {invoice.fileType === "pdf" ? (
-                <iframe src={`/api/invoices/${id}/file`} className="w-full h-96 border rounded" />
+                <iframe src={fileUrl} className="w-full h-[500px] border rounded" />
               ) : (
-                <img src={`/api/invoices/${id}/file`} alt="Invoice" className="max-w-full rounded" />
+                <img src={fileUrl} alt="Invoice" className="max-w-full rounded" />
               )}
             </CardContent>
           </Card>
 
+          {/* Actions */}
           <Card>
             <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
             <CardContent className="flex gap-2">
@@ -149,6 +206,17 @@ export default function InvoiceDetail() {
               >
                 <Trash2 className="h-3 w-3 mr-1" />Delete
               </Button>
+            </CardContent>
+          </Card>
+
+          {/* Metadata */}
+          <Card>
+            <CardHeader><CardTitle>Metadata</CardTitle></CardHeader>
+            <CardContent className="text-sm space-y-1 text-gray-600">
+              <div className="flex justify-between"><span>Source</span><span className="font-medium">{invoice.source}</span></div>
+              <div className="flex justify-between"><span>File</span><span className="font-medium">{invoice.originalFilename}</span></div>
+              <div className="flex justify-between"><span>Size</span><span className="font-medium">{invoice.fileSize ? `${(invoice.fileSize / 1024).toFixed(1)} KB` : "—"}</span></div>
+              <div className="flex justify-between"><span>Uploaded</span><span className="font-medium">{invoice.createdAt}</span></div>
             </CardContent>
           </Card>
         </div>
