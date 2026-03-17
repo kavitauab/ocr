@@ -2,7 +2,9 @@
 require_once __DIR__ . '/config.php';
 $db = getDBConnection();
 
-// Widen all VARCHAR(21) ID columns to VARCHAR(30)
+// Disable FK checks to allow column widening
+$db->exec("SET FOREIGN_KEY_CHECKS = 0");
+
 $alterStatements = [
     "ALTER TABLE companies MODIFY id VARCHAR(30) NOT NULL",
     "ALTER TABLE users MODIFY id VARCHAR(30) NOT NULL",
@@ -35,12 +37,10 @@ foreach ($alterStatements as $sql) {
     }
 }
 
-// Also delete any orphaned invoices stuck in 'processing' from previous broken uploads
-$stmt = $db->query("SELECT id, status, vendor_name FROM invoices WHERE status = 'processing'");
-$stuck = $stmt->fetchAll();
-echo "\nStuck processing invoices: " . count($stuck) . "\n";
-foreach ($stuck as $inv) {
-    echo "  - {$inv['id']} (vendor: {$inv['vendor_name']})\n";
-}
+$db->exec("SET FOREIGN_KEY_CHECKS = 1");
+
+// Clean up stuck processing invoices (from broken uploads with truncated IDs)
+$deleted = $db->exec("DELETE FROM invoices WHERE status = 'processing' AND vendor_name IS NULL AND invoice_number IS NULL");
+echo "\nCleaned up $deleted stuck processing invoices\n";
 
 echo "\nDone!\n";
