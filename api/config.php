@@ -146,7 +146,7 @@ function requireAuth() {
 function isPublicEndpoint() {
     $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
     $path = preg_replace('#^/api#', '', $path);
-    $publicPaths = ['/auth/login', '/health', '/setup'];
+    $publicPaths = ['/auth/login', '/health'];
     if (str_starts_with($path, '/cron/')) return true;
     return in_array($path, $publicPaths);
 }
