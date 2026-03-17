@@ -21,7 +21,7 @@ define('DB_CHARSET', 'utf8mb4');
 // JWT
 define('JWT_SECRET', $_ENV['JWT_SECRET'] ?? 'change-this');
 
-// Claude API
+// Claude API (from .env, can be overridden by DB settings)
 define('ANTHROPIC_API_KEY', $_ENV['ANTHROPIC_API_KEY'] ?? '');
 
 // File storage
@@ -29,6 +29,21 @@ define('UPLOAD_DIR', $_ENV['UPLOAD_DIR'] ?? __DIR__ . '/../uploads');
 
 // Cron
 define('CRON_SECRET', $_ENV['CRON_SECRET'] ?? '');
+
+// Get effective API key (DB settings override .env)
+function getAnthropicApiKey() {
+    if (!empty(ANTHROPIC_API_KEY) && ANTHROPIC_API_KEY !== 'your-anthropic-api-key') {
+        return ANTHROPIC_API_KEY;
+    }
+    try {
+        $db = getDBConnection();
+        $stmt = $db->prepare("SELECT `value` FROM settings WHERE `key` = 'anthropic_api_key'");
+        $stmt->execute();
+        $row = $stmt->fetch();
+        if ($row && !empty($row['value'])) return $row['value'];
+    } catch (\Throwable $e) {}
+    return '';
+}
 
 // CORS
 $defaultCorsOrigin = isset($_SERVER['HTTP_HOST']) ? 'https://' . $_SERVER['HTTP_HOST'] : 'http://localhost:5173';

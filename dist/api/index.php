@@ -24,7 +24,7 @@ if (($pathParts[0] ?? '') === 'health') {
         $info['upload_dir'] = $uploadDir;
         $info['upload_dir_exists'] = is_dir($uploadDir);
         $info['upload_dir_writable'] = is_writable($uploadDir);
-        $info['api_key_set'] = !empty(ANTHROPIC_API_KEY) && ANTHROPIC_API_KEY !== 'your-anthropic-api-key';
+        $info['api_key_set'] = !empty(getAnthropicApiKey());
         sendJSON($info);
     } catch (\Throwable $e) {
         sendJSON(['status' => 'error', 'message' => $e->getMessage()], 500);

@@ -104,6 +104,11 @@ Rules:
         ],
     ];
 
+    $apiKey = getAnthropicApiKey();
+    if (empty($apiKey)) {
+        throw new \Exception('Anthropic API key not configured. Set it in System Settings or api/.env');
+    }
+
     $ch = curl_init('https://api.anthropic.com/v1/messages');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -111,7 +116,7 @@ Rules:
         CURLOPT_POSTFIELDS => json_encode($requestBody),
         CURLOPT_HTTPHEADER => [
             'Content-Type: application/json',
-            'x-api-key: ' . ANTHROPIC_API_KEY,
+            'x-api-key: ' . $apiKey,
             'anthropic-version: 2023-06-01',
             'anthropic-beta: pdfs-2024-09-25',
         ],
