@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import api from "@/api/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Plus, Building2 } from "lucide-react";
 
 export default function Companies() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isSuperadmin = user?.role === "superadmin";
 
   const { data, isLoading } = useQuery({
@@ -40,12 +41,15 @@ export default function Companies() {
                   <TableHead className="font-semibold">Your Role</TableHead>
                   <TableHead className="font-semibold">Email</TableHead>
                   <TableHead className="font-semibold">Vecticum</TableHead>
-                  <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data?.companies?.map((c: any) => (
-                  <TableRow key={c.id} className="hover:bg-primary/[0.03] transition-colors duration-150">
+                  <TableRow
+                    key={c.id}
+                    className="cursor-pointer hover:bg-primary/[0.03] transition-colors duration-150"
+                    onClick={() => navigate(`/settings/companies/${c.id}`)}
+                  >
                     <TableCell className="font-medium">{c.name}</TableCell>
                     <TableCell className="text-muted-foreground">{c.code}</TableCell>
                     <TableCell>
@@ -55,13 +59,6 @@ export default function Companies() {
                     </TableCell>
                     <TableCell className="text-muted-foreground">{c.msFetchEnabled ? "Enabled" : "—"}</TableCell>
                     <TableCell className="text-muted-foreground">{c.vecticumEnabled ? "Enabled" : "—"}</TableCell>
-                    <TableCell>
-                      <Link to={`/settings/companies/${c.id}`}>
-                        <Button variant="outline" size="sm">
-                          {isSuperadmin || ["admin", "owner"].includes(c.companyRole || c.company_role) ? "Edit" : "View"}
-                        </Button>
-                      </Link>
-                    </TableCell>
                   </TableRow>
                 ))}
                 {isLoading && (
@@ -73,14 +70,13 @@ export default function Companies() {
                         <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                        <TableCell><Skeleton className="h-8 w-14" /></TableCell>
                       </TableRow>
                     ))}
                   </>
                 )}
                 {!isLoading && (!data?.companies || data.companies.length === 0) && (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-12">
+                    <TableCell colSpan={5} className="py-12">
                       <div className="flex flex-col items-center justify-center text-center">
                         <div className="rounded-full bg-muted p-3 mb-3">
                           <Building2 className="h-5 w-5 text-muted-foreground" />

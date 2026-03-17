@@ -337,7 +337,6 @@ export default function Billing() {
                   <TableHead className="text-right font-semibold">Used Tokens</TableHead>
                   <TableHead className="text-right font-semibold">Overage / 1k Tokens</TableHead>
                   <TableHead className="text-right font-semibold">Overage / Invoice</TableHead>
-                  <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -380,7 +379,11 @@ export default function Billing() {
                     const companyCode = getCompanyCode(row);
                     const status = getStatus(row);
                     return (
-                      <TableRow key={companyId || `${getCompanyName(row)}-${index}`} className="hover:bg-primary/[0.03] transition-colors duration-150">
+                      <TableRow
+                        key={companyId || `${getCompanyName(row)}-${index}`}
+                        className="cursor-pointer hover:bg-primary/[0.03] transition-colors duration-150"
+                        onClick={() => openEditDialog(row)}
+                      >
                         <TableCell>
                           <div className="font-medium text-foreground">{getCompanyName(row)}</div>
                           {companyCode && <div className="text-xs text-muted-foreground">{companyCode}</div>}
@@ -397,12 +400,6 @@ export default function Billing() {
                         <TableCell className="text-right tabular-nums text-muted-foreground">{formatNumber(getTokenUsage(row))}</TableCell>
                         <TableCell className="text-right tabular-nums text-muted-foreground">{formatRate(getOveragePer1kTokens(row))}</TableCell>
                         <TableCell className="text-right tabular-nums text-muted-foreground">{formatRate(getOveragePerInvoice(row))}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="outline" size="sm" onClick={() => openEditDialog(row)}>
-                            <Pencil className="h-3.5 w-3.5" />
-                            <span className="ml-1">Edit</span>
-                          </Button>
-                        </TableCell>
                       </TableRow>
                     );
                   })}
