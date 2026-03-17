@@ -13,6 +13,7 @@ import {
   Users,
   ChevronDown,
   Wrench,
+  CreditCard,
 } from "lucide-react";
 
 export default function Layout() {
@@ -52,6 +53,7 @@ export default function Layout() {
         : []),
     ...(isSuperadmin
       ? [
+          { to: "/settings/billing", label: "Billing", icon: CreditCard },
           { to: "/settings/users", label: "Users", icon: Users },
           { to: "/settings/system", label: "System", icon: Wrench },
         ]

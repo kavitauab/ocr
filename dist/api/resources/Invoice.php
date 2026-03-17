@@ -113,7 +113,7 @@ class Invoice extends BaseResource {
         $stmt->execute($params);
         $total = (int)$stmt->fetchColumn();
 
-        $sql = "SELECT i.* FROM invoices i $where ORDER BY i.created_at DESC LIMIT $limit OFFSET $offset";
+        $sql = "SELECT i.*, c.name as company_name, c.code as company_code FROM invoices i LEFT JOIN companies c ON c.id = i.company_id $where ORDER BY i.created_at DESC LIMIT $limit OFFSET $offset";
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
         $items = $stmt->fetchAll();

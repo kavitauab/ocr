@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { useCompany } from "@/lib/company";
+import { useAuth } from "@/lib/auth";
 import api from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,8 @@ function formatDateTime(value: string | null | undefined): string {
 }
 
 export default function Invoices() {
+  const { user } = useAuth();
+  const isSuperadmin = user?.role === "superadmin";
   const { selectedCompany, companies } = useCompany();
   const [searchParams, setSearchParams] = useSearchParams();
   const page = parseInt(searchParams.get("page") || "1");
@@ -178,6 +181,7 @@ export default function Invoices() {
         <TableHeader>
           <TableRow>
             <TableHead>Invoice #</TableHead>
+            {isSuperadmin && <TableHead>Company</TableHead>}
             <TableHead>Vendor</TableHead>
             <TableHead>Date</TableHead>
             <TableHead>Amount</TableHead>
@@ -195,6 +199,12 @@ export default function Invoices() {
                   {inv.invoiceNumber || inv.originalFilename}
                 </Link>
               </TableCell>
+              {isSuperadmin && (
+                <TableCell>
+                  <span className="text-sm">{inv.companyName || "—"}</span>
+                  {inv.companyCode && <span className="text-xs text-gray-400 ml-1">({inv.companyCode})</span>}
+                </TableCell>
+              )}
               <TableCell>{inv.vendorName || "—"}</TableCell>
               <TableCell>{inv.invoiceDate || "—"}</TableCell>
               <TableCell>{inv.totalAmount ? `${inv.totalAmount} ${inv.currency || ""}` : "—"}</TableCell>
@@ -208,9 +218,9 @@ export default function Invoices() {
               <TableCell className="text-sm text-gray-600">{formatDateTime(getReturnedAt(inv))}</TableCell>
             </TableRow>
           ))}
-          {isLoading && <TableRow><TableCell colSpan={8} className="text-center">Loading...</TableCell></TableRow>}
+          {isLoading && <TableRow><TableCell colSpan={isSuperadmin ? 9 : 8} className="text-center">Loading...</TableCell></TableRow>}
           {!isLoading && invoices.length === 0 && (
-            <TableRow><TableCell colSpan={8} className="text-center text-gray-500">No invoices found</TableCell></TableRow>
+            <TableRow><TableCell colSpan={isSuperadmin ? 9 : 8} className="text-center text-gray-500">No invoices found</TableCell></TableRow>
           )}
         </TableBody>
       </Table>

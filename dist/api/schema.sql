@@ -189,6 +189,9 @@ CREATE TABLE IF NOT EXISTS `subscriptions` (
   `status` ENUM('active','suspended','cancelled') NOT NULL DEFAULT 'active',
   `invoice_limit` INT,
   `storage_limit_bytes` BIGINT,
+  `included_tokens` BIGINT,
+  `overage_per_1k_tokens_usd` DECIMAL(12,6),
+  `overage_per_invoice_usd` DECIMAL(12,6),
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON DELETE CASCADE

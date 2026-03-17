@@ -25,3 +25,23 @@
   - `php -l api/lib/usage.php`
   - `php -l api/lib/claude.php`
   - `npm run build`
+
+---
+
+# Iteration 2 - Billing Management Module
+
+## Plan
+- [ ] Add backend `subscriptions` management API for super admin (list + upsert by company).
+- [ ] Support editable billing fields: plan, status, invoice limit, storage limit, included tokens, overage rates.
+- [ ] Add frontend Billing settings page with search and row editing dialog.
+- [ ] Wire new Billing page into settings navigation/routes.
+- [ ] Verify via PHP syntax checks + frontend build.
+
+## Verification Checklist
+- [ ] `php -l` passes for new/updated backend files.
+- [ ] `npm run build` passes.
+- [ ] Super-admin can view all clients with billing fields on one screen.
+- [ ] Super-admin can edit and save billing values per company.
+
+## Review
+- Pending
