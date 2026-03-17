@@ -10,6 +10,19 @@ class Invoice extends BaseResource {
     protected $searchColumns = ['invoice_number', 'vendor_name', 'buyer_name'];
     protected $allowedOrderColumns = ['id', 'created_at', 'updated_at', 'invoice_date', 'vendor_name', 'total_amount', 'status'];
 
+    private function formatInvoice($row) {
+        if (!$row) return $row;
+        if (isset($row['confidence_scores'])) $row['confidence_scores'] = json_decode($row['confidence_scores'], true);
+        if (isset($row['raw_extraction'])) $row['raw_extraction'] = json_decode($row['raw_extraction'], true);
+        // Convert snake_case to camelCase for frontend
+        $result = [];
+        foreach ($row as $key => $value) {
+            $camelKey = lcfirst(str_replace(' ', '', ucwords(str_replace('_', ' ', $key))));
+            $result[$camelKey] = $value;
+        }
+        return $result;
+    }
+
     private $allowedTypes = ['application/pdf', 'image/png', 'image/jpeg'];
     private $contentTypes = [
         'pdf' => 'application/pdf',
@@ -72,13 +85,9 @@ class Invoice extends BaseResource {
         $stmt->execute($params);
         $items = $stmt->fetchAll();
 
-        // Parse JSON columns
-        foreach ($items as &$item) {
-            if (isset($item['confidence_scores'])) $item['confidence_scores'] = json_decode($item['confidence_scores'], true);
-            if (isset($item['raw_extraction'])) $item['raw_extraction'] = json_decode($item['raw_extraction'], true);
-        }
+        $formatted = array_map([$this, 'formatInvoice'], $items);
 
-        sendJSON(['invoices' => $items, 'total' => $total, 'page' => $page, 'totalPages' => max(1, (int)ceil($total / $limit))]);
+        sendJSON(['invoices' => $formatted, 'total' => $total, 'page' => $page, 'totalPages' => max(1, (int)ceil($total / $limit))]);
     }
 
     public function create() {
@@ -144,19 +153,26 @@ class Invoice extends BaseResource {
             ]);
 
             trackInvoiceProcessed($companyId, $file['size']);
-        } catch (Exception $e) {
-            $this->db->prepare("UPDATE invoices SET status = 'failed', processing_error = :error, updated_at = NOW() WHERE id = :id")->execute(['error' => $e->getMessage(), 'id' => $id]);
+        } catch (\Throwable $e) {
+            try {
+                $this->db->prepare("UPDATE invoices SET status = 'failed', processing_error = :error, updated_at = NOW() WHERE id = :id")
+                    ->execute(['error' => $e->getMessage(), 'id' => $id]);
+            } catch (\Throwable $e2) {
+                error_log("Invoice $id catch failed: " . $e2->getMessage());
+            }
         }
 
-        logAction(['userId' => $user['id'], 'companyId' => $companyId, 'action' => 'upload', 'resourceType' => 'invoice', 'resourceId' => $id]);
+        try {
+            logAction(['userId' => $user['id'], 'companyId' => $companyId, 'action' => 'upload', 'resourceType' => 'invoice', 'resourceId' => $id]);
+        } catch (\Throwable $e) {
+            // non-critical
+        }
 
         $stmt = $this->db->prepare("SELECT * FROM invoices WHERE id = :id");
         $stmt->execute(['id' => $id]);
         $invoice = $stmt->fetch();
-        if (isset($invoice['confidence_scores'])) $invoice['confidence_scores'] = json_decode($invoice['confidence_scores'], true);
-        if (isset($invoice['raw_extraction'])) $invoice['raw_extraction'] = json_decode($invoice['raw_extraction'], true);
 
-        sendJSON(['invoice' => $invoice], 201);
+        sendJSON(['invoice' => $this->formatInvoice($invoice)], 201);
     }
 
     public function get($id) {
@@ -168,10 +184,7 @@ class Invoice extends BaseResource {
 
         if ($invoice['company_id']) requireCompanyAccess($user, $invoice['company_id']);
 
-        if (isset($invoice['confidence_scores'])) $invoice['confidence_scores'] = json_decode($invoice['confidence_scores'], true);
-        if (isset($invoice['raw_extraction'])) $invoice['raw_extraction'] = json_decode($invoice['raw_extraction'], true);
-
-        sendJSON(['invoice' => $invoice]);
+        sendJSON(['invoice' => $this->formatInvoice($invoice)]);
     }
 
     public function update($id) {
