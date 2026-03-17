@@ -95,17 +95,22 @@ export default function Dashboard() {
     return "Good evening";
   })();
 
+  const formattedDate = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+
   return (
     <div className="space-y-6">
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
             {greeting}, {user?.email?.split("@")[0] || "there"}
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
-          </p>
+          <p className="text-sm text-muted-foreground">{formattedDate}</p>
         </div>
         {isSuperadmin && (
           <div className="flex items-center rounded-lg border border-border bg-card p-0.5">
@@ -134,13 +139,13 @@ export default function Dashboard() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
         {statsLoading
           ? Array.from({ length: 4 }).map((_, i) => (
               <Card key={i}>
-                <CardContent className="p-5">
-                  <Skeleton className="h-4 w-20 mb-3" />
-                  <Skeleton className="h-8 w-16" />
+                <CardContent className="p-3.5">
+                  <Skeleton className="h-3 w-20 mb-2" />
+                  <Skeleton className="h-7 w-14" />
                 </CardContent>
               </Card>
             ))
@@ -149,18 +154,18 @@ export default function Dashboard() {
                 key={key}
                 className={`border-l-4 ${borderColor} hover:shadow-md transition-shadow duration-200`}
               >
-                <CardContent className="p-5">
+                <CardContent className="p-3.5">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                         {label}
                       </p>
-                      <p className="text-3xl font-bold tabular-nums mt-1 text-foreground">
+                      <p className="text-2xl font-bold tabular-nums mt-0.5 leading-none text-foreground">
                         {(stats as any)?.[key] || 0}
                       </p>
                     </div>
-                    <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconBg}`}>
-                      <Icon className={`h-5 w-5 ${iconColor}`} />
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${iconBg}`}>
+                      <Icon className={`h-4 w-4 ${iconColor}`} />
                     </div>
                   </div>
                 </CardContent>
