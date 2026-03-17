@@ -4,8 +4,8 @@
 # env files
 /.env
 api/.env
-dist/api/.env
 !.env.example
+# dist/api/.env is tracked intentionally (production secrets for Plesk)
 
 # misc
 .DS_Store

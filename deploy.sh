@@ -14,6 +14,9 @@ mkdir -p dist/api
 cp -r api/* dist/api/
 rm -f dist/api/.env
 
+echo "Restoring production .env..."
+git checkout dist/api/.env 2>/dev/null || echo "Warning: dist/api/.env not in git"
+
 echo "Copying .htaccess..."
 cp .htaccess dist/
 
