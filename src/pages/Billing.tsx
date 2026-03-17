@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Navigate } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Navigate, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import api from "@/api/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -8,27 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogTitle } from "@/components/ui/dialog";
-import { Select } from "@/components/ui/select";
 import { getStatusClasses } from "@/lib/ui-utils";
-import { toast } from "sonner";
-import { Pencil, CreditCard } from "lucide-react";
+import { CreditCard } from "lucide-react";
 
 type JsonRecord = Record<string, unknown>;
 type SubscriptionRow = JsonRecord;
-
-interface BillingFormState {
-  plan: string;
-  status: string;
-  invoiceLimit: string;
-  storageLimitBytes: string;
-  includedTokens: string;
-  overagePer1kTokensUsd: string;
-  overagePerInvoiceUsd: string;
-}
-
-const PLAN_OPTIONS = ["free", "starter", "professional", "enterprise"];
-const STATUS_OPTIONS = ["active", "suspended", "cancelled"];
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -67,10 +51,6 @@ function toNullableNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const num = typeof value === "number" ? value : Number(value);
   return Number.isFinite(num) ? num : null;
-}
-
-function toInputValue(value: number | null): string {
-  return value === null ? "" : String(value);
 }
 
 function formatNumber(value: number | null): string {
@@ -168,32 +148,10 @@ function getOveragePerInvoice(row: SubscriptionRow): number | null {
   );
 }
 
-function parseInputNumber(raw: string, label: string, integer = false): number | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  const value = Number(trimmed);
-  if (!Number.isFinite(value) || (integer && !Number.isInteger(value))) {
-    throw new Error(`${label} must be ${integer ? "a whole number" : "a valid number"}`);
-  }
-  return value;
-}
-
-const EMPTY_FORM: BillingFormState = {
-  plan: "free",
-  status: "active",
-  invoiceLimit: "",
-  storageLimitBytes: "",
-  includedTokens: "",
-  overagePer1kTokensUsd: "",
-  overagePerInvoiceUsd: "",
-};
-
 export default function Billing() {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [editingRow, setEditingRow] = useState<SubscriptionRow | null>(null);
-  const [form, setForm] = useState<BillingFormState>(EMPTY_FORM);
 
   const isSuperadmin = user?.role === "superadmin";
 
@@ -221,80 +179,9 @@ export default function Billing() {
     });
   }, [rows, search]);
 
-  const planOptions = useMemo(() => {
-    const current = form.plan.trim();
-    if (current && !PLAN_OPTIONS.includes(current)) return [current, ...PLAN_OPTIONS];
-    return PLAN_OPTIONS;
-  }, [form.plan]);
-
-  const statusOptions = useMemo(() => {
-    const current = form.status.trim();
-    if (current && !STATUS_OPTIONS.includes(current)) return [current, ...STATUS_OPTIONS];
-    return STATUS_OPTIONS;
-  }, [form.status]);
-
-  const updateMutation = useMutation({
-    mutationFn: ({ companyId, payload }: { companyId: string; payload: Record<string, unknown> }) =>
-      api.patch(`/subscriptions/${companyId}`, payload).then((r) => r.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
-      toast.success("Billing settings saved");
-      setEditingRow(null);
-    },
-    onError: (mutationError: unknown) => {
-      toast.error(getErrorMessage(mutationError, "Failed to save billing settings"));
-    },
-  });
-
   if (!isSuperadmin) {
     return <Navigate to="/dashboard" replace />;
   }
-
-  const openEditDialog = (row: SubscriptionRow) => {
-    setEditingRow(row);
-    setForm({
-      plan: toNullableString(pickFirst(row, ["plan", "subscriptionPlan", "subscription_plan"])) ?? "free",
-      status:
-        toNullableString(
-          pickFirst(row, ["status", "billingStatus", "billing_status", "subscriptionStatus", "subscription_status"])
-        ) ?? "active",
-      invoiceLimit: toInputValue(getInvoiceLimit(row)),
-      storageLimitBytes: toInputValue(getStorageLimitBytes(row)),
-      includedTokens: toInputValue(getIncludedTokens(row)),
-      overagePer1kTokensUsd: toInputValue(getOveragePer1kTokens(row)),
-      overagePerInvoiceUsd: toInputValue(getOveragePerInvoice(row)),
-    });
-  };
-
-  const closeEditDialog = () => {
-    if (updateMutation.isPending) return;
-    setEditingRow(null);
-    setForm(EMPTY_FORM);
-  };
-
-  const save = () => {
-    if (!editingRow) return;
-    const companyId = getCompanyId(editingRow);
-    if (!companyId) {
-      toast.error("Selected client is missing company ID");
-      return;
-    }
-
-    try {
-      const payload: Record<string, unknown> = {
-        plan: form.plan.trim(),
-        status: form.status.trim(),
-        invoice_limit: parseInputNumber(form.invoiceLimit, "Invoice limit", true),
-        storage_limit_bytes: parseInputNumber(form.storageLimitBytes, "Storage limit", true),
-        included_tokens: parseInputNumber(form.includedTokens, "Included tokens", true),
-        overage_per_1k_tokens_usd: parseInputNumber(form.overagePer1kTokensUsd, "Overage per 1k tokens"),
-        overage_per_invoice_usd: parseInputNumber(form.overagePerInvoiceUsd, "Overage per invoice"),
-      };
-      updateMutation.mutate({ companyId, payload });
-    } catch (saveError) {
-      toast.error(getErrorMessage(saveError, "Please check billing values"));
-    }
-  };
 
   return (
     <div className="space-y-4">
@@ -382,7 +269,7 @@ export default function Billing() {
                       <TableRow
                         key={companyId || `${getCompanyName(row)}-${index}`}
                         className="cursor-pointer hover:bg-primary/[0.03] transition-colors duration-150"
-                        onClick={() => openEditDialog(row)}
+                        onClick={() => navigate(`/settings/billing/${companyId}`)}
                       >
                         <TableCell>
                           <div className="font-medium text-foreground">{getCompanyName(row)}</div>
@@ -427,100 +314,6 @@ export default function Billing() {
         </CardContent>
       </Card>
 
-      <Dialog open={!!editingRow} onClose={closeEditDialog}>
-        <DialogTitle>Edit Billing</DialogTitle>
-        <p className="text-sm text-muted-foreground mt-1">
-          {editingRow ? getCompanyName(editingRow) : "Client"}
-        </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Plan</label>
-            <Select value={form.plan} onChange={(event) => setForm((prev) => ({ ...prev, plan: event.target.value }))}>
-              {planOptions.map((plan) => (
-                <option key={plan} value={plan}>
-                  {plan}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Status</label>
-            <Select
-              value={form.status}
-              onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}
-            >
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Invoice Limit</label>
-            <Input
-              type="number"
-              value={form.invoiceLimit}
-              onChange={(event) => setForm((prev) => ({ ...prev, invoiceLimit: event.target.value }))}
-              placeholder="e.g. 1000"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Storage Limit (bytes)</label>
-            <Input
-              type="number"
-              value={form.storageLimitBytes}
-              onChange={(event) => setForm((prev) => ({ ...prev, storageLimitBytes: event.target.value }))}
-              placeholder="e.g. 1073741824"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Included Tokens</label>
-            <Input
-              type="number"
-              value={form.includedTokens}
-              onChange={(event) => setForm((prev) => ({ ...prev, includedTokens: event.target.value }))}
-              placeholder="e.g. 1000000"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Overage per 1k Tokens (USD)</label>
-            <Input
-              type="number"
-              step="0.000001"
-              value={form.overagePer1kTokensUsd}
-              onChange={(event) => setForm((prev) => ({ ...prev, overagePer1kTokensUsd: event.target.value }))}
-              placeholder="e.g. 0.005"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Overage per Invoice (USD)</label>
-            <Input
-              type="number"
-              step="0.000001"
-              value={form.overagePerInvoiceUsd}
-              onChange={(event) => setForm((prev) => ({ ...prev, overagePerInvoiceUsd: event.target.value }))}
-              placeholder="e.g. 0.50"
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2 mt-5">
-          <Button variant="outline" onClick={closeEditDialog} disabled={updateMutation.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={save} disabled={updateMutation.isPending}>
-            {updateMutation.isPending ? "Saving..." : "Save"}
-          </Button>
-        </div>
-      </Dialog>
     </div>
   );
 }

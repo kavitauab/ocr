@@ -13,6 +13,7 @@ import CompanyEdit from "@/pages/CompanyEdit";
 import Users from "@/pages/Users";
 import SystemSettings from "@/pages/SystemSettings";
 import Billing from "@/pages/Billing";
+import BillingEdit from "@/pages/BillingEdit";
 import { Toaster } from "@/components/ui/sonner";
 
 export default function App() {
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/settings/companies/new" element={<CompanyEdit />} />
           <Route path="/settings/companies/:id" element={<CompanyEdit />} />
           <Route path="/settings/billing" element={<Billing />} />
+          <Route path="/settings/billing/:id" element={<BillingEdit />} />
           <Route path="/settings/users" element={<Users />} />
           <Route path="/settings/system" element={<SystemSettings />} />
         </Route>
