@@ -1,0 +1,11 @@
+RewriteEngine On
+
+# API requests → Node.js (handled by Plesk proxy)
+RewriteRule ^api/ - [L]
+
+# If file exists, serve it
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+# SPA fallback
+RewriteRule ^ index.html [L]
