@@ -196,7 +196,7 @@ export default function CompanyEdit() {
   const pageTitle = isNew ? "New Company" : canEdit ? "Edit Company" : "Company Details";
 
   return (
-    <div className="space-y-4 max-w-2xl">
+    <div className="space-y-4">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-4 w-4" /></Button>
         <div>
@@ -352,14 +352,16 @@ export default function CompanyEdit() {
                   </span>
                 )}
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Tenant ID</label><Input value={form.msTenantId} onChange={(e) => set("msTenantId", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client ID</label><Input value={form.msClientId} onChange={(e) => set("msClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client Secret</label><Input type="password" value={form.msClientSecret} onChange={(e) => set("msClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Sender Email</label><Input value={form.msSenderEmail} onChange={(e) => set("msSenderEmail", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Folder</label><Input value={form.msFetchFolder} onChange={(e) => set("msFetchFolder", e.target.value)} disabled={!canEditIntegrations} /></div>
-                {canEditIntegrations && <Button variant="outline" size="sm" onClick={testEmail}>Test Connection</Button>}
-              </CardContent>
+              {form.msFetchEnabled && (
+                <CardContent className="space-y-4">
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Tenant ID</label><Input value={form.msTenantId} onChange={(e) => set("msTenantId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client ID</label><Input value={form.msClientId} onChange={(e) => set("msClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client Secret</label><Input type="password" value={form.msClientSecret} onChange={(e) => set("msClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Sender Email</label><Input value={form.msSenderEmail} onChange={(e) => set("msSenderEmail", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Folder</label><Input value={form.msFetchFolder} onChange={(e) => set("msFetchFolder", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  {canEditIntegrations && <Button variant="outline" size="sm" onClick={testEmail}>Test Connection</Button>}
+                </CardContent>
+              )}
             </Card>
           )}
 
@@ -379,15 +381,17 @@ export default function CompanyEdit() {
                   </span>
                 )}
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">API Base URL</label><Input value={form.vecticumApiBaseUrl} onChange={(e) => set("vecticumApiBaseUrl", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client ID</label><Input value={form.vecticumClientId} onChange={(e) => set("vecticumClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client Secret</label><Input type="password" value={form.vecticumClientSecret} onChange={(e) => set("vecticumClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Company ID (Endpoint)</label><Input value={form.vecticumCompanyId} onChange={(e) => set("vecticumCompanyId", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Author ID</label><Input value={form.vecticumAuthorId} onChange={(e) => set("vecticumAuthorId", e.target.value)} disabled={!canEditIntegrations} /></div>
-                <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Author Name</label><Input value={form.vecticumAuthorName} onChange={(e) => set("vecticumAuthorName", e.target.value)} disabled={!canEditIntegrations} /></div>
-                {canEditIntegrations && <Button variant="outline" size="sm" onClick={testVecticum}>Test Connection</Button>}
-              </CardContent>
+              {form.vecticumEnabled && (
+                <CardContent className="space-y-4">
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">API Base URL</label><Input value={form.vecticumApiBaseUrl} onChange={(e) => set("vecticumApiBaseUrl", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client ID</label><Input value={form.vecticumClientId} onChange={(e) => set("vecticumClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client Secret</label><Input type="password" value={form.vecticumClientSecret} onChange={(e) => set("vecticumClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Company ID (Endpoint)</label><Input value={form.vecticumCompanyId} onChange={(e) => set("vecticumCompanyId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Author ID</label><Input value={form.vecticumAuthorId} onChange={(e) => set("vecticumAuthorId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Author Name</label><Input value={form.vecticumAuthorName} onChange={(e) => set("vecticumAuthorName", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  {canEditIntegrations && <Button variant="outline" size="sm" onClick={testVecticum}>Test Connection</Button>}
+                </CardContent>
+              )}
             </Card>
           )}
         </>

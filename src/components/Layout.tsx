@@ -393,7 +393,7 @@ export default function Layout() {
           collapsed ? "lg:ml-[4.5rem]" : "lg:ml-64"
         }`}
       >
-        <div className="p-4 md:p-6 lg:p-8 max-w-[1400px] mx-auto animate-fade-in">
+        <div className="p-4 md:p-6 lg:p-8 animate-fade-in">
           <Outlet />
         </div>
       </main>

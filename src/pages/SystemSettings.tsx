@@ -36,7 +36,7 @@ export default function SystemSettings() {
   });
 
   return (
-    <div className="space-y-4 max-w-2xl">
+    <div className="space-y-4">
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-foreground">System Settings</h2>
         <p className="text-sm text-muted-foreground mt-0.5">Global configuration for the OCR system</p>
