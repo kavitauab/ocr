@@ -1,12 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import api from "@/api/client";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Plus } from "lucide-react";
 
 export default function Companies() {
+  const { user } = useAuth();
+  const isSuperadmin = user?.role === "superadmin";
+
   const { data, isLoading } = useQuery({
     queryKey: ["companies"],
     queryFn: () => api.get("/companies").then((r) => r.data),
@@ -16,7 +20,9 @@ export default function Companies() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Companies</h2>
-        <Link to="/settings/companies/new"><Button size="sm"><Plus className="h-3 w-3 mr-1" />Add Company</Button></Link>
+        {isSuperadmin && (
+          <Link to="/settings/companies/new"><Button size="sm"><Plus className="h-3 w-3 mr-1" />Add Company</Button></Link>
+        )}
       </div>
 
       <Card>
@@ -26,6 +32,7 @@ export default function Companies() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Code</TableHead>
+                <TableHead>Your Role</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Vecticum</TableHead>
                 <TableHead></TableHead>
@@ -36,16 +43,23 @@ export default function Companies() {
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">{c.name}</TableCell>
                   <TableCell>{c.code}</TableCell>
+                  <TableCell>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 capitalize">
+                      {c.companyRole || c.company_role || "—"}
+                    </span>
+                  </TableCell>
                   <TableCell>{c.msFetchEnabled ? "Enabled" : "—"}</TableCell>
                   <TableCell>{c.vecticumEnabled ? "Enabled" : "—"}</TableCell>
                   <TableCell>
                     <Link to={`/settings/companies/${c.id}`}>
-                      <Button variant="outline" size="sm">Edit</Button>
+                      <Button variant="outline" size="sm">
+                        {isSuperadmin || ["admin", "owner"].includes(c.companyRole || c.company_role) ? "Edit" : "View"}
+                      </Button>
                     </Link>
                   </TableCell>
                 </TableRow>
               ))}
-              {isLoading && <TableRow><TableCell colSpan={5} className="text-center">Loading...</TableCell></TableRow>}
+              {isLoading && <TableRow><TableCell colSpan={6} className="text-center">Loading...</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent>

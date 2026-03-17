@@ -15,16 +15,9 @@ import {
   Wrench,
 } from "lucide-react";
 
-const mainNavItems = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/invoices", label: "Invoices", icon: FileText },
-  { to: "/upload", label: "Upload", icon: Upload },
-  { to: "/emails", label: "Emails", icon: Mail },
-];
-
 export default function Layout() {
   const { user, logout } = useAuth();
-  const { companies, selectedCompany, switchCompany } = useCompany();
+  const { companies, selectedCompany, switchCompany, hasCompanyRole, isSuperadmin } = useCompany();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -40,9 +33,24 @@ export default function Layout() {
     navigate("/login");
   };
 
+  const mainNavItems = [
+    { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { to: "/invoices", label: "Invoices", icon: FileText },
+    ...(hasCompanyRole("manager")
+      ? [
+          { to: "/upload", label: "Upload", icon: Upload },
+          { to: "/emails", label: "Emails", icon: Mail },
+        ]
+      : []),
+  ];
+
   const settingsSubItems = [
-    { to: "/settings/companies", label: "Companies", icon: Building2 },
-    ...(user?.role === "superadmin"
+    ...(isSuperadmin
+      ? [{ to: "/settings/companies", label: "Companies", icon: Building2 }]
+      : hasCompanyRole("admin") && selectedCompany
+        ? [{ to: `/settings/companies/${selectedCompany.id}`, label: "Company", icon: Building2 }]
+        : []),
+    ...(isSuperadmin
       ? [
           { to: "/settings/users", label: "Users", icon: Users },
           { to: "/settings/system", label: "System", icon: Wrench },
@@ -96,42 +104,46 @@ export default function Layout() {
             </NavLink>
           ))}
 
-          {/* Settings expandable */}
-          <button
-            onClick={() => setSettingsOpen(!settingsOpen)}
-            className={`flex items-center justify-between w-full px-3 py-2 rounded-md text-sm mt-1 ${
-              isSettingsPath
-                ? "bg-blue-50 text-blue-700 font-medium"
-                : "text-gray-600 hover:bg-gray-100"
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <Settings className="h-4 w-4" />
-              Settings
-            </span>
-            <ChevronDown
-              className={`h-3 w-3 transition-transform ${settingsOpen ? "rotate-180" : ""}`}
-            />
-          </button>
-          {settingsOpen && (
-            <div className="ml-4 mt-0.5 space-y-0.5">
-              {settingsSubItems.map(({ to, label, icon: Icon }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  className={({ isActive }) =>
-                    `flex items-center gap-2 px-3 py-1.5 rounded-md text-sm ${
-                      isActive
-                        ? "bg-blue-50 text-blue-700 font-medium"
-                        : "text-gray-500 hover:bg-gray-100"
-                    }`
-                  }
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {label}
-                </NavLink>
-              ))}
-            </div>
+          {/* Settings expandable - only show if there are sub-items */}
+          {settingsSubItems.length > 0 && (
+            <>
+              <button
+                onClick={() => setSettingsOpen(!settingsOpen)}
+                className={`flex items-center justify-between w-full px-3 py-2 rounded-md text-sm mt-1 ${
+                  isSettingsPath
+                    ? "bg-blue-50 text-blue-700 font-medium"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <Settings className="h-4 w-4" />
+                  Settings
+                </span>
+                <ChevronDown
+                  className={`h-3 w-3 transition-transform ${settingsOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+              {settingsOpen && (
+                <div className="ml-4 mt-0.5 space-y-0.5">
+                  {settingsSubItems.map(({ to, label, icon: Icon }) => (
+                    <NavLink
+                      key={to}
+                      to={to}
+                      className={({ isActive }) =>
+                        `flex items-center gap-2 px-3 py-1.5 rounded-md text-sm ${
+                          isActive
+                            ? "bg-blue-50 text-blue-700 font-medium"
+                            : "text-gray-500 hover:bg-gray-100"
+                        }`
+                      }
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {label}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </nav>
 

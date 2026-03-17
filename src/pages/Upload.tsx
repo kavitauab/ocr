@@ -9,9 +9,22 @@ import { toast } from "sonner";
 import { Upload as UploadIcon, FileText, Loader2 } from "lucide-react";
 
 export default function Upload() {
-  const { selectedCompany } = useCompany();
+  const { selectedCompany, hasCompanyRole } = useCompany();
   const navigate = useNavigate();
   const [uploading, setUploading] = useState(false);
+
+  if (!hasCompanyRole("manager")) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-bold">Upload Invoice</h1>
+        <Card>
+          <CardContent className="p-8 text-center">
+            <p className="text-gray-500">You don't have permission to upload invoices. Contact your company admin to request manager or higher access.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const onDrop = useCallback(async (files: File[]) => {
     if (!selectedCompany) {

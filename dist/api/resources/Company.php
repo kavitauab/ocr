@@ -21,11 +21,14 @@ class Company extends BaseResource {
         $stmt->execute(['id' => $id]);
         $company = $stmt->fetch();
         if (!$company) sendJSON(['error' => 'Company not found'], 404);
-        sendJSON(['company' => maskCompanySecrets($company)]);
+        $company = maskCompanySecrets($company);
+        $company['userRole'] = $user['role'] === 'superadmin' ? 'superadmin' : getUserCompanyRole($user['id'], $id);
+        sendJSON(['company' => $company]);
     }
 
     public function create() {
         $user = getAuthUser();
+        requireRole('superadmin');
         $data = $this->getRequestBody();
         if (empty($data['name']) || empty($data['code'])) sendJSON(['error' => 'Name and code are required'], 400);
 

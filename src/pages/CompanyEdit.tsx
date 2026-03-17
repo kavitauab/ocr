@@ -2,13 +2,21 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import api from "@/api/client";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ArrowLeft, Save, Plus, Trash2, Search, UserPlus } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, Search, UserPlus, Eye } from "lucide-react";
+
+const ROLE_HIERARCHY: Record<string, number> = { viewer: 0, manager: 1, admin: 2, owner: 3, superadmin: 4 };
+
+function meetsRole(userRole: string | undefined, minRole: string): boolean {
+  if (!userRole) return false;
+  return (ROLE_HIERARCHY[userRole] ?? -1) >= (ROLE_HIERARCHY[minRole] ?? 0);
+}
 
 interface SearchUser {
   id: string;
@@ -20,6 +28,7 @@ export default function CompanyEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const isNew = !id;
 
   const [showAddMember, setShowAddMember] = useState(false);
@@ -29,7 +38,7 @@ export default function CompanyEdit() {
   const [searchResults, setSearchResults] = useState<SearchUser[]>([]);
   const [selectedUser, setSelectedUser] = useState<SearchUser | null>(null);
   const [showResults, setShowResults] = useState(false);
-  const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const allExtractionFields: [string, string][] = [
     ["invoiceNumber", "Invoice Number"],
@@ -57,7 +66,7 @@ export default function CompanyEdit() {
     vecticumEnabled: false, vecticumApiBaseUrl: "", vecticumClientId: "",
     vecticumClientSecret: "", vecticumCompanyId: "",
     vecticumAuthorId: "", vecticumAuthorName: "",
-    extractionFields: null, // null = all fields enabled
+    extractionFields: null,
   });
 
   const { data } = useQuery({
@@ -65,6 +74,14 @@ export default function CompanyEdit() {
     queryFn: () => api.get(`/companies/${id}`).then((r) => r.data),
     enabled: !!id,
   });
+
+  // Determine user's role in this company
+  const userRole: string = data?.company?.userRole
+    || (user?.role === "superadmin" ? "superadmin" : "viewer");
+  const canEdit = meetsRole(userRole, "admin");
+  const canManageMembers = meetsRole(userRole, "admin");
+  const canViewIntegrations = meetsRole(userRole, "manager");
+  const canEditIntegrations = meetsRole(userRole, "admin");
 
   useEffect(() => {
     if (data?.company) {
@@ -75,7 +92,7 @@ export default function CompanyEdit() {
   const { data: membersData, refetch: refetchMembers } = useQuery({
     queryKey: ["company-members", id],
     queryFn: () => api.get(`/companies/${id}/members`).then((r) => r.data),
-    enabled: !!id,
+    enabled: !!id && meetsRole(userRole, "manager"),
   });
 
   const saveMutation = useMutation({
@@ -175,161 +192,202 @@ export default function CompanyEdit() {
     } catch { toast.error("Test failed"); }
   };
 
+  const pageTitle = isNew ? "New Company" : canEdit ? "Edit Company" : "Company Details";
+
   return (
     <div className="space-y-4 max-w-2xl">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-4 w-4" /></Button>
-        <h2 className="text-xl font-semibold">{isNew ? "New Company" : "Edit Company"}</h2>
+        <h2 className="text-xl font-semibold">{pageTitle}</h2>
+        {!isNew && !canEdit && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+            <Eye className="h-3 w-3" />Read-only
+          </span>
+        )}
       </div>
 
+      {/* General */}
       <Card>
         <CardHeader><CardTitle>General</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <div><label className="text-sm font-medium">Name</label><Input value={form.name} onChange={(e) => set("name", e.target.value)} /></div>
-          <div><label className="text-sm font-medium">Code</label><Input value={form.code} onChange={(e) => set("code", e.target.value)} /></div>
+          <div><label className="text-sm font-medium">Name</label><Input value={form.name} onChange={(e) => set("name", e.target.value)} disabled={!isNew && !canEdit} /></div>
+          <div><label className="text-sm font-medium">Code</label><Input value={form.code} onChange={(e) => set("code", e.target.value)} disabled={!isNew && !canEdit} /></div>
         </CardContent>
       </Card>
 
       {!isNew && (
         <>
-          {/* Extraction Fields */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Extraction Fields</CardTitle>
-              <label className="flex items-center gap-2 text-sm text-gray-500">
-                <input
-                  type="checkbox"
-                  checked={form.extractionFields === null || form.extractionFields === undefined}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      set("extractionFields", null);
-                    } else {
-                      set("extractionFields", allExtractionFields.map(([k]) => k));
-                    }
-                  }}
-                />
-                All fields
-              </label>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-gray-500 mb-3">Select which fields to extract from invoices for this company. Unchecked fields will be skipped during AI extraction.</p>
-              <div className="grid grid-cols-2 gap-2">
-                {allExtractionFields.map(([key, label]) => {
-                  const isAllMode = form.extractionFields === null || form.extractionFields === undefined;
-                  const isChecked = isAllMode || (Array.isArray(form.extractionFields) && form.extractionFields.includes(key));
-                  return (
-                    <label key={key} className="flex items-center gap-2 text-sm py-1">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        disabled={isAllMode}
-                        onChange={(e) => {
-                          const current: string[] = Array.isArray(form.extractionFields) ? [...form.extractionFields] : allExtractionFields.map(([k]) => k);
-                          if (e.target.checked) {
-                            if (!current.includes(key)) current.push(key);
-                          } else {
-                            const idx = current.indexOf(key);
-                            if (idx > -1) current.splice(idx, 1);
-                          }
-                          set("extractionFields", current);
-                        }}
-                      />
-                      {label}
-                    </label>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
+          {/* Extraction Fields - admin+ only */}
+          {canEdit && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Extraction Fields</CardTitle>
+                <label className="flex items-center gap-2 text-sm text-gray-500">
+                  <input
+                    type="checkbox"
+                    checked={form.extractionFields === null || form.extractionFields === undefined}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        set("extractionFields", null);
+                      } else {
+                        set("extractionFields", allExtractionFields.map(([k]) => k));
+                      }
+                    }}
+                  />
+                  All fields
+                </label>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-gray-500 mb-3">Select which fields to extract from invoices for this company. Unchecked fields will be skipped during AI extraction.</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {allExtractionFields.map(([key, label]) => {
+                    const isAllMode = form.extractionFields === null || form.extractionFields === undefined;
+                    const isChecked = isAllMode || (Array.isArray(form.extractionFields) && form.extractionFields.includes(key));
+                    return (
+                      <label key={key} className="flex items-center gap-2 text-sm py-1">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled={isAllMode}
+                          onChange={(e) => {
+                            const current: string[] = Array.isArray(form.extractionFields) ? [...form.extractionFields] : allExtractionFields.map(([k]) => k);
+                            if (e.target.checked) {
+                              if (!current.includes(key)) current.push(key);
+                            } else {
+                              const idx = current.indexOf(key);
+                              if (idx > -1) current.splice(idx, 1);
+                            }
+                            set("extractionFields", current);
+                          }}
+                        />
+                        {label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-          {/* Members */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Members</CardTitle>
-              <Button size="sm" variant="outline" onClick={() => setShowAddMember(true)}>
-                <Plus className="h-3 w-3 mr-1" />Add Member
-              </Button>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(membersData?.members || []).map((m: any) => (
-                    <TableRow key={m.userId || m.user_id}>
-                      <TableCell>{m.name || m.userName}</TableCell>
-                      <TableCell>{m.email || m.userEmail}</TableCell>
-                      <TableCell>
-                        <select value={m.role} onChange={(e) => updateRoleMutation.mutate({ userId: m.userId || m.user_id, role: e.target.value })} className="border rounded px-2 py-1 text-sm">
-                          <option value="viewer">Viewer</option>
-                          <option value="manager">Manager</option>
-                          <option value="admin">Admin</option>
-                          <option value="owner">Owner</option>
-                        </select>
-                      </TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="icon" onClick={() => { if (confirm("Remove this member?")) removeMemberMutation.mutate(m.userId || m.user_id); }}>
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </TableCell>
+          {/* Members - manager can view, admin+ can manage */}
+          {canViewIntegrations && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Members</CardTitle>
+                {canManageMembers && (
+                  <Button size="sm" variant="outline" onClick={() => setShowAddMember(true)}>
+                    <Plus className="h-3 w-3 mr-1" />Add Member
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Role</TableHead>
+                      {canManageMembers && <TableHead></TableHead>}
                     </TableRow>
-                  ))}
-                  {(membersData?.members || []).length === 0 && (
-                    <TableRow><TableCell colSpan={4} className="text-center text-gray-500">No members yet</TableCell></TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {(membersData?.members || []).map((m: any) => (
+                      <TableRow key={m.userId || m.user_id}>
+                        <TableCell>{m.name || m.userName}</TableCell>
+                        <TableCell>{m.email || m.userEmail}</TableCell>
+                        <TableCell>
+                          {canManageMembers ? (
+                            <select value={m.role} onChange={(e) => updateRoleMutation.mutate({ userId: m.userId || m.user_id, role: e.target.value })} className="border rounded px-2 py-1 text-sm">
+                              <option value="viewer">Viewer</option>
+                              <option value="manager">Manager</option>
+                              <option value="admin">Admin</option>
+                              <option value="owner">Owner</option>
+                            </select>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 capitalize">{m.role}</span>
+                          )}
+                        </TableCell>
+                        {canManageMembers && (
+                          <TableCell>
+                            <Button variant="ghost" size="icon" onClick={() => { if (confirm("Remove this member?")) removeMemberMutation.mutate(m.userId || m.user_id); }}>
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                    {(membersData?.members || []).length === 0 && (
+                      <TableRow><TableCell colSpan={canManageMembers ? 4 : 3} className="text-center text-gray-500">No members yet</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Microsoft 365 Email</CardTitle>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={form.msFetchEnabled as boolean} onChange={(e) => set("msFetchEnabled", e.target.checked)} />
-                Enabled
-              </label>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div><label className="text-sm font-medium">Tenant ID</label><Input value={form.msTenantId} onChange={(e) => set("msTenantId", e.target.value)} /></div>
-              <div><label className="text-sm font-medium">Client ID</label><Input value={form.msClientId} onChange={(e) => set("msClientId", e.target.value)} /></div>
-              <div><label className="text-sm font-medium">Client Secret</label><Input type="password" value={form.msClientSecret} onChange={(e) => set("msClientSecret", e.target.value)} /></div>
-              <div><label className="text-sm font-medium">Sender Email</label><Input value={form.msSenderEmail} onChange={(e) => set("msSenderEmail", e.target.value)} /></div>
-              <div><label className="text-sm font-medium">Folder</label><Input value={form.msFetchFolder} onChange={(e) => set("msFetchFolder", e.target.value)} /></div>
-              <Button variant="outline" size="sm" onClick={testEmail}>Test Connection</Button>
-            </CardContent>
-          </Card>
+          {/* Microsoft 365 Email - manager can view, admin+ can edit */}
+          {canViewIntegrations && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Microsoft 365 Email</CardTitle>
+                {canEditIntegrations ? (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={form.msFetchEnabled as boolean} onChange={(e) => set("msFetchEnabled", e.target.checked)} />
+                    Enabled
+                  </label>
+                ) : (
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${form.msFetchEnabled ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                    {form.msFetchEnabled ? "Enabled" : "Disabled"}
+                  </span>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div><label className="text-sm font-medium">Tenant ID</label><Input value={form.msTenantId} onChange={(e) => set("msTenantId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div><label className="text-sm font-medium">Client ID</label><Input value={form.msClientId} onChange={(e) => set("msClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div><label className="text-sm font-medium">Client Secret</label><Input type="password" value={form.msClientSecret} onChange={(e) => set("msClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div><label className="text-sm font-medium">Sender Email</label><Input value={form.msSenderEmail} onChange={(e) => set("msSenderEmail", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div><label className="text-sm font-medium">Folder</label><Input value={form.msFetchFolder} onChange={(e) => set("msFetchFolder", e.target.value)} disabled={!canEditIntegrations} /></div>
+                {canEditIntegrations && <Button variant="outline" size="sm" onClick={testEmail}>Test Connection</Button>}
+              </CardContent>
+            </Card>
+          )}
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Vecticum</CardTitle>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={form.vecticumEnabled as boolean} onChange={(e) => set("vecticumEnabled", e.target.checked)} />
-                Enabled
-              </label>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div><label className="text-sm font-medium">API Base URL</label><Input value={form.vecticumApiBaseUrl} onChange={(e) => set("vecticumApiBaseUrl", e.target.value)} /></div>
-              <div><label className="text-sm font-medium">Client ID</label><Input value={form.vecticumClientId} onChange={(e) => set("vecticumClientId", e.target.value)} /></div>
-              <div><label className="text-sm font-medium">Client Secret</label><Input type="password" value={form.vecticumClientSecret} onChange={(e) => set("vecticumClientSecret", e.target.value)} /></div>
-              <div><label className="text-sm font-medium">Company ID (Endpoint)</label><Input value={form.vecticumCompanyId} onChange={(e) => set("vecticumCompanyId", e.target.value)} /></div>
-              <div><label className="text-sm font-medium">Author ID</label><Input value={form.vecticumAuthorId} onChange={(e) => set("vecticumAuthorId", e.target.value)} /></div>
-              <div><label className="text-sm font-medium">Author Name</label><Input value={form.vecticumAuthorName} onChange={(e) => set("vecticumAuthorName", e.target.value)} /></div>
-              <Button variant="outline" size="sm" onClick={testVecticum}>Test Connection</Button>
-            </CardContent>
-          </Card>
+          {/* Vecticum - manager can view, admin+ can edit */}
+          {canViewIntegrations && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Vecticum</CardTitle>
+                {canEditIntegrations ? (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={form.vecticumEnabled as boolean} onChange={(e) => set("vecticumEnabled", e.target.checked)} />
+                    Enabled
+                  </label>
+                ) : (
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${form.vecticumEnabled ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                    {form.vecticumEnabled ? "Enabled" : "Disabled"}
+                  </span>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div><label className="text-sm font-medium">API Base URL</label><Input value={form.vecticumApiBaseUrl} onChange={(e) => set("vecticumApiBaseUrl", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div><label className="text-sm font-medium">Client ID</label><Input value={form.vecticumClientId} onChange={(e) => set("vecticumClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div><label className="text-sm font-medium">Client Secret</label><Input type="password" value={form.vecticumClientSecret} onChange={(e) => set("vecticumClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div><label className="text-sm font-medium">Company ID (Endpoint)</label><Input value={form.vecticumCompanyId} onChange={(e) => set("vecticumCompanyId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div><label className="text-sm font-medium">Author ID</label><Input value={form.vecticumAuthorId} onChange={(e) => set("vecticumAuthorId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                <div><label className="text-sm font-medium">Author Name</label><Input value={form.vecticumAuthorName} onChange={(e) => set("vecticumAuthorName", e.target.value)} disabled={!canEditIntegrations} /></div>
+                {canEditIntegrations && <Button variant="outline" size="sm" onClick={testVecticum}>Test Connection</Button>}
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
 
-      <Button onClick={() => saveMutation.mutate(form)} disabled={saveMutation.isPending}>
-        <Save className="h-3 w-3 mr-1" />{isNew ? "Create" : "Save Changes"}
-      </Button>
+      {/* Save button - only for admin+ or new company */}
+      {(isNew || canEdit) && (
+        <Button onClick={() => saveMutation.mutate(form)} disabled={saveMutation.isPending}>
+          <Save className="h-3 w-3 mr-1" />{isNew ? "Create" : "Save Changes"}
+        </Button>
+      )}
 
       {/* Add Member Dialog */}
       <Dialog open={showAddMember} onClose={resetMemberDialog}>
