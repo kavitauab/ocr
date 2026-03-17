@@ -130,57 +130,102 @@ export default function Invoices() {
   const renderInvoiceRow = (inv: any, showCompany: boolean) => (
     <TableRow key={inv.id} className="transition-colors duration-150 hover:bg-primary/[0.03] group">
       {showCompany && (
-        <TableCell className="py-1.5">
-          <div className="flex items-center gap-1.5">
-            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[9px] font-semibold text-muted-foreground">
+        <TableCell>
+          <div className="flex items-center gap-2">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-semibold text-muted-foreground">
               {(inv.companyName || "?")[0].toUpperCase()}
             </div>
-            <span className="text-xs text-foreground">{inv.companyName || "\u2014"}</span>
+            <span className="text-sm text-foreground">{inv.companyName || "\u2014"}</span>
           </div>
         </TableCell>
       )}
-      <TableCell className="py-1.5">
-        <Link to={`/invoices/${inv.id}`} className="text-primary hover:text-primary-dark text-xs font-medium hover:underline">
+      <TableCell>
+        <Link to={`/invoices/${inv.id}`} className="text-primary hover:text-primary-dark text-sm font-medium hover:underline">
           {inv.invoiceNumber || inv.originalFilename}
         </Link>
       </TableCell>
-      <TableCell className="text-xs text-foreground py-1.5">{inv.vendorName || "\u2014"}</TableCell>
-      <TableCell className="text-xs text-muted-foreground hidden md:table-cell py-1.5">{inv.invoiceDate || "\u2014"}</TableCell>
-      <TableCell className="text-right tabular-nums text-xs font-medium hidden sm:table-cell py-1.5">
+      <TableCell className="text-sm text-foreground">{inv.vendorName || "\u2014"}</TableCell>
+      <TableCell className="text-sm text-muted-foreground hidden md:table-cell">{inv.invoiceDate || "\u2014"}</TableCell>
+      <TableCell className="text-right tabular-nums text-sm font-medium hidden sm:table-cell">
         {inv.totalAmount ? `${inv.totalAmount} ${inv.currency || ""}` : "\u2014"}
       </TableCell>
-      <TableCell className="py-1.5">
-        <span className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-medium ${getStatusClasses(inv.status)}`}>
+      <TableCell>
+        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getStatusClasses(inv.status)}`}>
           {inv.status}
         </span>
       </TableCell>
-      <TableCell className="hidden lg:table-cell py-1.5">
-        <span className="inline-flex items-center rounded-full border border-border px-1.5 py-0 text-[10px] text-muted-foreground">
+      <TableCell className="hidden lg:table-cell">
+        <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
           {inv.source}
         </span>
       </TableCell>
-      <TableCell className="text-[11px] text-muted-foreground hidden xl:table-cell py-1.5">{formatDateTime(getSentToOcrAt(inv))}</TableCell>
-      <TableCell className="text-[11px] text-muted-foreground hidden xl:table-cell py-1.5">{formatDateTime(getReturnedAt(inv))}</TableCell>
+      <TableCell className="text-xs text-muted-foreground hidden xl:table-cell">{formatDateTime(getSentToOcrAt(inv))}</TableCell>
+      <TableCell className="text-xs text-muted-foreground hidden xl:table-cell">{formatDateTime(getReturnedAt(inv))}</TableCell>
     </TableRow>
   );
 
   return (
-    <div className="space-y-2">
-      {/* Header + search + filters — all compact */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <div className="flex items-center gap-3">
+    <div className="space-y-3">
+      {/* Header row: title + search + status + actions */}
+      <div className="flex flex-col lg:flex-row lg:items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <h1 className="text-lg font-bold tracking-tight text-foreground">Invoices</h1>
           {data && (
-            <span className="text-xs text-muted-foreground">
-              {data.totalCount || invoices.length} total
-            </span>
+            <span className="text-xs text-muted-foreground">{data.totalCount || invoices.length} total</span>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
+
+        <form onSubmit={handleSearch} className="flex gap-1.5 flex-1 lg:max-w-sm">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search invoices..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-8 text-sm"
+            />
+          </div>
+          <Button type="submit" variant="outline" size="sm" className="h-8 text-xs px-3">Search</Button>
+        </form>
+
+        <div className="flex items-center gap-1.5 ml-auto">
+          <select
+            value={status}
+            onChange={(e) => setParam("status", e.target.value)}
+            className="h-8 rounded-md border border-border bg-card px-2.5 text-sm text-foreground focus:ring-2 focus:ring-ring/20 transition-colors"
+          >
+            <option value="">All statuses</option>
+            <option value="completed">Completed</option>
+            <option value="processing">Processing</option>
+            <option value="failed">Failed</option>
+          </select>
+          <Button
+            variant={showFilters || hasLifecycleFilters ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowFilters(!showFilters)}
+            className="gap-1 h-8 text-sm px-3"
+          >
+            <Filter className="h-3.5 w-3.5" />Filters
+            {hasLifecycleFilters && (
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary-foreground text-primary text-[10px] font-bold">!</span>
+            )}
+          </Button>
+          {isSuperadmin && !urlCompanyId && (
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={groupByCompany}
+                onChange={(e) => setGroupByCompany(e.target.checked)}
+                className="rounded border-border"
+              />
+              Group
+            </label>
+          )}
+          <div className="w-px h-5 bg-border mx-0.5" />
           <DropdownMenu
             trigger={
-              <Button variant="outline" size="sm" className="gap-1 h-7 text-xs px-2.5">
-                <Download className="h-3 w-3" />Export<ChevronDown className="h-2.5 w-2.5" />
+              <Button variant="outline" size="sm" className="gap-1 h-8 text-sm px-3">
+                <Download className="h-3.5 w-3.5" />Export<ChevronDown className="h-3 w-3" />
               </Button>
             }
           >
@@ -192,8 +237,8 @@ export default function Invoices() {
             </DropdownItem>
           </DropdownMenu>
           <Link to="/upload">
-            <Button size="sm" className="gap-1 h-7 text-xs px-2.5">
-              <Upload className="h-3 w-3" />Upload
+            <Button size="sm" className="gap-1 h-8 text-sm px-3">
+              <Upload className="h-3.5 w-3.5" />Upload
             </Button>
           </Link>
         </div>
@@ -201,97 +246,47 @@ export default function Invoices() {
 
       {/* Company filter banner */}
       {filterCompany && (
-        <div className="flex items-center gap-2 bg-info-light/50 border border-blue-200 rounded-md px-3 py-1.5">
-          <span className="text-xs text-blue-700">
+        <div className="flex items-center gap-2 bg-info-light/50 border border-blue-200 rounded-lg px-3 py-2">
+          <span className="text-sm text-blue-700">
             Filtered by <strong>{filterCompany.name}</strong>
           </span>
-          <button onClick={clearCompanyFilter} className="ml-auto flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-800 transition-colors">
-            <X className="h-2.5 w-2.5" />Clear
+          <button onClick={clearCompanyFilter} className="ml-auto flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors">
+            <X className="h-3 w-3" />Clear
           </button>
         </div>
       )}
 
-      {/* Search + status + filters — single row */}
-      <div className="flex flex-col sm:flex-row gap-1.5">
-        <form onSubmit={handleSearch} className="flex gap-1.5 flex-1">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Search invoices..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 h-7 text-xs"
-            />
-          </div>
-          <Button type="submit" variant="outline" size="sm" className="h-7 text-xs px-2.5">Search</Button>
-        </form>
-        <div className="flex items-center gap-1.5">
-          <select
-            value={status}
-            onChange={(e) => setParam("status", e.target.value)}
-            className="h-7 rounded-md border border-border bg-card px-2 text-xs text-foreground focus:ring-2 focus:ring-ring/20 transition-colors"
-          >
-            <option value="">All statuses</option>
-            <option value="completed">Completed</option>
-            <option value="processing">Processing</option>
-            <option value="failed">Failed</option>
-          </select>
-          <Button
-            variant={showFilters || hasLifecycleFilters ? "default" : "outline"}
-            size="sm"
-            onClick={() => setShowFilters(!showFilters)}
-            className="gap-1 h-7 text-xs px-2.5"
-          >
-            <Filter className="h-3 w-3" />Filters
-            {hasLifecycleFilters && (
-              <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary-foreground text-primary text-[9px] font-bold">!</span>
-            )}
-          </Button>
-          {isSuperadmin && !urlCompanyId && (
-            <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none whitespace-nowrap">
-              <input
-                type="checkbox"
-                checked={groupByCompany}
-                onChange={(e) => setGroupByCompany(e.target.checked)}
-                className="rounded border-border h-3 w-3"
-              />
-              Group
-            </label>
-          )}
-        </div>
-      </div>
-
       {/* Expandable filters */}
       <div className={`overflow-hidden transition-all duration-200 ${showFilters ? "max-h-40 opacity-100" : "max-h-0 opacity-0"}`}>
         <Card>
-          <CardContent className="p-3">
-            <div className="flex flex-wrap items-center gap-2">
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-center gap-3">
               <select
                 value={lifecycle}
                 onChange={(e) => setParam("lifecycle", e.target.value)}
-                className="h-7 rounded-md border border-border bg-card px-2 text-xs text-foreground"
+                className="h-8 rounded-md border border-border bg-card px-2.5 text-sm text-foreground"
               >
-                <option value="all">All lifecycle</option>
+                <option value="all">All lifecycle states</option>
                 <option value="sent">Sent to OCR</option>
-                <option value="not-sent">Not sent</option>
-                <option value="returned">Returned</option>
-                <option value="pending-return">Pending return</option>
+                <option value="not-sent">Not sent to OCR</option>
+                <option value="returned">Returned from OCR</option>
+                <option value="pending-return">Sent, awaiting return</option>
               </select>
-              <div className="flex items-center gap-1 text-xs">
-                <span className="text-muted-foreground text-[10px]">Sent</span>
-                <Input type="date" value={sentFrom} onChange={(e) => setParam("sentFrom", e.target.value)} className="h-7 w-32 text-xs" />
-                <span className="text-muted-foreground text-[10px]">to</span>
-                <Input type="date" value={sentTo} onChange={(e) => setParam("sentTo", e.target.value)} className="h-7 w-32 text-xs" />
+              <div className="flex items-center gap-1.5 text-sm">
+                <span className="text-muted-foreground text-xs">Sent</span>
+                <Input type="date" value={sentFrom} onChange={(e) => setParam("sentFrom", e.target.value)} className="h-8 w-36" />
+                <span className="text-muted-foreground text-xs">to</span>
+                <Input type="date" value={sentTo} onChange={(e) => setParam("sentTo", e.target.value)} className="h-8 w-36" />
               </div>
-              <div className="flex items-center gap-1 text-xs">
-                <span className="text-muted-foreground text-[10px]">Returned</span>
-                <Input type="date" value={returnedFrom} onChange={(e) => setParam("returnedFrom", e.target.value)} className="h-7 w-32 text-xs" />
-                <span className="text-muted-foreground text-[10px]">to</span>
-                <Input type="date" value={returnedTo} onChange={(e) => setParam("returnedTo", e.target.value)} className="h-7 w-32 text-xs" />
+              <div className="flex items-center gap-1.5 text-sm">
+                <span className="text-muted-foreground text-xs">Returned</span>
+                <Input type="date" value={returnedFrom} onChange={(e) => setParam("returnedFrom", e.target.value)} className="h-8 w-36" />
+                <span className="text-muted-foreground text-xs">to</span>
+                <Input type="date" value={returnedTo} onChange={(e) => setParam("returnedTo", e.target.value)} className="h-8 w-36" />
               </div>
               {hasLifecycleFilters && (
-                <Button variant="ghost" size="sm" onClick={clearLifecycleFilters} className="text-muted-foreground gap-1 h-7 text-xs">
-                  <X className="h-2.5 w-2.5" />Clear
+                <Button variant="ghost" size="sm" onClick={clearLifecycleFilters} className="text-muted-foreground gap-1">
+                  <X className="h-3 w-3" />Clear
                 </Button>
               )}
             </div>
@@ -301,23 +296,23 @@ export default function Invoices() {
 
       {/* Active filter pills */}
       {hasAnyFilter && (
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1.5">
           {searchParams.get("search") && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-foreground">
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
               Search: {searchParams.get("search")}
-              <button onClick={() => { setSearch(""); setParam("search", ""); }} className="hover:text-destructive"><X className="h-2.5 w-2.5" /></button>
+              <button onClick={() => { setSearch(""); setParam("search", ""); }} className="hover:text-destructive"><X className="h-3 w-3" /></button>
             </span>
           )}
           {status && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-foreground">
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
               Status: {status}
-              <button onClick={() => setParam("status", "")} className="hover:text-destructive"><X className="h-2.5 w-2.5" /></button>
+              <button onClick={() => setParam("status", "")} className="hover:text-destructive"><X className="h-3 w-3" /></button>
             </span>
           )}
           {lifecycle !== "all" && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-foreground">
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
               Lifecycle: {lifecycle}
-              <button onClick={() => setParam("lifecycle", "all")} className="hover:text-destructive"><X className="h-2.5 w-2.5" /></button>
+              <button onClick={() => setParam("lifecycle", "all")} className="hover:text-destructive"><X className="h-3 w-3" /></button>
             </span>
           )}
         </div>
@@ -329,15 +324,15 @@ export default function Invoices() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30">
-                {isSuperadmin && !groupByCompany && <TableHead className="text-[11px] font-semibold py-2">Company</TableHead>}
-                <TableHead className="text-[11px] font-semibold py-2">Invoice #</TableHead>
-                <TableHead className="text-[11px] font-semibold py-2">Vendor</TableHead>
-                <TableHead className="text-[11px] font-semibold hidden md:table-cell py-2">Date</TableHead>
-                <TableHead className="text-[11px] font-semibold text-right hidden sm:table-cell py-2">Amount</TableHead>
-                <TableHead className="text-[11px] font-semibold py-2">Status</TableHead>
-                <TableHead className="text-[11px] font-semibold hidden lg:table-cell py-2">Source</TableHead>
-                <TableHead className="text-[11px] font-semibold hidden xl:table-cell py-2">Sent to OCR</TableHead>
-                <TableHead className="text-[11px] font-semibold hidden xl:table-cell py-2">Returned</TableHead>
+                {isSuperadmin && !groupByCompany && <TableHead className="font-semibold">Company</TableHead>}
+                <TableHead className="font-semibold">Invoice #</TableHead>
+                <TableHead className="font-semibold">Vendor</TableHead>
+                <TableHead className="font-semibold hidden md:table-cell">Date</TableHead>
+                <TableHead className="font-semibold text-right hidden sm:table-cell">Amount</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold hidden lg:table-cell">Source</TableHead>
+                <TableHead className="font-semibold hidden xl:table-cell">Sent to OCR</TableHead>
+                <TableHead className="font-semibold hidden xl:table-cell">Returned</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -345,7 +340,7 @@ export default function Invoices() {
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
                     {Array.from({ length: colCount }).map((__, j) => (
-                      <TableCell key={j} className="py-1.5"><Skeleton className="h-3.5 w-full" /></TableCell>
+                      <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                     ))}
                   </TableRow>
                 ))
@@ -353,14 +348,14 @@ export default function Invoices() {
                 groupedInvoices.map((group) => (
                   <>{/* Group header */}
                     <TableRow key={`group-${group.companyId}`} className="bg-muted/50 border-t-2 border-border">
-                      <TableCell colSpan={8} className="py-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-primary/10 text-[9px] font-bold text-primary">
+                      <TableCell colSpan={8}>
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-primary/10 text-[10px] font-bold text-primary">
                             {group.name[0].toUpperCase()}
                           </div>
-                          <span className="font-semibold text-xs text-foreground">{group.name}</span>
-                          {group.code && <span className="text-[10px] text-muted-foreground">{group.code}</span>}
-                          <span className="text-[10px] text-muted-foreground">
+                          <span className="font-semibold text-sm text-foreground">{group.name}</span>
+                          {group.code && <span className="text-xs text-muted-foreground">{group.code}</span>}
+                          <span className="text-xs text-muted-foreground">
                             ({group.invoices.length})
                           </span>
                         </div>
@@ -379,14 +374,14 @@ export default function Invoices() {
                       <div className="rounded-full bg-muted p-3 mb-2">
                         <FileText className="h-6 w-6 text-muted-foreground" />
                       </div>
-                      <p className="text-xs font-medium text-foreground">No invoices found</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                      <p className="text-sm font-medium text-foreground">No invoices found</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         {hasAnyFilter ? "Try adjusting your filters" : "Upload your first invoice to get started"}
                       </p>
                       {!hasAnyFilter && (
                         <Link to="/upload">
-                          <Button size="sm" className="mt-2 gap-1 h-7 text-xs">
-                            <Upload className="h-3 w-3" />Upload
+                          <Button size="sm" className="mt-2 gap-1">
+                            <Upload className="h-3.5 w-3.5" />Upload
                           </Button>
                         </Link>
                       )}
@@ -402,18 +397,18 @@ export default function Invoices() {
       {/* Pagination */}
       {data && data.totalPages > 1 && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {(page - 1) * 20 + 1}–{Math.min(page * 20, data.totalCount || invoices.length)} of {data.totalCount || invoices.length}
           </p>
-          <div className="flex items-center gap-0.5">
+          <div className="flex items-center gap-1">
             <Button
               variant="outline"
               size="sm"
               disabled={page <= 1}
               onClick={() => setSearchParams((p) => { p.set("page", String(page - 1)); return p; })}
-              className="h-7 w-7 p-0"
+              className="h-8 w-8 p-0"
             >
-              <ChevronLeft className="h-3.5 w-3.5" />
+              <ChevronLeft className="h-4 w-4" />
             </Button>
             {Array.from({ length: Math.min(data.totalPages, 5) }, (_, i) => {
               let pageNum: number;
@@ -432,7 +427,7 @@ export default function Invoices() {
                   variant={pageNum === page ? "default" : "outline"}
                   size="sm"
                   onClick={() => setSearchParams((p) => { p.set("page", String(pageNum)); return p; })}
-                  className="h-7 w-7 p-0 text-[10px]"
+                  className="h-8 w-8 p-0 text-xs"
                 >
                   {pageNum}
                 </Button>
@@ -443,9 +438,9 @@ export default function Invoices() {
               size="sm"
               disabled={page >= data.totalPages}
               onClick={() => setSearchParams((p) => { p.set("page", String(page + 1)); return p; })}
-              className="h-7 w-7 p-0"
+              className="h-8 w-8 p-0"
             >
-              <ChevronRight className="h-3.5 w-3.5" />
+              <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>
