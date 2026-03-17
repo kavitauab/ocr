@@ -13,3 +13,4 @@
 - Before coding substantial changes: write plan + verification criteria.
 - During execution: keep progress updated in task checklist.
 - Before final response: include verification evidence and known limits.
+- For this project, do not use or start local MySQL for deployment/migration tasks; execute deployment flow via API/server environment only.

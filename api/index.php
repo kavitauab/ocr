@@ -81,6 +81,10 @@ if (($pathParts[0] ?? '') === 'cron') {
         require_once __DIR__ . '/functions/fetch_emails.php';
         exit;
     }
+    if (($pathParts[1] ?? '') === 'migrate-schema') {
+        require_once __DIR__ . '/functions/migrate_schema.php';
+        exit;
+    }
     sendJSON(['error' => 'Not found'], 404);
 }
 
