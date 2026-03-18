@@ -89,6 +89,10 @@ if (($pathParts[0] ?? '') === 'cron') {
         require_once __DIR__ . '/functions/process_ocr_queue.php';
         exit;
     }
+    if (($pathParts[1] ?? '') === 'test-vecticum') {
+        require_once __DIR__ . '/functions/test_vecticum.php';
+        exit;
+    }
     sendJSON(['error' => 'Not found'], 404);
 }
 
