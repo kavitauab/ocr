@@ -22,6 +22,7 @@ import {
   Clock,
   FileText,
   ExternalLink,
+  RotateCcw,
 } from "lucide-react";
 
 function ConfidenceDot({ score }: { score?: number }) {
@@ -132,6 +133,11 @@ export default function InvoiceDetail() {
     onSuccess: (d) => toast.success(d.message || "Sent to Vecticum"),
     onError: (err: any) => toast.error(err.response?.data?.error || "Failed"),
   });
+  const retryMutation = useMutation({
+    mutationFn: () => api.post(`/invoices/${id}/retry`).then((r) => r.data),
+    onSuccess: () => { toast.success("Invoice queued for retry"); queryClient.invalidateQueries({ queryKey: ["invoice", id] }); },
+    onError: (err: any) => toast.error(err.response?.data?.error || "Retry failed"),
+  });
 
   if (isLoading) return (
     <div className="space-y-2">
@@ -217,6 +223,11 @@ export default function InvoiceDetail() {
           <Button variant="outline" size="sm" className="gap-1 h-7 text-xs px-2.5" onClick={() => vecticumMutation.mutate()} disabled={vecticumMutation.isPending}>
             <Send className="h-3 w-3" />Vecticum
           </Button>
+          {(invoice.status === "failed" || invoice.status === "retrying") && (
+            <Button variant="outline" size="sm" className="gap-1 h-7 text-xs px-2.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50" onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending}>
+              <RotateCcw className="h-3 w-3" />Retry
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="gap-1 h-7 text-xs px-2.5 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => { if (confirm("Delete this invoice?")) deleteMutation.mutate(); }}>
             <Trash2 className="h-3 w-3" />Delete
           </Button>

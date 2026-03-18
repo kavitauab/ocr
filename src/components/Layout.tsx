@@ -22,6 +22,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   X,
+  Activity,
 } from "lucide-react";
 
 const COLLAPSED_KEY = "sidebar-collapsed";
@@ -81,6 +82,7 @@ export default function Layout() {
           { to: "/settings/billing", label: "Billing", icon: CreditCard },
           { to: "/settings/users", label: "Users", icon: Users },
           { to: "/settings/system", label: "System", icon: Wrench },
+          { to: "/settings/health", label: "Health", icon: Activity },
         ]
       : []),
   ];

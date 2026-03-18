@@ -162,5 +162,34 @@ $ensureColumn('subscriptions', 'included_tokens', 'BIGINT');
 $ensureColumn('subscriptions', 'overage_per_1k_tokens_usd', 'DECIMAL(12,6)');
 $ensureColumn('subscriptions', 'overage_per_invoice_usd', 'DECIMAL(12,6)');
 
+// --- OCR Queue & Retry columns on ocr_jobs ---
+$ensureColumn('ocr_jobs', 'attempt', 'INT NOT NULL DEFAULT 1');
+$ensureColumn('ocr_jobs', 'max_attempts', 'INT NOT NULL DEFAULT 3');
+$ensureColumn('ocr_jobs', 'next_retry_at', 'DATETIME NULL');
+$ensureColumn('ocr_jobs', 'queued_at', 'DATETIME NULL');
+
+// Extend ocr_jobs status enum to include 'queued' and 'retrying'
+// MySQL ALTER COLUMN MODIFY is idempotent if run multiple times
+$ocrJobsStatusStatement = "ALTER TABLE `ocr_jobs` MODIFY COLUMN `status` ENUM('queued','processing','completed','failed','retrying') NOT NULL DEFAULT 'queued'";
+if ($tableExists('ocr_jobs') && $columnExists('ocr_jobs', 'status')) {
+    // Check current enum values
+    $stmt = $db->prepare("SELECT COLUMN_TYPE FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'ocr_jobs' AND column_name = 'status'");
+    $stmt->execute();
+    $colType = $stmt->fetchColumn();
+    if ($colType && strpos($colType, 'queued') === false) {
+        $runStatement($ocrJobsStatusStatement);
+    } else {
+        $record('skipped', $ocrJobsStatusStatement);
+    }
+} else {
+    $record('skipped', $ocrJobsStatusStatement);
+}
+
+$ensureIndex('ocr_jobs', 'idx_ocr_jobs_queue', '(`status`, `next_retry_at`)');
+
+// --- Rate limiting columns on subscriptions ---
+$ensureColumn('subscriptions', 'rate_limit_per_hour', 'INT NULL');
+$ensureColumn('subscriptions', 'rate_limit_per_day', 'INT NULL');
+
 $statusCode = $summary['errors'] > 0 ? 500 : 200;
 sendJSON($summary, $statusCode);

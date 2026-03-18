@@ -59,6 +59,8 @@ export default function BillingEdit() {
     includedTokens: "",
     overagePer1kTokensUsd: "",
     overagePerInvoiceUsd: "",
+    rateLimitPerHour: "",
+    rateLimitPerDay: "",
   });
 
   const { data, isLoading } = useQuery({
@@ -78,6 +80,8 @@ export default function BillingEdit() {
         includedTokens: toInputValue(pickFirst(s, ["includedTokens", "included_tokens", "tokenLimit", "token_limit"])),
         overagePer1kTokensUsd: toInputValue(pickFirst(s, ["overagePer1kTokensUsd", "overage_per_1k_tokens_usd", "overageRateUsd", "overage_rate_usd"])),
         overagePerInvoiceUsd: toInputValue(pickFirst(s, ["overagePerInvoiceUsd", "overage_per_invoice_usd", "overageRatePerInvoiceUsd"])),
+        rateLimitPerHour: toInputValue(pickFirst(s, ["rateLimitPerHour", "rate_limit_per_hour"])),
+        rateLimitPerDay: toInputValue(pickFirst(s, ["rateLimitPerDay", "rate_limit_per_day"])),
       });
     }
   }, [data]);
@@ -125,6 +129,8 @@ export default function BillingEdit() {
         included_tokens: parseInputNumber(form.includedTokens, "Included tokens", true),
         overage_per_1k_tokens_usd: parseInputNumber(form.overagePer1kTokensUsd, "Overage per 1k tokens"),
         overage_per_invoice_usd: parseInputNumber(form.overagePerInvoiceUsd, "Overage per invoice"),
+        rate_limit_per_hour: parseInputNumber(form.rateLimitPerHour, "Rate limit per hour", true),
+        rate_limit_per_day: parseInputNumber(form.rateLimitPerDay, "Rate limit per day", true),
       };
       updateMutation.mutate(payload);
     } catch (err: any) {
@@ -197,6 +203,24 @@ export default function BillingEdit() {
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Included Tokens</label>
                   <Input type="number" value={form.includedTokens} onChange={(e) => setForm((prev) => ({ ...prev, includedTokens: e.target.value }))} placeholder="e.g. 1000000" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle>Rate Limits</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Invoices per Hour</label>
+                  <Input type="number" value={form.rateLimitPerHour} onChange={(e) => setForm((prev) => ({ ...prev, rateLimitPerHour: e.target.value }))} placeholder="Unlimited" />
+                  <p className="text-xs text-muted-foreground">Leave empty for unlimited</p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Invoices per Day</label>
+                  <Input type="number" value={form.rateLimitPerDay} onChange={(e) => setForm((prev) => ({ ...prev, rateLimitPerDay: e.target.value }))} placeholder="Unlimited" />
+                  <p className="text-xs text-muted-foreground">Leave empty for unlimited</p>
                 </div>
               </div>
             </CardContent>

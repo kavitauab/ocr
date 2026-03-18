@@ -137,7 +137,6 @@ class Invoice extends BaseResource {
     }
 
     public function create() {
-        set_time_limit(120); // Claude API can take up to 60s for extraction
         $user = getAuthUser();
         $companyId = $_POST['companyId'] ?? '';
 
@@ -145,6 +144,19 @@ class Invoice extends BaseResource {
         if (!$companyId) sendJSON(['error' => 'Company is required'], 400);
 
         requireCompanyAccess($user, $companyId, 'manager');
+
+        // Check rate limits before accepting the upload
+        require_once __DIR__ . '/../lib/rate_limit.php';
+        $rateCheck = checkRateLimit($companyId);
+        if (!$rateCheck['allowed']) {
+            $retryAfter = $rateCheck['retryAfterSeconds'] ?? 3600;
+            header('Retry-After: ' . $retryAfter);
+            sendRateLimitHeaders($rateCheck['limits']);
+            sendJSON(['error' => $rateCheck['reason'], 'retryAfterSeconds' => $retryAfter], 429);
+        }
+        if (isset($rateCheck['limits'])) {
+            sendRateLimitHeaders($rateCheck['limits']);
+        }
 
         $file = $_FILES['file'];
         if (!in_array($file['type'], $this->allowedTypes)) {
@@ -155,7 +167,8 @@ class Invoice extends BaseResource {
         $saved = saveFile($fileData, $file['name'], $companyId);
         $id = generateId();
 
-        $stmt = $this->db->prepare("INSERT INTO invoices (id, company_id, source, original_filename, stored_filename, file_type, file_size, status) VALUES (:id, :companyId, 'upload', :originalFilename, :storedFilename, :fileType, :fileSize, 'processing')");
+        // Insert invoice with 'queued' status — OCR happens in background via cron worker
+        $stmt = $this->db->prepare("INSERT INTO invoices (id, company_id, source, original_filename, stored_filename, file_type, file_size, status) VALUES (:id, :companyId, 'upload', :originalFilename, :storedFilename, :fileType, :fileSize, 'queued')");
         $stmt->execute([
             'id' => $id, 'companyId' => $companyId,
             'originalFilename' => $file['name'],
@@ -164,108 +177,18 @@ class Invoice extends BaseResource {
             'fileSize' => $file['size'],
         ]);
 
-        // Extract with Claude
-        $ocrJobId = null;
-        $ocrRequestStarted = false;
-        $ocrUsage = ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-20250514'];
+        // Create a queued OCR job for the background worker to pick up
         try {
-            // Load company extraction field preferences
-            $companyStmt = $this->db->prepare("SELECT extraction_fields FROM companies WHERE id = :id");
-            $companyStmt->execute(['id' => $companyId]);
-            $companyRow = $companyStmt->fetch();
-            $enabledFields = null;
-            if ($companyRow && $companyRow['extraction_fields']) {
-                $enabledFields = json_decode($companyRow['extraction_fields'], true);
-            }
-
-            $filePath = getFilePath($saved['storedFilename']);
-            $ocrJobId = startOcrJob($id, $companyId, 'anthropic', 'claude-sonnet-4-20250514');
-            try {
-                $this->db->prepare("UPDATE invoices SET ocr_sent_at = NOW(), updated_at = NOW() WHERE id = :id")
-                    ->execute(['id' => $id]);
-            } catch (\Throwable $e) {
-                // Allow processing to continue on DBs not yet migrated with ocr_sent_at.
-            }
-
-            $ocrRequestStarted = true;
-            $extractionResult = extractInvoiceData($filePath, $saved['fileType'], $enabledFields, true);
-            $extracted = $extractionResult['data'] ?? $extractionResult;
-            if (isset($extractionResult['usage']) && is_array($extractionResult['usage'])) {
-                $ocrUsage = $extractionResult['usage'];
-            }
-
-            $invoiceUpdateParams = [
-                'documentType' => $extracted['documentType'] ?? null,
-                'invoiceNumber' => $extracted['invoiceNumber'] ?? null,
-                'invoiceDate' => $extracted['invoiceDate'] ?? null,
-                'dueDate' => $extracted['dueDate'] ?? null,
-                'vendorName' => $extracted['vendorName'] ?? null,
-                'vendorAddress' => $extracted['vendorAddress'] ?? null,
-                'vendorVatId' => $extracted['vendorVatId'] ?? null,
-                'buyerName' => $extracted['buyerName'] ?? null,
-                'buyerAddress' => $extracted['buyerAddress'] ?? null,
-                'buyerVatId' => $extracted['buyerVatId'] ?? null,
-                'totalAmount' => isset($extracted['totalAmount']) ? (string)$extracted['totalAmount'] : null,
-                'currency' => $extracted['currency'] ?? null,
-                'taxAmount' => isset($extracted['taxAmount']) ? (string)$extracted['taxAmount'] : null,
-                'subtotalAmount' => isset($extracted['subtotalAmount']) ? (string)$extracted['subtotalAmount'] : null,
-                'poNumber' => $extracted['poNumber'] ?? null,
-                'paymentTerms' => $extracted['paymentTerms'] ?? null,
-                'bankDetails' => $extracted['bankDetails'] ?? null,
-                'confidence' => json_encode($extracted['confidence'] ?? []),
-                'raw' => json_encode($extracted),
-                'id' => $id,
-            ];
-
-            try {
-                $stmt = $this->db->prepare("UPDATE invoices SET status = 'completed',
-                    document_type = :documentType,
-                    invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
-                    vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
-                    buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
-                    total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
-                    subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
-                    bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
-                    ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id");
-                $stmt->execute($invoiceUpdateParams);
-            } catch (\Throwable $e) {
-                // Fallback for DBs that do not have ocr_returned_at yet.
-                $stmt = $this->db->prepare("UPDATE invoices SET status = 'completed',
-                    document_type = :documentType,
-                    invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
-                    vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
-                    buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
-                    total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
-                    subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
-                    bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
-                    updated_at = NOW() WHERE id = :id");
-                $stmt->execute($invoiceUpdateParams);
-            }
-
-            completeOcrJob($ocrJobId, $ocrUsage);
-            trackInvoiceProcessed($companyId, $file['size'], $ocrUsage);
+            $ocrJobId = generateId();
+            $stmt = $this->db->prepare("INSERT INTO ocr_jobs (id, invoice_id, company_id, provider, model, status, queued_at, attempt, max_attempts)
+                VALUES (:id, :invoiceId, :companyId, 'anthropic', 'claude-sonnet-4-20250514', 'queued', NOW(), 1, 3)");
+            $stmt->execute([
+                'id' => $ocrJobId,
+                'invoiceId' => $id,
+                'companyId' => $companyId,
+            ]);
         } catch (\Throwable $e) {
-            try {
-                try {
-                    $this->db->prepare("UPDATE invoices
-                        SET status = 'failed',
-                            processing_error = :error,
-                            ocr_returned_at = CASE WHEN ocr_sent_at IS NULL THEN ocr_returned_at ELSE NOW() END,
-                            updated_at = NOW()
-                        WHERE id = :id")
-                        ->execute(['error' => $e->getMessage(), 'id' => $id]);
-                } catch (\Throwable $e3) {
-                    $this->db->prepare("UPDATE invoices SET status = 'failed', processing_error = :error, updated_at = NOW() WHERE id = :id")
-                        ->execute(['error' => $e->getMessage(), 'id' => $id]);
-                }
-
-                if ($ocrRequestStarted) {
-                    failOcrJob($ocrJobId, $e->getMessage(), $ocrUsage);
-                    trackApiCall($companyId, $ocrUsage ?? ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-20250514']);
-                }
-            } catch (\Throwable $e2) {
-                error_log("Invoice $id catch failed: " . $e2->getMessage());
-            }
+            error_log("Failed to create OCR job for invoice $id: " . $e->getMessage());
         }
 
         try {
@@ -574,7 +497,7 @@ class Invoice extends BaseResource {
 
         $where = $conditions ? 'WHERE ' . implode(' AND ', $conditions) : '';
 
-        $sql = "SELECT COUNT(*) as total, SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) as completed, SUM(CASE WHEN status='processing' THEN 1 ELSE 0 END) as processing, SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) as failed, SUM(CASE WHEN status='completed' THEN COALESCE(total_amount,0) ELSE 0 END) as total_amount FROM invoices $where";
+        $sql = "SELECT COUNT(*) as total, SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) as completed, SUM(CASE WHEN status IN ('processing','queued') THEN 1 ELSE 0 END) as processing, SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) as failed, SUM(CASE WHEN status='queued' THEN 1 ELSE 0 END) as queued, SUM(CASE WHEN status='retrying' THEN 1 ELSE 0 END) as retrying, SUM(CASE WHEN status='completed' THEN COALESCE(total_amount,0) ELSE 0 END) as total_amount FROM invoices $where";
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
         $row = $stmt->fetch();
@@ -584,6 +507,8 @@ class Invoice extends BaseResource {
             'completedCount' => (int)($row['completed'] ?? 0),
             'processingCount' => (int)($row['processing'] ?? 0),
             'failedCount' => (int)($row['failed'] ?? 0),
+            'queuedCount' => (int)($row['queued'] ?? 0),
+            'retryingCount' => (int)($row['retrying'] ?? 0),
             'totalAmountSum' => (float)($row['total_amount'] ?? 0),
         ];
 
@@ -809,5 +734,178 @@ class Invoice extends BaseResource {
             sendJSON(['success' => true, 'externalId' => $result['externalId'], 'message' => "Invoice sent to Vecticum (ID: {$result['externalId']})"]);
         }
         sendJSON(['error' => $result['error'] ?? 'Failed to upload to Vecticum'], 500);
+    }
+
+    /**
+     * POST /invoices/{id}/retry — Re-queue a failed invoice for OCR processing
+     */
+    public function retry($id) {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') sendJSON(['error' => 'Method not allowed'], 405);
+
+        $user = getAuthUser();
+        $stmt = $this->db->prepare("SELECT * FROM invoices WHERE id = :id");
+        $stmt->execute(['id' => $id]);
+        $invoice = $stmt->fetch();
+        if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
+
+        if ($invoice['company_id']) requireCompanyAccess($user, $invoice['company_id'], 'manager');
+
+        if (!in_array($invoice['status'], ['failed', 'retrying'])) {
+            sendJSON(['error' => 'Only failed or retrying invoices can be retried'], 400);
+        }
+
+        // Reset invoice to queued
+        $this->db->prepare("UPDATE invoices SET status = 'queued', processing_error = NULL, ocr_sent_at = NULL, ocr_returned_at = NULL, updated_at = NOW() WHERE id = :id")
+            ->execute(['id' => $id]);
+
+        // Create a new OCR job
+        try {
+            $ocrJobId = generateId();
+            $stmt = $this->db->prepare("INSERT INTO ocr_jobs (id, invoice_id, company_id, provider, model, status, queued_at, attempt, max_attempts)
+                VALUES (:id, :invoiceId, :companyId, 'anthropic', 'claude-sonnet-4-20250514', 'queued', NOW(), 1, 3)");
+            $stmt->execute([
+                'id' => $ocrJobId,
+                'invoiceId' => $id,
+                'companyId' => $invoice['company_id'],
+            ]);
+        } catch (\Throwable $e) {
+            error_log("Failed to create retry OCR job for invoice $id: " . $e->getMessage());
+        }
+
+        try {
+            logAction(['userId' => $user['id'], 'companyId' => $invoice['company_id'], 'action' => 'retry', 'resourceType' => 'invoice', 'resourceId' => $id]);
+        } catch (\Throwable $e) {
+            // non-critical
+        }
+
+        $stmt = $this->db->prepare("SELECT * FROM invoices WHERE id = :id");
+        $stmt->execute(['id' => $id]);
+        $updated = $stmt->fetch();
+        sendJSON(['invoice' => $this->formatInvoice($updated), 'message' => 'Invoice queued for retry']);
+    }
+
+    /**
+     * GET /invoices/health — OCR system health metrics (superadmin only)
+     */
+    public function health($id = null) {
+        requireRole('superadmin');
+
+        // Overview stats
+        $overview = $this->db->query("
+            SELECT
+                COUNT(*) as total_jobs,
+                SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) as completed_jobs,
+                SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) as failed_jobs,
+                SUM(CASE WHEN status='queued' THEN 1 ELSE 0 END) as queued_jobs,
+                SUM(CASE WHEN status='processing' THEN 1 ELSE 0 END) as processing_jobs,
+                SUM(CASE WHEN status='retrying' THEN 1 ELSE 0 END) as retrying_jobs,
+                AVG(CASE WHEN status='completed' AND sent_at IS NOT NULL AND returned_at IS NOT NULL
+                    THEN TIMESTAMPDIFF(SECOND, sent_at, returned_at) ELSE NULL END) as avg_processing_seconds
+            FROM ocr_jobs
+        ")->fetch();
+
+        $totalFinished = (int)$overview['completed_jobs'] + (int)$overview['failed_jobs'];
+        $successRate = $totalFinished > 0 ? round(((int)$overview['completed_jobs'] / $totalFinished) * 100, 1) : 100;
+
+        // Queue status
+        $queue = $this->db->query("
+            SELECT
+                COUNT(*) as depth,
+                MIN(queued_at) as oldest_queued_at,
+                SUM(CASE WHEN status='retrying' THEN 1 ELSE 0 END) as retrying
+            FROM ocr_jobs
+            WHERE status IN ('queued', 'retrying', 'processing')
+        ")->fetch();
+
+        // Daily trends (last 30 days)
+        $daily = $this->db->query("
+            SELECT
+                DATE(COALESCE(returned_at, created_at)) as date,
+                SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) as completed,
+                SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) as failed,
+                AVG(CASE WHEN status='completed' AND sent_at IS NOT NULL AND returned_at IS NOT NULL
+                    THEN TIMESTAMPDIFF(SECOND, sent_at, returned_at) ELSE NULL END) as avg_seconds,
+                SUM(cost_usd) as total_cost_usd
+            FROM ocr_jobs
+            WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            GROUP BY DATE(COALESCE(returned_at, created_at))
+            ORDER BY date DESC
+        ")->fetchAll();
+
+        // Top errors (last 30 days)
+        $topErrors = $this->db->query("
+            SELECT
+                SUBSTRING(error_message, 1, 200) as message,
+                COUNT(*) as count,
+                MAX(updated_at) as last_seen
+            FROM ocr_jobs
+            WHERE status = 'failed'
+              AND error_message IS NOT NULL
+              AND created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            GROUP BY SUBSTRING(error_message, 1, 200)
+            ORDER BY count DESC
+            LIMIT 10
+        ")->fetchAll();
+
+        // Rate limit status per company
+        $rateLimits = [];
+        try {
+            require_once __DIR__ . '/../lib/rate_limit.php';
+            $companies = $this->db->query("
+                SELECT c.id, c.name, s.rate_limit_per_hour, s.rate_limit_per_day
+                FROM companies c
+                LEFT JOIN subscriptions s ON s.company_id = c.id
+                WHERE s.rate_limit_per_hour IS NOT NULL OR s.rate_limit_per_day IS NOT NULL
+            ")->fetchAll();
+
+            foreach ($companies as $c) {
+                $rateCheck = checkRateLimit($c['id']);
+                $rateLimits[] = [
+                    'companyId' => $c['id'],
+                    'companyName' => $c['name'],
+                    'hourlyLimit' => $c['rate_limit_per_hour'] !== null ? (int)$c['rate_limit_per_hour'] : null,
+                    'dailyLimit' => $c['rate_limit_per_day'] !== null ? (int)$c['rate_limit_per_day'] : null,
+                    'hourlyUsed' => $rateCheck['limits']['hourlyUsed'] ?? 0,
+                    'dailyUsed' => $rateCheck['limits']['dailyUsed'] ?? 0,
+                ];
+            }
+        } catch (\Throwable $e) {
+            // Rate limit columns may not exist yet
+        }
+
+        sendJSON([
+            'overview' => [
+                'totalJobs' => (int)$overview['total_jobs'],
+                'completedJobs' => (int)$overview['completed_jobs'],
+                'failedJobs' => (int)$overview['failed_jobs'],
+                'queuedJobs' => (int)$overview['queued_jobs'],
+                'processingJobs' => (int)$overview['processing_jobs'],
+                'retryingJobs' => (int)$overview['retrying_jobs'],
+                'successRate' => $successRate,
+                'avgProcessingSeconds' => $overview['avg_processing_seconds'] !== null ? round((float)$overview['avg_processing_seconds'], 1) : null,
+            ],
+            'queue' => [
+                'depth' => (int)$queue['depth'],
+                'oldestQueuedAt' => $queue['oldest_queued_at'],
+                'retrying' => (int)$queue['retrying'],
+            ],
+            'daily' => array_map(function ($row) {
+                return [
+                    'date' => $row['date'],
+                    'completed' => (int)$row['completed'],
+                    'failed' => (int)$row['failed'],
+                    'avgSeconds' => $row['avg_seconds'] !== null ? round((float)$row['avg_seconds'], 1) : null,
+                    'totalCostUsd' => round((float)$row['total_cost_usd'], 6),
+                ];
+            }, $daily),
+            'topErrors' => array_map(function ($row) {
+                return [
+                    'message' => $row['message'],
+                    'count' => (int)$row['count'],
+                    'lastSeen' => $row['last_seen'],
+                ];
+            }, $topErrors),
+            'rateLimits' => $rateLimits,
+        ]);
     }
 }

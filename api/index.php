@@ -85,6 +85,10 @@ if (($pathParts[0] ?? '') === 'cron') {
         require_once __DIR__ . '/functions/migrate_schema.php';
         exit;
     }
+    if (($pathParts[1] ?? '') === 'process-ocr') {
+        require_once __DIR__ . '/functions/process_ocr_queue.php';
+        exit;
+    }
     sendJSON(['error' => 'Not found'], 404);
 }
 
@@ -99,7 +103,7 @@ if (($pathParts[0] ?? '') === 'user' && ($pathParts[1] ?? '') === 'companies') {
 
 // Resource routing
 $resourceKey = $pathParts[0] ?? '';
-$reservedActions = ['stats', 'filter'];
+$reservedActions = ['stats', 'filter', 'health'];
 $id = isset($pathParts[1]) && !in_array($pathParts[1], $reservedActions) ? $pathParts[1] : null;
 $action = $pathParts[2] ?? (isset($pathParts[1]) && in_array($pathParts[1], $reservedActions) ? $pathParts[1] : null);
 

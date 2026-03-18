@@ -76,8 +76,12 @@ export default function Upload() {
           )
         );
       } catch (err: any) {
-        const errorMsg = err.response?.data?.error || "Failed to upload";
+        const status = err.response?.status;
+        const errorMsg = status === 429
+          ? `Rate limit reached. ${err.response?.data?.error || "Try again later."}`
+          : err.response?.data?.error || "Failed to upload";
         setResults((prev) => prev.map((r, idx) => idx === i ? { ...r, status: "error", error: errorMsg } : r));
+        if (status === 429) break; // Stop batch on rate limit
       }
     }
 

@@ -5,8 +5,12 @@ export function getStatusClasses(status: string): string {
   const s = (status || "").toLowerCase();
   if (["completed", "processed", "active", "paid", "ok", "current"].includes(s))
     return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (["queued"].includes(s))
+    return "bg-indigo-50 text-indigo-700 border-indigo-200";
   if (["processing", "pending", "uploading"].includes(s))
     return "bg-amber-50 text-amber-700 border-amber-200";
+  if (["retrying"].includes(s))
+    return "bg-orange-50 text-orange-700 border-orange-200";
   if (["failed", "error", "cancelled", "rejected", "overdue"].includes(s))
     return "bg-red-50 text-red-700 border-red-200";
   if (["suspended", "paused", "inactive"].includes(s))

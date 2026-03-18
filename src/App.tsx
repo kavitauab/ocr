@@ -14,6 +14,7 @@ import Users from "@/pages/Users";
 import SystemSettings from "@/pages/SystemSettings";
 import Billing from "@/pages/Billing";
 import BillingEdit from "@/pages/BillingEdit";
+import Health from "@/pages/Health";
 import { Toaster } from "@/components/ui/sonner";
 
 export default function App() {
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="/settings/billing/:id" element={<BillingEdit />} />
           <Route path="/settings/users" element={<Users />} />
           <Route path="/settings/system" element={<SystemSettings />} />
+          <Route path="/settings/health" element={<Health />} />
         </Route>
       </Routes>
       <Toaster />

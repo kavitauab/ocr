@@ -38,6 +38,8 @@ class Subscriptions extends BaseResource {
             'includedTokens' => null,
             'overagePer1kTokensUsd' => null,
             'overagePerInvoiceUsd' => null,
+            'rateLimitPerHour' => null,
+            'rateLimitPerDay' => null,
         ];
     }
 
@@ -120,6 +122,16 @@ class Subscriptions extends BaseResource {
             $result['overage_per_invoice_usd'] = $this->normalizeNullableFloat($raw, 'overagePerInvoiceUsd');
         }
 
+        if (array_key_exists('rateLimitPerHour', $data) || array_key_exists('rate_limit_per_hour', $data)) {
+            $raw = array_key_exists('rateLimitPerHour', $data) ? $data['rateLimitPerHour'] : $data['rate_limit_per_hour'];
+            $result['rate_limit_per_hour'] = $this->normalizeNullableInt($raw, 'rateLimitPerHour');
+        }
+
+        if (array_key_exists('rateLimitPerDay', $data) || array_key_exists('rate_limit_per_day', $data)) {
+            $raw = array_key_exists('rateLimitPerDay', $data) ? $data['rateLimitPerDay'] : $data['rate_limit_per_day'];
+            $result['rate_limit_per_day'] = $this->normalizeNullableInt($raw, 'rateLimitPerDay');
+        }
+
         return $result;
     }
 
@@ -147,6 +159,8 @@ class Subscriptions extends BaseResource {
             'includedTokens' => $this->toIntOrNull($row['included_tokens'] ?? $defaults['includedTokens']),
             'overagePer1kTokensUsd' => $this->toFloatOrNull($row['overage_per_1k_tokens_usd'] ?? $defaults['overagePer1kTokensUsd']),
             'overagePerInvoiceUsd' => $this->toFloatOrNull($row['overage_per_invoice_usd'] ?? $defaults['overagePerInvoiceUsd']),
+            'rateLimitPerHour' => $this->toIntOrNull($row['rate_limit_per_hour'] ?? $defaults['rateLimitPerHour']),
+            'rateLimitPerDay' => $this->toIntOrNull($row['rate_limit_per_day'] ?? $defaults['rateLimitPerDay']),
         ];
     }
 
@@ -163,6 +177,8 @@ class Subscriptions extends BaseResource {
                 $this->selectFragment('included_tokens', 'included_tokens'),
                 $this->selectFragment('overage_per_1k_tokens_usd', 'overage_per_1k_tokens_usd'),
                 $this->selectFragment('overage_per_invoice_usd', 'overage_per_invoice_usd'),
+                $this->selectFragment('rate_limit_per_hour', 'rate_limit_per_hour'),
+                $this->selectFragment('rate_limit_per_day', 'rate_limit_per_day'),
             ];
 
             return "SELECT " . implode(', ', $selectParts) . "\n"
@@ -174,7 +190,8 @@ class Subscriptions extends BaseResource {
         return "SELECT c.id AS company_id, c.name AS company_name, c.code AS company_code, "
             . "'free' AS plan, 'active' AS status, "
             . "NULL AS invoice_limit, NULL AS storage_limit_bytes, "
-            . "NULL AS included_tokens, NULL AS overage_per_1k_tokens_usd, NULL AS overage_per_invoice_usd "
+            . "NULL AS included_tokens, NULL AS overage_per_1k_tokens_usd, NULL AS overage_per_invoice_usd, "
+            . "NULL AS rate_limit_per_hour, NULL AS rate_limit_per_day "
             . "FROM companies c ORDER BY c.created_at DESC";
     }
 
@@ -191,6 +208,8 @@ class Subscriptions extends BaseResource {
                 $this->selectFragment('included_tokens', 'included_tokens'),
                 $this->selectFragment('overage_per_1k_tokens_usd', 'overage_per_1k_tokens_usd'),
                 $this->selectFragment('overage_per_invoice_usd', 'overage_per_invoice_usd'),
+                $this->selectFragment('rate_limit_per_hour', 'rate_limit_per_hour'),
+                $this->selectFragment('rate_limit_per_day', 'rate_limit_per_day'),
             ];
 
             return "SELECT " . implode(', ', $selectParts) . "\n"
@@ -202,7 +221,8 @@ class Subscriptions extends BaseResource {
         return "SELECT c.id AS company_id, c.name AS company_name, c.code AS company_code, "
             . "'free' AS plan, 'active' AS status, "
             . "NULL AS invoice_limit, NULL AS storage_limit_bytes, "
-            . "NULL AS included_tokens, NULL AS overage_per_1k_tokens_usd, NULL AS overage_per_invoice_usd "
+            . "NULL AS included_tokens, NULL AS overage_per_1k_tokens_usd, NULL AS overage_per_invoice_usd, "
+            . "NULL AS rate_limit_per_hour, NULL AS rate_limit_per_day "
             . "FROM companies c WHERE c.id = :companyId";
     }
 

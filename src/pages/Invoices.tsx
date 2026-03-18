@@ -196,7 +196,9 @@ export default function Invoices() {
           >
             <option value="">All statuses</option>
             <option value="completed">Completed</option>
+            <option value="queued">Queued</option>
             <option value="processing">Processing</option>
+            <option value="retrying">Retrying</option>
             <option value="failed">Failed</option>
           </select>
           <Button
