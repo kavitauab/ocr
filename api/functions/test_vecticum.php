@@ -384,4 +384,119 @@ if ($action === 'try-file-upload') {
     sendJSON(['action' => 'try-file-upload', 'results' => $results]);
 }
 
-sendJSON(['error' => 'Unknown action. Use: test-connection, list-invoices, send-test, send-real, probe-endpoints, inspect-record, find-with-files, try-file-upload'], 400);
+if ($action === 'try-patch-files') {
+    // Try to PATCH just the files field on a record to see if the API accepts it
+    $token = getVecticumToken($company);
+    $baseUrl = $company['vecticum_api_base_url'];
+    $companyEndpoint = $company['vecticum_company_id'];
+    $recordId = $_GET['recordId'] ?? '';
+    if (!$recordId) sendJSON(['error' => 'Need recordId'], 400);
+
+    // Try different HTTP methods to update
+    $methods = ['PATCH', 'PUT'];
+    $results = [];
+
+    foreach ($methods as $method) {
+        // Try updating with just the description to see if updates work at all
+        $ch = curl_init($baseUrl . '/' . $companyEndpoint . '/' . $recordId);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => $method,
+            CURLOPT_POSTFIELDS => json_encode(['additionalInfo' => 'Test update from OCR system']),
+            CURLOPT_HTTPHEADER => [
+                'Accept: application/json',
+                'Content-Type: application/json',
+                "Authorization: Bearer $token",
+            ],
+            CURLOPT_TIMEOUT => 10,
+        ]);
+        $response = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $results[$method] = ['httpCode' => $code, 'response' => json_decode($response, true) ?? substr($response, 0, 500)];
+    }
+
+    sendJSON(['action' => 'try-patch-files', 'results' => $results]);
+}
+
+if ($action === 'try-multipart') {
+    // Try multipart/form-data upload directly to the API endpoint
+    $token = getVecticumToken($company);
+    $baseUrl = $company['vecticum_api_base_url'];
+    $companyEndpoint = $company['vecticum_company_id'];
+    $recordId = $_GET['recordId'] ?? '';
+    $invoiceId = $_GET['invoiceId'] ?? '';
+
+    if (!$recordId || !$invoiceId) sendJSON(['error' => 'Need recordId and invoiceId'], 400);
+
+    $stmt = $db->prepare("SELECT * FROM invoices WHERE id = :id");
+    $stmt->execute(['id' => $invoiceId]);
+    $invoice = $stmt->fetch();
+    if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
+
+    $filePath = rtrim(UPLOAD_DIR, '/') . '/' . $invoice['stored_filename'];
+    if (!file_exists($filePath)) sendJSON(['error' => "File not found: $filePath"], 404);
+
+    $fileName = $invoice['original_filename'];
+    $fileType = $invoice['file_type'] ?? 'application/pdf';
+
+    // Try multipart upload directly to the record endpoint
+    $cfile = new CURLFile($filePath, $fileType, $fileName);
+
+    $ch = curl_init($baseUrl . '/' . $companyEndpoint . '/' . $recordId);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CUSTOMREQUEST => 'PUT',
+        CURLOPT_POSTFIELDS => ['file' => $cfile],
+        CURLOPT_HTTPHEADER => [
+            'Accept: application/json',
+            "Authorization: Bearer $token",
+        ],
+        CURLOPT_TIMEOUT => 30,
+    ]);
+    $response = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $results = ['multipart_put' => ['httpCode' => $code, 'response' => json_decode($response, true) ?? substr($response, 0, 500)]];
+
+    // Also try POST to the record
+    $ch = curl_init($baseUrl . '/' . $companyEndpoint . '/' . $recordId);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => ['file' => $cfile],
+        CURLOPT_HTTPHEADER => [
+            'Accept: application/json',
+            "Authorization: Bearer $token",
+        ],
+        CURLOPT_TIMEOUT => 30,
+    ]);
+    $response = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $results['multipart_post'] = ['httpCode' => $code, 'response' => json_decode($response, true) ?? substr($response, 0, 500)];
+
+    // Try a /upload sub-endpoint
+    $ch = curl_init($baseUrl . '/' . $companyEndpoint . '/' . $recordId . '/upload');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => ['file' => $cfile],
+        CURLOPT_HTTPHEADER => [
+            'Accept: application/json',
+            "Authorization: Bearer $token",
+        ],
+        CURLOPT_TIMEOUT => 30,
+    ]);
+    $response = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $results['multipart_upload_endpoint'] = ['httpCode' => $code, 'response' => json_decode($response, true) ?? substr($response, 0, 500)];
+
+    sendJSON(['action' => 'try-multipart', 'results' => $results]);
+}
+
+sendJSON(['error' => 'Unknown action'], 400);
