@@ -72,7 +72,7 @@ export default function Dashboard() {
 
   const { data: invoicesData } = useQuery({
     queryKey: ["recent-invoices", effectiveCompanyId],
-    queryFn: () => api.get(`/invoices?companyId=${effectiveCompanyId}&limit=5`).then((r) => r.data),
+    queryFn: () => api.get(`/invoices?companyId=${effectiveCompanyId}&limit=20`).then((r) => r.data),
     enabled: !!effectiveCompanyId,
   });
 
@@ -294,6 +294,7 @@ export default function Dashboard() {
                     <TableHead className="font-semibold">Vendor</TableHead>
                     <TableHead className="font-semibold hidden sm:table-cell">Date</TableHead>
                     <TableHead className="font-semibold text-right">Amount</TableHead>
+                    <TableHead className="font-semibold hidden md:table-cell">Scanned</TableHead>
                     <TableHead className="font-semibold">Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -310,6 +311,7 @@ export default function Dashboard() {
                       <TableCell className="text-right tabular-nums font-medium">
                         {inv.totalAmount ? `${inv.totalAmount} ${inv.currency || ""}` : "\u2014"}
                       </TableCell>
+                      <TableCell className="text-muted-foreground hidden md:table-cell">{formatDateTime(inv.createdAt)}</TableCell>
                       <TableCell>
                         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getStatusClasses(inv.status)}`}>
                           {inv.status}
@@ -319,7 +321,7 @@ export default function Dashboard() {
                   ))}
                   {(!invoicesData?.invoices || invoicesData.invoices.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={5} className="py-12">
+                      <TableCell colSpan={6} className="py-12">
                         <div className="flex flex-col items-center justify-center text-center">
                           <div className="rounded-full bg-muted p-3 mb-3">
                             <BarChart3 className="h-6 w-6 text-muted-foreground" />
