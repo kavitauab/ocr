@@ -14,10 +14,10 @@ $companyId = $_GET['companyId'] ?? '';
 $action = $_GET['action'] ?? 'test-connection'; // test-connection, list-invoices, send-test, probe-endpoints
 
 if (!$companyId) {
-    // List companies with vecticum enabled
-    $stmt = $db->query("SELECT id, name, vecticum_enabled, vecticum_api_base_url, vecticum_company_id FROM companies WHERE vecticum_enabled = 1");
+    // List ALL companies
+    $stmt = $db->query("SELECT id, name, vecticum_enabled, vecticum_api_base_url, vecticum_company_id FROM companies");
     $companies = $stmt->fetchAll();
-    sendJSON(['action' => 'list-enabled', 'companies' => $companies]);
+    sendJSON(['action' => 'list-all', 'companies' => $companies]);
 }
 
 $stmt = $db->prepare("SELECT * FROM companies WHERE id = :id");
