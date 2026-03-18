@@ -258,4 +258,130 @@ if ($action === 'find-with-files') {
     ]);
 }
 
-sendJSON(['error' => 'Unknown action. Use: test-connection, list-invoices, send-test, send-real, probe-endpoints'], 400);
+if ($action === 'try-file-upload') {
+    // Try to upload a file to Vecticum's Firebase Storage and update the record
+    $token = getVecticumToken($company);
+    $baseUrl = $company['vecticum_api_base_url'];
+    $companyEndpoint = $company['vecticum_company_id'];
+    $recordId = $_GET['recordId'] ?? '';
+    $invoiceId = $_GET['invoiceId'] ?? '';
+
+    if (!$recordId || !$invoiceId) sendJSON(['error' => 'Need recordId (vecticum) and invoiceId (our system)'], 400);
+
+    // Get our invoice to find the file
+    $stmt = $db->prepare("SELECT * FROM invoices WHERE id = :id");
+    $stmt->execute(['id' => $invoiceId]);
+    $invoice = $stmt->fetch();
+    if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
+
+    $filePath = rtrim(UPLOAD_DIR, '/') . '/' . $invoice['stored_filename'];
+    if (!file_exists($filePath)) sendJSON(['error' => 'File not found: ' . $filePath], 404);
+
+    $fileContent = file_get_contents($filePath);
+    $fileName = $invoice['original_filename'];
+    $fileType = $invoice['file_type'] ?? 'application/pdf';
+    $fileSize = filesize($filePath);
+
+    // Firebase Storage upload path: {companyId}/{objectTypeId}/{recordId}/{randomId}/{filename}
+    $vecticumCompanyId = 'TKZ3DS7QjhRWkzKNNg0C';
+    $objectTypeId = 'Z9OVQWEWH7bYmO1ydt7O'; // Invoice object type
+    $randomId = substr(str_shuffle('abcdefghijklmnopqrstuvwxyz0123456789'), 0, 8);
+    $storagePath = "$vecticumCompanyId/$objectTypeId/$recordId/$randomId/$fileName";
+
+    // Try uploading to Firebase Storage
+    $bucket = 'vecticum-prod-eu.appspot.com';
+    $encodedPath = rawurlencode($storagePath);
+    $uploadUrl = "https://firebasestorage.googleapis.com/v0/b/$bucket/o/$encodedPath";
+
+    $ch = curl_init($uploadUrl);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $fileContent,
+        CURLOPT_HTTPHEADER => [
+            "Content-Type: $fileType",
+            "Authorization: Bearer $token",
+        ],
+        CURLOPT_TIMEOUT => 60,
+    ]);
+    $uploadResponse = curl_exec($ch);
+    $uploadCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $uploadData = json_decode($uploadResponse, true);
+
+    // If upload succeeded, try to update the record with file reference
+    $results = [
+        'firebaseUpload' => [
+            'httpCode' => $uploadCode,
+            'path' => $storagePath,
+            'response' => $uploadData ?? substr($uploadResponse, 0, 500),
+        ],
+    ];
+
+    if ($uploadCode === 200) {
+        // Get download token from upload response
+        $downloadToken = $uploadData['downloadTokens'] ?? '';
+        $downloadURL = "https://firebasestorage.googleapis.com/v0/b/$bucket/o/$encodedPath?alt=media" . ($downloadToken ? "&token=$downloadToken" : '');
+
+        $filesPayload = [
+            [
+                'path' => $storagePath,
+                'name' => $fileName,
+                'downloadURL' => $downloadURL,
+                'type' => $fileType,
+                'size' => (string)$fileSize,
+            ]
+        ];
+
+        // Try PATCH to update the record with file reference
+        $ch = curl_init($baseUrl . '/' . $companyEndpoint . '/' . $recordId);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => 'PATCH',
+            CURLOPT_POSTFIELDS => json_encode(['files' => $filesPayload]),
+            CURLOPT_HTTPHEADER => [
+                'Accept: application/json',
+                'Content-Type: application/json',
+                "Authorization: Bearer $token",
+            ],
+            CURLOPT_TIMEOUT => 15,
+        ]);
+        $patchResponse = curl_exec($ch);
+        $patchCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $results['patchRecord'] = [
+            'httpCode' => $patchCode,
+            'response' => json_decode($patchResponse, true) ?? substr($patchResponse, 0, 500),
+        ];
+
+        // If PATCH didn't work, try PUT
+        if ($patchCode >= 400) {
+            $ch = curl_init($baseUrl . '/' . $companyEndpoint . '/' . $recordId);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CUSTOMREQUEST => 'PUT',
+                CURLOPT_POSTFIELDS => json_encode(['files' => $filesPayload]),
+                CURLOPT_HTTPHEADER => [
+                    'Accept: application/json',
+                    'Content-Type: application/json',
+                    "Authorization: Bearer $token",
+                ],
+                CURLOPT_TIMEOUT => 15,
+            ]);
+            $putResponse = curl_exec($ch);
+            $putCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            $results['putRecord'] = [
+                'httpCode' => $putCode,
+                'response' => json_decode($putResponse, true) ?? substr($putResponse, 0, 500),
+            ];
+        }
+    }
+
+    sendJSON(['action' => 'try-file-upload', 'results' => $results]);
+}
+
+sendJSON(['error' => 'Unknown action. Use: test-connection, list-invoices, send-test, send-real, probe-endpoints, inspect-record, find-with-files, try-file-upload'], 400);
