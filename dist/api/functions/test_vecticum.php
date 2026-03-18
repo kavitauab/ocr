@@ -499,4 +499,117 @@ if ($action === 'try-multipart') {
     sendJSON(['action' => 'try-multipart', 'results' => $results]);
 }
 
+if ($action === 'full-send') {
+    // Full 3-step flow: POST metadata → PUT file → PATCH metadata back
+    $token = getVecticumToken($company);
+    $baseUrl = $company['vecticum_api_base_url'];
+    $companyEndpoint = $company['vecticum_company_id'];
+    $invoiceId = $_GET['invoiceId'] ?? '';
+    if (!$invoiceId) sendJSON(['error' => 'Need invoiceId'], 400);
+
+    $stmt = $db->prepare("SELECT * FROM invoices WHERE id = :id");
+    $stmt->execute(['id' => $invoiceId]);
+    $invoice = $stmt->fetch();
+    if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
+
+    $filePath = rtrim(UPLOAD_DIR, '/') . '/' . $invoice['stored_filename'];
+    if (!file_exists($filePath)) sendJSON(['error' => "File not found: $filePath"], 404);
+
+    $steps = [];
+
+    // STEP 1: POST metadata to create record
+    $total = floatval($invoice['total_amount'] ?? 0);
+    $tax = floatval($invoice['tax_amount'] ?? 0);
+    $subtotal = floatval($invoice['subtotal_amount'] ?? 0);
+    $totalInclVat = number_format($total && $tax ? $total + $tax : $total, 2, '.', '');
+
+    $body = array_filter([
+        'invoiceNo' => $invoice['invoice_number'],
+        'invoiceDate' => $invoice['invoice_date'],
+        'paymentDate' => $invoice['due_date'],
+        'invoiceAmount' => $subtotal ?: $total,
+        'vatAmount' => $tax,
+        'totalAmount' => $subtotal ?: $total,
+        'totalInclVat' => $totalInclVat,
+        'description' => $invoice['vendor_name'],
+        'counterpartyCode' => $invoice['vendor_vat_id'],
+        'currency' => ['id' => 'O18j5zeck1yHYb5W4H86', 'name' => 'EUR'],
+    ], fn($v) => $v !== null && $v !== '');
+
+    if (!empty($company['vecticum_author_id'])) {
+        $body['author'] = ['id' => $company['vecticum_author_id'], 'name' => $company['vecticum_author_name'] ?? ''];
+    }
+
+    $ch = curl_init($baseUrl . '/' . $companyEndpoint);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode($body),
+        CURLOPT_HTTPHEADER => ['Accept: application/json', 'Content-Type: application/json', "Authorization: Bearer $token"],
+        CURLOPT_TIMEOUT => 30,
+    ]);
+    $response = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $data = json_decode($response, true);
+
+    $steps['1_create'] = ['httpCode' => $code, 'recordId' => $data['id'] ?? null];
+    if ($code >= 300 || empty($data['id'])) {
+        sendJSON(['action' => 'full-send', 'error' => 'Step 1 failed', 'steps' => $steps, 'response' => $data]);
+    }
+
+    $recordId = $data['id'];
+
+    // STEP 2: PUT multipart to upload file
+    $cfile = new CURLFile($filePath, $invoice['file_type'] ?? 'application/pdf', $invoice['original_filename']);
+    $ch = curl_init($baseUrl . '/' . $companyEndpoint . '/' . $recordId);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CUSTOMREQUEST => 'PUT',
+        CURLOPT_POSTFIELDS => ['file' => $cfile],
+        CURLOPT_HTTPHEADER => ['Accept: application/json', "Authorization: Bearer $token"],
+        CURLOPT_TIMEOUT => 60,
+    ]);
+    $response = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $steps['2_upload'] = ['httpCode' => $code, 'response' => substr($response, 0, 200)];
+
+    // STEP 3: PATCH metadata back (since PUT wipes it)
+    $ch = curl_init($baseUrl . '/' . $companyEndpoint . '/' . $recordId);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CUSTOMREQUEST => 'PATCH',
+        CURLOPT_POSTFIELDS => json_encode($body),
+        CURLOPT_HTTPHEADER => ['Accept: application/json', 'Content-Type: application/json', "Authorization: Bearer $token"],
+        CURLOPT_TIMEOUT => 15,
+    ]);
+    $response = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $steps['3_patch'] = ['httpCode' => $code];
+
+    // STEP 4: Verify the final state
+    $ch = curl_init($baseUrl . '/' . $companyEndpoint . '/' . $recordId);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['Accept: application/json', "Authorization: Bearer $token"],
+        CURLOPT_TIMEOUT => 10,
+    ]);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    $final = json_decode($response, true);
+
+    $steps['4_verify'] = [
+        'invoiceNo' => $final['invoiceNo'] ?? null,
+        'description' => $final['description'] ?? null,
+        'invoiceAmount' => $final['invoiceAmount'] ?? null,
+        'files' => $final['files'] ?? null,
+    ];
+
+    sendJSON(['action' => 'full-send', 'success' => true, 'recordId' => $recordId, 'steps' => $steps]);
+}
+
 sendJSON(['error' => 'Unknown action'], 400);
