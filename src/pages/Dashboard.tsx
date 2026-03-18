@@ -44,10 +44,10 @@ function getLastReturned(company: any): string | null {
 }
 
 const statConfig = [
-  { key: "totalInvoices", label: "Total Invoices", icon: FileText, borderColor: "border-l-blue-500", iconBg: "bg-blue-50", iconColor: "text-blue-600" },
-  { key: "completedCount", label: "Completed", icon: CheckCircle, borderColor: "border-l-emerald-500", iconBg: "bg-emerald-50", iconColor: "text-emerald-600" },
-  { key: "processingCount", label: "Processing", icon: Loader2, borderColor: "border-l-amber-500", iconBg: "bg-amber-50", iconColor: "text-amber-600" },
-  { key: "failedCount", label: "Failed", icon: AlertTriangle, borderColor: "border-l-red-500", iconBg: "bg-red-50", iconColor: "text-red-600" },
+  { key: "totalInvoices", label: "Total Invoices", icon: FileText, borderColor: "border-l-blue-500", iconBg: "bg-blue-50", iconColor: "text-blue-600", statusFilter: "" },
+  { key: "completedCount", label: "Completed", icon: CheckCircle, borderColor: "border-l-emerald-500", iconBg: "bg-emerald-50", iconColor: "text-emerald-600", statusFilter: "completed" },
+  { key: "processingCount", label: "Processing", icon: Loader2, borderColor: "border-l-amber-500", iconBg: "bg-amber-50", iconColor: "text-amber-600", statusFilter: "processing" },
+  { key: "failedCount", label: "Failed", icon: AlertTriangle, borderColor: "border-l-red-500", iconBg: "bg-red-50", iconColor: "text-red-600", statusFilter: "failed" },
 ] as const;
 
 export default function Dashboard() {
@@ -149,28 +149,35 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             ))
-          : statConfig.map(({ key, label, icon: Icon, borderColor, iconBg, iconColor }) => (
-              <Card
-                key={key}
-                className={`border-l-4 ${borderColor} hover:shadow-md transition-shadow duration-200`}
-              >
-                <CardContent className="p-3.5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        {label}
-                      </p>
-                      <p className="text-2xl font-bold tabular-nums mt-0.5 leading-none text-foreground">
-                        {(stats as any)?.[key] || 0}
-                      </p>
+          : statConfig.map(({ key, label, icon: Icon, borderColor, iconBg, iconColor, statusFilter }) => {
+              const params = new URLSearchParams();
+              if (statusFilter) params.set("status", statusFilter);
+              if (effectiveCompanyId) params.set("companyId", effectiveCompanyId);
+              const href = `/invoices${params.toString() ? `?${params}` : ""}`;
+              return (
+                <Card
+                  key={key}
+                  className={`border-l-4 ${borderColor} hover:shadow-md transition-shadow duration-200 cursor-pointer`}
+                  onClick={() => navigate(href)}
+                >
+                  <CardContent className="p-3.5">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          {label}
+                        </p>
+                        <p className="text-2xl font-bold tabular-nums mt-0.5 leading-none text-foreground">
+                          {(stats as any)?.[key] || 0}
+                        </p>
+                      </div>
+                      <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${iconBg}`}>
+                        <Icon className={`h-4 w-4 ${iconColor}`} />
+                      </div>
                     </div>
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${iconBg}`}>
-                      <Icon className={`h-4 w-4 ${iconColor}`} />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
       </div>
 
       {/* Company overview */}
