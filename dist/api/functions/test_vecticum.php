@@ -20,6 +20,22 @@ if (!$companyId) {
     sendJSON(['action' => 'list-all', 'companies' => $companies]);
 }
 
+if ($action === 'setup') {
+    // One-time setup: configure vecticum on a company
+    $baseUrl = $_GET['baseUrl'] ?? '';
+    $clientId = $_GET['clientId'] ?? '';
+    $clientSecret = $_GET['clientSecret'] ?? '';
+    $vecCompanyId = $_GET['vecCompanyId'] ?? '';
+
+    if (!$baseUrl || !$clientId || !$clientSecret || !$vecCompanyId) {
+        sendJSON(['error' => 'Need: baseUrl, clientId, clientSecret, vecCompanyId'], 400);
+    }
+
+    $stmt = $db->prepare("UPDATE companies SET vecticum_enabled = 1, vecticum_api_base_url = :url, vecticum_client_id = :cid, vecticum_client_secret = :cs, vecticum_company_id = :vcid WHERE id = :id");
+    $stmt->execute(['url' => $baseUrl, 'cid' => $clientId, 'cs' => $clientSecret, 'vcid' => $vecCompanyId, 'id' => $companyId]);
+    sendJSON(['action' => 'setup', 'success' => true, 'message' => "Vecticum configured for company $companyId"]);
+}
+
 $stmt = $db->prepare("SELECT * FROM companies WHERE id = :id");
 $stmt->execute(['id' => $companyId]);
 $company = $stmt->fetch();
