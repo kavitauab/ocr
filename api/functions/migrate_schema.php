@@ -162,6 +162,21 @@ $ensureColumn('subscriptions', 'included_tokens', 'BIGINT');
 $ensureColumn('subscriptions', 'overage_per_1k_tokens_usd', 'DECIMAL(12,6)');
 $ensureColumn('subscriptions', 'overage_per_invoice_usd', 'DECIMAL(12,6)');
 
+// --- Extend invoices status to include 'queued' and 'retrying' ---
+$invoiceStatusStatement = "ALTER TABLE `invoices` MODIFY COLUMN `status` ENUM('uploaded','queued','processing','completed','failed','retrying') NOT NULL DEFAULT 'uploaded'";
+if ($tableExists('invoices') && $columnExists('invoices', 'status')) {
+    $stmt = $db->prepare("SELECT COLUMN_TYPE FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'invoices' AND column_name = 'status'");
+    $stmt->execute();
+    $colType = $stmt->fetchColumn();
+    if ($colType && strpos($colType, 'queued') === false) {
+        $runStatement($invoiceStatusStatement);
+    } else {
+        $record('skipped', $invoiceStatusStatement);
+    }
+} else {
+    $record('skipped', $invoiceStatusStatement);
+}
+
 // --- OCR Queue & Retry columns on ocr_jobs ---
 $ensureColumn('ocr_jobs', 'attempt', 'INT NOT NULL DEFAULT 1');
 $ensureColumn('ocr_jobs', 'max_attempts', 'INT NOT NULL DEFAULT 3');
