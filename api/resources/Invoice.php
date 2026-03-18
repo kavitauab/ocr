@@ -121,12 +121,17 @@ class Invoice extends BaseResource {
 
         $where = $conditions ? 'WHERE ' . implode(' AND ', $conditions) : '';
 
+        // Sorting
+        $orderByParam = $_GET['orderBy'] ?? '-created_at';
+        $orderField = $this->validateOrderField(ltrim($orderByParam, '-'));
+        $orderDir = strpos($orderByParam, '-') === 0 ? 'DESC' : 'ASC';
+
         $countSql = "SELECT COUNT(*) FROM invoices i $where";
         $stmt = $this->db->prepare($countSql);
         $stmt->execute($params);
         $total = (int)$stmt->fetchColumn();
 
-        $sql = "SELECT i.*, c.name as company_name, c.code as company_code FROM invoices i LEFT JOIN companies c ON c.id = i.company_id $where ORDER BY i.created_at DESC LIMIT $limit OFFSET $offset";
+        $sql = "SELECT i.*, c.name as company_name, c.code as company_code FROM invoices i LEFT JOIN companies c ON c.id = i.company_id $where ORDER BY i.`$orderField` $orderDir LIMIT $limit OFFSET $offset";
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
         $items = $stmt->fetchAll();

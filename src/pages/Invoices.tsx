@@ -7,6 +7,7 @@ import api from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DropdownMenu, DropdownItem } from "@/components/ui/dropdown-menu";
@@ -45,13 +46,14 @@ export default function Invoices() {
   const returnedTo = searchParams.get("returnedTo") || "";
   const urlCompanyId = searchParams.get("companyId") || "";
   const [search, setSearch] = useState(searchParams.get("search") || "");
+  const orderBy = searchParams.get("orderBy") || "-created_at";
   const [showFilters, setShowFilters] = useState(false);
 
   const effectiveCompanyId = urlCompanyId || selectedCompany?.id || "";
   const filterCompany = urlCompanyId ? companies.find((c) => c.id === urlCompanyId) : null;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["invoices", effectiveCompanyId, page, status, search, lifecycle, sentFrom, sentTo, returnedFrom, returnedTo],
+    queryKey: ["invoices", effectiveCompanyId, page, status, search, lifecycle, sentFrom, sentTo, returnedFrom, returnedTo, orderBy],
     queryFn: () => {
       const params: Record<string, string> = { page: String(page), limit: "20" };
       if (effectiveCompanyId) params.companyId = effectiveCompanyId;
@@ -62,6 +64,7 @@ export default function Invoices() {
       if (sentTo) params.sentTo = sentTo;
       if (returnedFrom) params.returnedFrom = returnedFrom;
       if (returnedTo) params.returnedTo = returnedTo;
+      if (orderBy) params.orderBy = orderBy;
       return api.get("/invoices", { params }).then((r) => r.data);
     },
   });
@@ -327,14 +330,14 @@ export default function Invoices() {
             <TableHeader>
               <TableRow className="bg-muted/30">
                 {isSuperadmin && !groupByCompany && <TableHead className="font-semibold">Company</TableHead>}
-                <TableHead className="font-semibold">Invoice #</TableHead>
-                <TableHead className="font-semibold">Vendor</TableHead>
-                <TableHead className="font-semibold hidden md:table-cell">Date</TableHead>
-                <TableHead className="font-semibold text-right hidden sm:table-cell">Amount</TableHead>
-                <TableHead className="font-semibold">Status</TableHead>
+                <SortableTableHead field="invoice_number" current={orderBy} onSort={(v) => setParam("orderBy", v)}>Invoice #</SortableTableHead>
+                <SortableTableHead field="vendor_name" current={orderBy} onSort={(v) => setParam("orderBy", v)}>Vendor</SortableTableHead>
+                <SortableTableHead field="invoice_date" current={orderBy} onSort={(v) => setParam("orderBy", v)} className="hidden md:table-cell">Date</SortableTableHead>
+                <SortableTableHead field="total_amount" current={orderBy} onSort={(v) => setParam("orderBy", v)} className="text-right hidden sm:table-cell">Amount</SortableTableHead>
+                <SortableTableHead field="status" current={orderBy} onSort={(v) => setParam("orderBy", v)}>Status</SortableTableHead>
                 <TableHead className="font-semibold hidden lg:table-cell">Source</TableHead>
-                <TableHead className="font-semibold hidden xl:table-cell">Sent to OCR</TableHead>
-                <TableHead className="font-semibold hidden xl:table-cell">Returned</TableHead>
+                <SortableTableHead field="ocr_sent_at" current={orderBy} onSort={(v) => setParam("orderBy", v)} className="hidden xl:table-cell">Sent to OCR</SortableTableHead>
+                <SortableTableHead field="ocr_returned_at" current={orderBy} onSort={(v) => setParam("orderBy", v)} className="hidden xl:table-cell">Returned</SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

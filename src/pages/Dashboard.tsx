@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateTime, formatNumber, formatUsd, getStatusClasses } from "@/lib/ui-utils";
 import {
@@ -56,6 +57,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [superadminMode, setSuperadminMode] = useState<"global" | "company">("global");
   const [companySearch, setCompanySearch] = useState("");
+  const [recentSort, setRecentSort] = useState("-createdAt");
 
   const isSuperadmin = user?.role === "superadmin";
   const effectiveCompanyId = isSuperadmin
@@ -87,6 +89,19 @@ export default function Dashboard() {
     });
   }, [companies, companySearch]);
   const showRecentInvoices = !!effectiveCompanyId && (!isSuperadmin || superadminMode === "company");
+
+  const sortedRecentInvoices = useMemo(() => {
+    const list = invoicesData?.invoices || [];
+    if (!list.length) return list;
+    const field = recentSort.replace(/^-/, "");
+    const dir = recentSort.startsWith("-") ? -1 : 1;
+    return [...list].sort((a: any, b: any) => {
+      const va = a[field] ?? "";
+      const vb = b[field] ?? "";
+      if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
+      return String(va).localeCompare(String(vb)) * dir;
+    });
+  }, [invoicesData?.invoices, recentSort]);
 
   const greeting = (() => {
     const hour = new Date().getHours();
@@ -297,16 +312,16 @@ export default function Dashboard() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/30">
-                    <TableHead className="font-semibold">Invoice #</TableHead>
-                    <TableHead className="font-semibold">Vendor</TableHead>
-                    <TableHead className="font-semibold hidden sm:table-cell">Date</TableHead>
-                    <TableHead className="font-semibold text-right">Amount</TableHead>
-                    <TableHead className="font-semibold hidden md:table-cell">Scanned</TableHead>
-                    <TableHead className="font-semibold">Status</TableHead>
+                    <SortableTableHead field="invoiceNumber" current={recentSort} onSort={setRecentSort}>Invoice #</SortableTableHead>
+                    <SortableTableHead field="vendorName" current={recentSort} onSort={setRecentSort}>Vendor</SortableTableHead>
+                    <SortableTableHead field="invoiceDate" current={recentSort} onSort={setRecentSort} className="hidden sm:table-cell">Date</SortableTableHead>
+                    <SortableTableHead field="totalAmount" current={recentSort} onSort={setRecentSort} className="text-right">Amount</SortableTableHead>
+                    <SortableTableHead field="createdAt" current={recentSort} onSort={setRecentSort} className="hidden md:table-cell">Scanned</SortableTableHead>
+                    <SortableTableHead field="status" current={recentSort} onSort={setRecentSort}>Status</SortableTableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {invoicesData?.invoices?.map((inv: any) => (
+                  {sortedRecentInvoices.map((inv: any) => (
                     <TableRow key={inv.id} className="transition-colors duration-150 hover:bg-primary/[0.03]">
                       <TableCell>
                         <Link to={`/invoices/${inv.id}`} className="text-primary hover:text-primary-dark font-medium hover:underline">
@@ -326,7 +341,7 @@ export default function Dashboard() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {(!invoicesData?.invoices || invoicesData.invoices.length === 0) && (
+                  {sortedRecentInvoices.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={6} className="py-12">
                         <div className="flex flex-col items-center justify-center text-center">
