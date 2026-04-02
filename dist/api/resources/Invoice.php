@@ -242,7 +242,7 @@ class Invoice extends BaseResource {
         }
 
         $user = getAuthUser();
-        $stmt = $this->db->prepare("SELECT i.*, c.name as company_name, c.vat_number as company_vat_number, c.buyer_keywords as company_buyer_keywords FROM invoices i LEFT JOIN companies c ON c.id = i.company_id WHERE i.id = :id");
+        $stmt = $this->db->prepare("SELECT i.*, c.name as company_name, c.vat_number as company_vat_number, c.buyer_keywords as company_buyer_keywords, e.from_email as sender_email, e.from_name as sender_name FROM invoices i LEFT JOIN companies c ON c.id = i.company_id LEFT JOIN email_inbox e ON e.id = i.email_inbox_id WHERE i.id = :id");
         $stmt->execute(['id' => $id]);
         $invoice = $stmt->fetch();
         if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);

@@ -45,6 +45,7 @@ class Email extends BaseResource {
         $stmt = $this->db->prepare("SELECT e.*, c.name as company_name FROM email_inbox e LEFT JOIN companies c ON e.company_id = c.id $where ORDER BY e.created_at DESC LIMIT $limit OFFSET $offset");
         $stmt->execute($params);
 
-        sendJSON(['emails' => $stmt->fetchAll(), 'total' => $total, 'page' => $page, 'totalPages' => max(1, (int)ceil($total / $limit))]);
+        $emails = array_map('snakeToCamel', $stmt->fetchAll());
+        sendJSON(['emails' => $emails, 'total' => $total, 'page' => $page, 'totalPages' => max(1, (int)ceil($total / $limit))]);
     }
 }

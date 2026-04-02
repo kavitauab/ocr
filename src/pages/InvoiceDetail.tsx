@@ -214,7 +214,7 @@ export default function InvoiceDetail() {
             </span>
           )}
           {invoice.source && (
-            <span className="text-[11px] text-muted-foreground">&middot; {invoice.source}</span>
+            <span className="text-[11px] text-muted-foreground">&middot; {invoice.source}{invoice.senderEmail ? ` from ${invoice.senderName || invoice.senderEmail}` : ""}</span>
           )}
         </div>
 
