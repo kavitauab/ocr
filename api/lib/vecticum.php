@@ -155,7 +155,7 @@ function uploadFileToVecticum($company, $documentId, $filePath, $fileName, $toke
         return ['success' => false, 'error' => 'Could not read file: ' . $filePath];
     }
 
-    $mimeType = mime_content_type($filePath) ?: 'application/octet-stream';
+    $mimeType = function_exists('mime_content_type') ? (mime_content_type($filePath) ?: 'application/octet-stream') : 'application/pdf';
 
     // POST raw file content to /files/{classId}/{documentId}/files
     $url = $company['vecticum_api_base_url'] . '/files/' . $company['vecticum_company_id'] . '/' . $documentId . '/files';

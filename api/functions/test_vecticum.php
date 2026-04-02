@@ -635,7 +635,7 @@ if ($action === 'test-file-upload') {
     if (!file_exists($filePath)) sendJSON(['error' => "File not found at $filePath"], 404);
 
     $fileContent = file_get_contents($filePath);
-    $mimeType = mime_content_type($filePath) ?: 'application/octet-stream';
+    $mimeType = function_exists('mime_content_type') ? (mime_content_type($filePath) ?: 'application/octet-stream') : ($invoice['file_type'] ?? 'application/pdf');
     $fileName = $invoice['original_filename'];
 
     $steps = [];
