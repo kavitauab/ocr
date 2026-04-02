@@ -192,7 +192,7 @@ export default function InvoiceDetail() {
     { label: "Uploaded", time: uploadedAt, color: "bg-slate-500", active: !!uploadedAt },
     { label: "Sent to OCR", time: sentToOcrAt, color: "bg-blue-500", active: !!sentToOcrAt },
     { label: "OCR Returned", time: returnedAt, color: "bg-emerald-500", active: !!returnedAt },
-    ...(invoice.vecticumId ? [{ label: "Sent to Vecticum", time: null, color: "bg-purple-500", active: true }] : []),
+    ...(invoice.vecticumId ? [{ label: "Sent to Vecticum", time: invoice.vecticumSentAt, color: "bg-purple-500", active: true }] : []),
   ];
 
   return (

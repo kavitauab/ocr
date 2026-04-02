@@ -188,7 +188,7 @@ function processCompanyEmails($companyId) {
                                         '_senderEmail' => $fromEmail,
                                     ]);
                                     if ($vecResult['success'] && !empty($vecResult['externalId'])) {
-                                        $db->prepare("UPDATE invoices SET vecticum_id = :vid, updated_at = NOW() WHERE id = :id")
+                                        $db->prepare("UPDATE invoices SET vecticum_id = :vid, vecticum_sent_at = NOW(), updated_at = NOW() WHERE id = :id")
                                             ->execute(['vid' => $vecResult['externalId'], 'id' => $invoiceId]);
                                     }
                                 }

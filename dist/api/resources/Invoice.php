@@ -811,7 +811,7 @@ class Invoice extends BaseResource {
         if ($result['success']) {
             // Save external ID
             if (!empty($result['externalId'])) {
-                $stmt = $this->db->prepare("UPDATE invoices SET vecticum_id = :vid, updated_at = NOW() WHERE id = :id");
+                $stmt = $this->db->prepare("UPDATE invoices SET vecticum_id = :vid, vecticum_sent_at = NOW(), updated_at = NOW() WHERE id = :id");
                 $stmt->execute(['vid' => $result['externalId'], 'id' => $id]);
             }
             sendJSON([
