@@ -14,6 +14,16 @@ class Invoice extends BaseResource {
         if (!$row) return $row;
         if (isset($row['confidence_scores'])) $row['confidence_scores'] = json_decode($row['confidence_scores'], true);
         if (isset($row['raw_extraction'])) $row['raw_extraction'] = json_decode($row['raw_extraction'], true);
+
+        // Compute buyer mismatch
+        $companyVat = strtoupper(preg_replace('/\s+/', '', $row['company_vat_number'] ?? ''));
+        $buyerVat = strtoupper(preg_replace('/\s+/', '', $row['buyer_vat_id'] ?? ''));
+        if ($companyVat && $buyerVat && $row['status'] === 'completed') {
+            $row['buyer_mismatch'] = $companyVat !== $buyerVat;
+        } else {
+            $row['buyer_mismatch'] = false;
+        }
+
         // Convert snake_case to camelCase for frontend
         $result = [];
         foreach ($row as $key => $value) {
@@ -131,7 +141,7 @@ class Invoice extends BaseResource {
         $stmt->execute($params);
         $total = (int)$stmt->fetchColumn();
 
-        $sql = "SELECT i.*, c.name as company_name, c.code as company_code FROM invoices i LEFT JOIN companies c ON c.id = i.company_id $where ORDER BY i.`$orderField` $orderDir LIMIT $limit OFFSET $offset";
+        $sql = "SELECT i.*, c.name as company_name, c.code as company_code, c.vat_number as company_vat_number FROM invoices i LEFT JOIN companies c ON c.id = i.company_id $where ORDER BY i.`$orderField` $orderDir LIMIT $limit OFFSET $offset";
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
         $items = $stmt->fetchAll();
@@ -216,7 +226,7 @@ class Invoice extends BaseResource {
         }
 
         $user = getAuthUser();
-        $stmt = $this->db->prepare("SELECT * FROM invoices WHERE id = :id");
+        $stmt = $this->db->prepare("SELECT i.*, c.name as company_name, c.vat_number as company_vat_number FROM invoices i LEFT JOIN companies c ON c.id = i.company_id WHERE i.id = :id");
         $stmt->execute(['id' => $id]);
         $invoice = $stmt->fetch();
         if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
@@ -722,6 +732,20 @@ class Invoice extends BaseResource {
         $company = $stmt->fetch();
         if (!$company) sendJSON(['error' => 'Company not found'], 404);
         if (!$company['vecticum_enabled']) sendJSON(['error' => 'Vecticum not enabled for this company'], 400);
+
+        // Buyer validation — check if invoice buyer matches the company
+        $force = ($_GET['force'] ?? '') === 'true';
+        if (!$force && !empty($company['vat_number']) && !empty($invoice['buyer_vat_id'])) {
+            $companyVat = strtoupper(preg_replace('/\s+/', '', $company['vat_number']));
+            $buyerVat = strtoupper(preg_replace('/\s+/', '', $invoice['buyer_vat_id']));
+            if ($companyVat !== $buyerVat) {
+                sendJSON([
+                    'error' => 'Buyer mismatch',
+                    'message' => "Invoice buyer ({$invoice['buyer_name']}, VAT: {$invoice['buyer_vat_id']}) does not match company ({$company['name']}, VAT: {$company['vat_number']})",
+                    'buyerMismatch' => true,
+                ], 400);
+            }
+        }
 
         // Resolve file path (stored_filename already includes company subdirectory)
         $uploadDir = rtrim(getenv('UPLOAD_DIR') ?: '../uploads', '/');

@@ -220,7 +220,7 @@ export default function InvoiceDetail() {
           <Button variant="outline" size="sm" className="gap-1 h-7 text-xs px-2.5" onClick={() => { window.open(`/api/invoices/${id}/metadata?access_token=${encodeURIComponent(token || "")}`, "_blank"); }}>
             <Download className="h-3 w-3" />JSON
           </Button>
-          <Button variant="outline" size="sm" className="gap-1 h-7 text-xs px-2.5" onClick={() => vecticumMutation.mutate()} disabled={vecticumMutation.isPending}>
+          <Button variant="outline" size="sm" className="gap-1 h-7 text-xs px-2.5" onClick={() => vecticumMutation.mutate()} disabled={vecticumMutation.isPending || invoice.buyerMismatch} title={invoice.buyerMismatch ? "Buyer does not match company" : undefined}>
             <Send className="h-3 w-3" />Vecticum
           </Button>
           {(invoice.status === "failed" || invoice.status === "retrying") && (
@@ -239,6 +239,16 @@ export default function InvoiceDetail() {
         <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
           <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
           <p className="text-xs text-red-700">{invoice.processingError}</p>
+        </div>
+      )}
+
+      {/* Buyer mismatch warning */}
+      {invoice.buyerMismatch && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+          <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+          <p className="text-xs text-amber-700">
+            Buyer mismatch: <strong>{invoice.buyerName}</strong> (VAT: {invoice.buyerVatId}) does not match company <strong>{invoice.companyName}</strong> (VAT: {invoice.companyVatNumber})
+          </p>
         </div>
       )}
 

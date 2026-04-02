@@ -22,6 +22,7 @@ import {
   Filter,
   FileText,
   Upload,
+  AlertTriangle,
 } from "lucide-react";
 
 function getSentToOcrAt(invoice: any): string | null {
@@ -153,9 +154,14 @@ export default function Invoices() {
         {inv.totalAmount ? `${inv.totalAmount} ${inv.currency || ""}` : "\u2014"}
       </TableCell>
       <TableCell>
-        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getStatusClasses(inv.status)}`}>
-          {inv.status}
-        </span>
+        <div className="flex items-center gap-1">
+          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getStatusClasses(inv.status)}`}>
+            {inv.status}
+          </span>
+          {inv.buyerMismatch && (
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" title="Buyer mismatch" />
+          )}
+        </div>
       </TableCell>
       <TableCell className="hidden lg:table-cell">
         <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">

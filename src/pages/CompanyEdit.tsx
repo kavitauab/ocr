@@ -61,7 +61,7 @@ export default function CompanyEdit() {
   ];
 
   const [form, setForm] = useState<Record<string, any>>({
-    name: "", code: "", logoUrl: "",
+    name: "", code: "", vatNumber: "", logoUrl: "",
     msClientId: "", msClientSecret: "", msTenantId: "", msSenderEmail: "",
     msFetchEnabled: false, msFetchFolder: "INBOX",
     vecticumEnabled: false, vecticumApiBaseUrl: "", vecticumClientId: "",
@@ -220,6 +220,10 @@ export default function CompanyEdit() {
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Code</label>
             <Input value={form.code} onChange={(e) => set("code", e.target.value)} disabled={!isNew && !canEdit} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">VAT Number</label>
+            <Input value={form.vatNumber} onChange={(e) => set("vatNumber", e.target.value)} disabled={!isNew && !canEdit} placeholder="e.g. LT100007165618" />
           </div>
         </CardContent>
       </Card>
