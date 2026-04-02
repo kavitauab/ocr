@@ -132,6 +132,39 @@ function findVecticumPartner($company, $vatId, $companyName, $token = null) {
     return null;
 }
 
+function findVecticumAuthor($company, $senderEmail, $token = null) {
+    if (!$senderEmail) return null;
+    if (!$token) $token = getVecticumToken($company);
+
+    // Fetch persons from Vecticum
+    $url = $company['vecticum_api_base_url'] . '/person';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['Accept: application/json', "Authorization: Bearer $token"],
+        CURLOPT_TIMEOUT => 15,
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200) return null;
+    $persons = json_decode($response, true);
+    if (!is_array($persons)) return null;
+
+    $normalizedEmail = strtolower(trim($senderEmail));
+
+    foreach ($persons as $p) {
+        $pEmail = strtolower(trim($p['email'] ?? ''));
+        $pPersonalEmail = strtolower(trim($p['personalEmail'] ?? ''));
+        if (($pEmail && $pEmail === $normalizedEmail) || ($pPersonalEmail && $pPersonalEmail === $normalizedEmail)) {
+            return ['id' => $p['id'], 'name' => $p['name'] ?? ''];
+        }
+    }
+
+    return null;
+}
+
 function uploadToVecticum($company, $metadata) {
     if (empty($company['vecticum_company_id'])) {
         return ['success' => false, 'error' => 'Vecticum endpoint ID not configured'];
@@ -167,7 +200,14 @@ function uploadToVecticum($company, $metadata) {
             $body['currency'] = ['id' => 'O18j5zeck1yHYb5W4H86', 'name' => 'EUR'];
         }
 
-        if (!empty($company['vecticum_author_id'])) {
+        // Match author by sender email
+        $author = null;
+        if (!empty($metadata['_senderEmail'])) {
+            $author = findVecticumAuthor($company, $metadata['_senderEmail'], $token);
+        }
+        if ($author) {
+            $body['author'] = $author;
+        } elseif (!empty($company['vecticum_author_id'])) {
             $body['author'] = ['id' => $company['vecticum_author_id'], 'name' => $company['vecticum_author_name'] ?? ''];
         }
 

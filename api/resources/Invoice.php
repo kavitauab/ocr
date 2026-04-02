@@ -727,6 +727,15 @@ class Invoice extends BaseResource {
         $uploadDir = rtrim(getenv('UPLOAD_DIR') ?: '../uploads', '/');
         $filePath = $uploadDir . '/' . $invoice['stored_filename'];
 
+        // Get sender email if invoice came from email
+        $senderEmail = null;
+        if (!empty($invoice['email_inbox_id'])) {
+            $stmt = $this->db->prepare("SELECT from_email FROM email_inbox WHERE id = :id");
+            $stmt->execute(['id' => $invoice['email_inbox_id']]);
+            $emailRow = $stmt->fetch();
+            if ($emailRow) $senderEmail = $emailRow['from_email'];
+        }
+
         $result = uploadToVecticum($company, [
             'invoiceNumber' => $invoice['invoice_number'],
             'invoiceDate' => $invoice['invoice_date'],
@@ -739,6 +748,7 @@ class Invoice extends BaseResource {
             'currency' => $invoice['currency'],
             '_filePath' => $filePath,
             '_fileName' => $invoice['original_filename'],
+            '_senderEmail' => $senderEmail,
         ]);
 
         if ($result['success']) {

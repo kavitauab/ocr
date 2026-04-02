@@ -63,6 +63,14 @@ if ($action === 'fetch') {
     sendJSON(['action' => 'fetch', 'url' => $url, 'httpCode' => $code, 'count' => $count, 'sample' => $sample]);
 }
 
+if ($action === 'match-author') {
+    $email = $_GET['email'] ?? '';
+    if (!$email) sendJSON(['error' => 'Need email param'], 400);
+    $token = getVecticumToken($company);
+    $result = findVecticumAuthor($company, $email, $token);
+    sendJSON(['action' => 'match-author', 'email' => $email, 'match' => $result]);
+}
+
 if ($action === 'match-partner') {
     $vatId = $_GET['vatId'] ?? '';
     $name = $_GET['name'] ?? '';
