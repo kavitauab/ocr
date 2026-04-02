@@ -707,13 +707,13 @@ if ($action === 'test-file-upload') {
     curl_close($ch);
     $results['A_raw_body'] = ['url' => $url, 'httpCode' => $code, 'response' => json_decode($response, true) ?? substr($response, 0, 300)];
 
-    // Approach B: Multipart form-data with CURLFile
+    // Approach B: Multipart with filename as field name (Vecticum uses field name as stored name)
     $cfile = new \CURLFile($filePath, $mimeType, $fileName);
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => ['file' => $cfile],
+        CURLOPT_POSTFIELDS => [$fileName => $cfile],
         CURLOPT_HTTPHEADER => [
             'Accept: application/json',
             "Authorization: Bearer $token",
@@ -723,25 +723,7 @@ if ($action === 'test-file-upload') {
     $response = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    $results['B_multipart'] = ['httpCode' => $code, 'response' => json_decode($response, true) ?? substr($response, 0, 300)];
-
-    // Approach C: key = "file" instead of "files"
-    $url_file = $baseUrl . '/files/' . $companyEndpoint . '/' . $recordId . '/file';
-    $ch = curl_init($url_file);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => ['file' => $cfile],
-        CURLOPT_HTTPHEADER => [
-            'Accept: application/json',
-            "Authorization: Bearer $token",
-        ],
-        CURLOPT_TIMEOUT => 60,
-    ]);
-    $response = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    $results['C_multipart_file_key'] = ['url' => $url_file, 'httpCode' => $code, 'response' => json_decode($response, true) ?? substr($response, 0, 300)];
+    $results['B_multipart_filename_as_field'] = ['httpCode' => $code, 'response' => json_decode($response, true) ?? substr($response, 0, 300)];
 
     // Find the best result
     $bestCode = 500;

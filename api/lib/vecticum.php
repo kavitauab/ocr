@@ -157,6 +157,7 @@ function uploadFileToVecticum($company, $documentId, $filePath, $fileName, $toke
     $mimeType = function_exists('mime_content_type') ? (mime_content_type($filePath) ?: 'application/octet-stream') : 'application/pdf';
 
     // POST multipart to /files/{classId}/{documentId}/files
+    // Use filename as the multipart field name — Vecticum stores it as the file name
     $url = $company['vecticum_api_base_url'] . '/files/' . $company['vecticum_company_id'] . '/' . $documentId . '/files';
     $cfile = new \CURLFile($filePath, $mimeType, $fileName);
 
@@ -164,7 +165,7 @@ function uploadFileToVecticum($company, $documentId, $filePath, $fileName, $toke
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => ['file' => $cfile],
+        CURLOPT_POSTFIELDS => [$fileName => $cfile],
         CURLOPT_HTTPHEADER => [
             'Accept: application/json',
             "Authorization: Bearer $token",
