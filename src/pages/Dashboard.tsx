@@ -123,7 +123,7 @@ export default function Dashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            {greeting}, {user?.email?.split("@")[0] || "there"}
+            {greeting}, {user?.name?.split(" ")[0] || "there"}
           </h1>
           <p className="text-sm text-muted-foreground">{formattedDate}</p>
         </div>
