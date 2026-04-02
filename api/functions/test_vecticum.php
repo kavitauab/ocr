@@ -63,6 +63,15 @@ if ($action === 'fetch') {
     sendJSON(['action' => 'fetch', 'url' => $url, 'httpCode' => $code, 'count' => $count, 'sample' => $sample]);
 }
 
+if ($action === 'match-partner') {
+    $vatId = $_GET['vatId'] ?? '';
+    $name = $_GET['name'] ?? '';
+    if (!$vatId && !$name) sendJSON(['error' => 'Need vatId or name param'], 400);
+    $token = getVecticumToken($company);
+    $result = findVecticumPartner($company, $vatId, $name, $token);
+    sendJSON(['action' => 'match-partner', 'vatId' => $vatId, 'name' => $name, 'match' => $result]);
+}
+
 if ($action === 'test-connection') {
     $result = testVecticumConnection($company);
     sendJSON(['action' => 'test-connection', 'company' => $company['name'], 'result' => $result]);
