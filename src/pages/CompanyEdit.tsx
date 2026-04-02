@@ -86,12 +86,7 @@ export default function CompanyEdit() {
 
   useEffect(() => {
     if (data?.company) {
-      // Coerce null values to empty strings so Inputs stay controlled
-      const cleaned: Record<string, any> = {};
-      for (const [k, v] of Object.entries(data.company)) {
-        cleaned[k] = v ?? "";
-      }
-      setForm((prev) => ({ ...prev, ...cleaned }));
+      setForm((prev) => ({ ...prev, ...data.company }));
     }
   }, [data]);
 
@@ -140,6 +135,8 @@ export default function CompanyEdit() {
   });
 
   const set = (key: string, value: any) => setForm((prev) => ({ ...prev, [key]: value }));
+  // Helper: safely get string value for Input (null → "")
+  const v = (key: string): string => form[key] ?? "";
 
   const resetMemberDialog = () => {
     setShowAddMember(false);
@@ -225,19 +222,19 @@ export default function CompanyEdit() {
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Name</label>
-            <Input value={form.name} onChange={(e) => set("name", e.target.value)} disabled={!isNew && !canEdit} />
+            <Input value={v("name")} onChange={(e) => set("name", e.target.value)} disabled={!isNew && !canEdit} />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Code</label>
-            <Input value={form.code} onChange={(e) => set("code", e.target.value)} disabled={!isNew && !canEdit} />
+            <Input value={v("code")} onChange={(e) => set("code", e.target.value)} disabled={!isNew && !canEdit} />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">VAT Number</label>
-            <Input value={form.vatNumber ?? ""} onChange={(e) => set("vatNumber", e.target.value)} disabled={!isNew && !canEdit} placeholder="e.g. LT100007165618" />
+            <Input value={v("vatNumber")} onChange={(e) => set("vatNumber", e.target.value)} disabled={!isNew && !canEdit} placeholder="e.g. LT100007165618" />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Buyer Keywords</label>
-            <Input value={form.buyerKeywords ?? ""} onChange={(e) => set("buyerKeywords", e.target.value)} disabled={!isNew && !canEdit} placeholder="e.g. Desmita Solutions, Desmita" />
+            <Input value={v("buyerKeywords")} onChange={(e) => set("buyerKeywords", e.target.value)} disabled={!isNew && !canEdit} placeholder="e.g. Desmita Solutions, Desmita" />
             <p className="text-xs text-muted-foreground">Comma-separated keywords to match invoice buyer name. If buyer doesn't contain any keyword, it's flagged as mismatch.</p>
           </div>
         </CardContent>
@@ -373,11 +370,11 @@ export default function CompanyEdit() {
               </CardHeader>
               {form.msFetchEnabled && (
                 <CardContent className="space-y-4">
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Tenant ID</label><Input value={form.msTenantId} onChange={(e) => set("msTenantId", e.target.value)} disabled={!canEditIntegrations} /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client ID</label><Input value={form.msClientId} onChange={(e) => set("msClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client Secret</label><Input type="password" value={form.msClientSecret} onChange={(e) => set("msClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Sender Email</label><Input value={form.msSenderEmail} onChange={(e) => set("msSenderEmail", e.target.value)} disabled={!canEditIntegrations} /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Folder</label><Input value={form.msFetchFolder} onChange={(e) => set("msFetchFolder", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Tenant ID</label><Input value={v("msTenantId")} onChange={(e) => set("msTenantId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client ID</label><Input value={v("msClientId")} onChange={(e) => set("msClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client Secret</label><Input type="password" value={v("msClientSecret")} onChange={(e) => set("msClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Sender Email</label><Input value={v("msSenderEmail")} onChange={(e) => set("msSenderEmail", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Folder</label><Input value={v("msFetchFolder")} onChange={(e) => set("msFetchFolder", e.target.value)} disabled={!canEditIntegrations} /></div>
                   {canEditIntegrations && <Button variant="outline" size="sm" onClick={testEmail}>Test Connection</Button>}
                 </CardContent>
               )}
@@ -402,13 +399,13 @@ export default function CompanyEdit() {
               </CardHeader>
               {form.vecticumEnabled && (
                 <CardContent className="space-y-4">
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">API Base URL</label><Input value={form.vecticumApiBaseUrl} onChange={(e) => set("vecticumApiBaseUrl", e.target.value)} disabled={!canEditIntegrations} /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client ID</label><Input value={form.vecticumClientId} onChange={(e) => set("vecticumClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client Secret</label><Input type="password" value={form.vecticumClientSecret} onChange={(e) => set("vecticumClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Invoice Class ID</label><Input value={form.vecticumCompanyId} onChange={(e) => set("vecticumCompanyId", e.target.value)} disabled={!canEditIntegrations} placeholder="Purchase invoice class endpoint" /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Partner Endpoint</label><Input value={form.vecticumPartnerEndpoint} onChange={(e) => set("vecticumPartnerEndpoint", e.target.value)} disabled={!canEditIntegrations} placeholder="Counterparty class ID" /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Author ID</label><Input value={form.vecticumAuthorId} onChange={(e) => set("vecticumAuthorId", e.target.value)} disabled={!canEditIntegrations} /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Author Name</label><Input value={form.vecticumAuthorName} onChange={(e) => set("vecticumAuthorName", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">API Base URL</label><Input value={v("vecticumApiBaseUrl")} onChange={(e) => set("vecticumApiBaseUrl", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client ID</label><Input value={v("vecticumClientId")} onChange={(e) => set("vecticumClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client Secret</label><Input type="password" value={v("vecticumClientSecret")} onChange={(e) => set("vecticumClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Invoice Class ID</label><Input value={v("vecticumCompanyId")} onChange={(e) => set("vecticumCompanyId", e.target.value)} disabled={!canEditIntegrations} placeholder="Purchase invoice class endpoint" /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Partner Endpoint</label><Input value={v("vecticumPartnerEndpoint")} onChange={(e) => set("vecticumPartnerEndpoint", e.target.value)} disabled={!canEditIntegrations} placeholder="Counterparty class ID" /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Author ID</label><Input value={v("vecticumAuthorId")} onChange={(e) => set("vecticumAuthorId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Author Name</label><Input value={v("vecticumAuthorName")} onChange={(e) => set("vecticumAuthorName", e.target.value)} disabled={!canEditIntegrations} /></div>
                   <label className="flex items-center gap-2 text-sm text-foreground pt-2">
                     <input type="checkbox" checked={form.vecticumAutoSend as boolean} onChange={(e) => set("vecticumAutoSend", e.target.checked)} disabled={!canEditIntegrations} />
                     Auto-send to Vecticum after OCR
