@@ -612,4 +612,122 @@ if ($action === 'full-send') {
     sendJSON(['action' => 'full-send', 'success' => true, 'recordId' => $recordId, 'steps' => $steps]);
 }
 
+if ($action === 'test-file-upload') {
+    // Test the official /files/ endpoint: POST raw body to /files/{classId}/{documentId}/{key}
+    $token = getVecticumToken($company);
+    $baseUrl = $company['vecticum_api_base_url'];
+    $companyEndpoint = $company['vecticum_company_id'];
+    $invoiceId = $_GET['invoiceId'] ?? '';
+    $recordId = $_GET['recordId'] ?? '';
+    if (!$invoiceId) sendJSON(['error' => 'Need invoiceId'], 400);
+
+    $stmt = $db->prepare("SELECT * FROM invoices WHERE id = :id");
+    $stmt->execute(['id' => $invoiceId]);
+    $invoice = $stmt->fetch();
+    if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
+
+    // Resolve file path - try both with and without company subdirectory
+    $uploadDir = rtrim(UPLOAD_DIR, '/');
+    $filePath = $uploadDir . '/' . $invoice['company_id'] . '/' . $invoice['stored_filename'];
+    if (!file_exists($filePath)) {
+        $filePath = $uploadDir . '/' . $invoice['stored_filename'];
+    }
+    if (!file_exists($filePath)) sendJSON(['error' => "File not found at $filePath"], 404);
+
+    $fileContent = file_get_contents($filePath);
+    $mimeType = mime_content_type($filePath) ?: 'application/octet-stream';
+    $fileName = $invoice['original_filename'];
+
+    $steps = [];
+
+    // If no recordId, create one first
+    if (!$recordId) {
+        $total = floatval($invoice['total_amount'] ?? 0);
+        $tax = floatval($invoice['tax_amount'] ?? 0);
+        $subtotal = floatval($invoice['subtotal_amount'] ?? 0);
+        $totalInclVat = number_format($total && $tax ? $total + $tax : $total, 2, '.', '');
+
+        $body = array_filter([
+            'invoiceNo' => $invoice['invoice_number'],
+            'invoiceDate' => $invoice['invoice_date'],
+            'paymentDate' => $invoice['due_date'],
+            'invoiceAmount' => $subtotal ?: $total,
+            'vatAmount' => $tax,
+            'totalAmount' => $subtotal ?: $total,
+            'totalInclVat' => $totalInclVat,
+            'description' => $invoice['vendor_name'],
+            'counterpartyCode' => $invoice['vendor_vat_id'],
+            'currency' => ['id' => 'O18j5zeck1yHYb5W4H86', 'name' => 'EUR'],
+        ], fn($v) => $v !== null && $v !== '');
+
+        if (!empty($company['vecticum_author_id'])) {
+            $body['author'] = ['id' => $company['vecticum_author_id'], 'name' => $company['vecticum_author_name'] ?? ''];
+        }
+
+        $ch = curl_init($baseUrl . '/' . $companyEndpoint);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($body),
+            CURLOPT_HTTPHEADER => ['Accept: application/json', 'Content-Type: application/json', "Authorization: Bearer $token"],
+            CURLOPT_TIMEOUT => 30,
+        ]);
+        $response = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $data = json_decode($response, true);
+        $recordId = $data['id'] ?? null;
+        $steps['1_create'] = ['httpCode' => $code, 'recordId' => $recordId];
+        if (!$recordId) sendJSON(['error' => 'Failed to create record', 'steps' => $steps, 'response' => $data]);
+    } else {
+        $steps['1_create'] = ['skipped' => true, 'recordId' => $recordId];
+    }
+
+    // STEP 2: Upload file via /files/{classId}/{documentId}/files
+    $url = $baseUrl . '/files/' . $companyEndpoint . '/' . $recordId . '/files';
+    $steps['2_upload_url'] = $url;
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $fileContent,
+        CURLOPT_HTTPHEADER => [
+            'Accept: application/json',
+            "Content-Type: $mimeType",
+            "Content-Disposition: attachment; filename=\"$fileName\"",
+            "Authorization: Bearer $token",
+        ],
+        CURLOPT_TIMEOUT => 60,
+    ]);
+    $response = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $steps['2_upload'] = [
+        'httpCode' => $code,
+        'success' => $code === 201,
+        'response' => json_decode($response, true) ?? substr($response, 0, 500),
+    ];
+
+    // STEP 3: Verify — GET the record to check files[]
+    $ch = curl_init($baseUrl . '/' . $companyEndpoint . '/' . $recordId);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['Accept: application/json', "Authorization: Bearer $token"],
+        CURLOPT_TIMEOUT => 10,
+    ]);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    $final = json_decode($response, true);
+
+    $steps['3_verify'] = [
+        'invoiceNo' => $final['invoiceNo'] ?? null,
+        'description' => $final['description'] ?? null,
+        'files' => $final['files'] ?? null,
+    ];
+
+    sendJSON(['action' => 'test-file-upload', 'success' => $code === 201, 'recordId' => $recordId, 'steps' => $steps]);
+}
+
 sendJSON(['error' => 'Unknown action'], 400);
