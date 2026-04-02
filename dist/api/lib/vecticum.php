@@ -65,6 +65,15 @@ function testVecticumConnection($company) {
     }
 }
 
+function _stripDiacritics($str) {
+    $map = ['ą'=>'a','č'=>'c','ę'=>'e','ė'=>'e','į'=>'i','š'=>'s','ų'=>'u','ū'=>'u','ž'=>'z',
+            'Ą'=>'A','Č'=>'C','Ę'=>'E','Ė'=>'E','Į'=>'I','Š'=>'S','Ų'=>'U','Ū'=>'U','Ž'=>'Z',
+            'ä'=>'a','ö'=>'o','ü'=>'u','ß'=>'ss','à'=>'a','á'=>'a','â'=>'a','ã'=>'a','å'=>'a',
+            'è'=>'e','é'=>'e','ê'=>'e','ë'=>'e','ì'=>'i','í'=>'i','î'=>'i','ï'=>'i',
+            'ò'=>'o','ó'=>'o','ô'=>'o','õ'=>'o','ù'=>'u','ú'=>'u','û'=>'u','ý'=>'y','ñ'=>'n'];
+    return strtr($str, $map);
+}
+
 function findVecticumPartner($company, $vatId, $companyName, $token = null) {
     if (!$token) $token = getVecticumToken($company);
     if (empty($company['vecticum_partner_endpoint'])) return null;
@@ -104,15 +113,15 @@ function findVecticumPartner($company, $vatId, $companyName, $token = null) {
 
     // Fallback: match by company name (fuzzy)
     if ($companyName) {
-        $normalizedName = strtolower(trim($companyName));
+        $normalizedName = _stripDiacritics(strtolower(trim($companyName)));
         // Remove common suffixes for comparison
-        $cleanName = preg_replace('/\b(uab|ab|mb|vši|įi|bv|gmbh|ltd|llc|s\.?a\.?|srl)\b/iu', '', $normalizedName);
-        $cleanName = trim(preg_replace('/[,.\s]+$/', '', $cleanName));
+        $cleanName = preg_replace('/\b(uab|ab|mb|vsi|ii|bv|gmbh|ltd|llc|s\.?a\.?|srl)\b/i', '', $normalizedName);
+        $cleanName = trim(preg_replace('/[,."\'"\s]+$/', '', trim($cleanName)));
 
         foreach ($partners as $p) {
-            $pName = strtolower(trim($p['name'] ?? ''));
-            $pClean = preg_replace('/\b(uab|ab|mb|vši|įi|bv|gmbh|ltd|llc|s\.?a\.?|srl)\b/iu', '', $pName);
-            $pClean = trim(preg_replace('/[,.\s]+$/', '', $pClean));
+            $pName = _stripDiacritics(strtolower(trim($p['name'] ?? '')));
+            $pClean = preg_replace('/\b(uab|ab|mb|vsi|ii|bv|gmbh|ltd|llc|s\.?a\.?|srl)\b/i', '', $pName);
+            $pClean = trim(preg_replace('/[,."\'"\s]+$/', '', trim($pClean)));
 
             if ($pClean && $cleanName && ($pClean === $cleanName || strpos($pClean, $cleanName) !== false || strpos($cleanName, $pClean) !== false)) {
                 return ['id' => $p['id'], 'name' => $p['name'] ?? ''];
