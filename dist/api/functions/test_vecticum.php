@@ -639,6 +639,11 @@ if ($action === 'test-file-upload') {
     }
     if (!file_exists($filePath)) sendJSON(['error' => "File not found", 'tried' => [$uploadDir . '/' . $companyIdDir . '/' . $storedFilename, $filePath], 'uploadDir' => $uploadDir], 404);
 
+    // Debug: return file info before attempting upload
+    if (isset($_GET['debug'])) {
+        sendJSON(['debug' => true, 'filePath' => $filePath, 'exists' => file_exists($filePath), 'size' => filesize($filePath), 'stored' => $storedFilename, 'companyDir' => $companyIdDir, 'uploadDir' => $uploadDir]);
+    }
+
     $mimeType = function_exists('mime_content_type') ? (mime_content_type($filePath) ?: 'application/octet-stream') : ($invoice['file_type'] ?? 'application/pdf');
     $fileName = $invoice['original_filename'];
 
