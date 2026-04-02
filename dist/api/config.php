@@ -234,3 +234,12 @@ function maskCompanySecrets($company) {
     }
     return $company;
 }
+
+function snakeToCamel($row) {
+    $result = [];
+    foreach ($row as $key => $value) {
+        $camelKey = lcfirst(str_replace(' ', '', ucwords(str_replace('_', ' ', $key))));
+        $result[$camelKey] = $value;
+    }
+    return $result;
+}

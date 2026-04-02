@@ -11,7 +11,7 @@ class Company extends BaseResource {
         $user = getAuthUser();
         $companies = getUserCompanies($user);
         $masked = array_map('maskCompanySecrets', $companies);
-        sendJSON(['companies' => $masked]);
+        sendJSON(['companies' => array_map('snakeToCamel', $masked)]);
     }
 
     public function get($id) {
@@ -23,7 +23,7 @@ class Company extends BaseResource {
         if (!$company) sendJSON(['error' => 'Company not found'], 404);
         $company = maskCompanySecrets($company);
         $company['userRole'] = $user['role'] === 'superadmin' ? 'superadmin' : getUserCompanyRole($user['id'], $id);
-        sendJSON(['company' => $company]);
+        sendJSON(['company' => snakeToCamel($company)]);
     }
 
     public function create() {
@@ -99,7 +99,7 @@ class Company extends BaseResource {
 
         $stmt = $this->db->prepare("SELECT * FROM companies WHERE id = :id");
         $stmt->execute(['id' => $id]);
-        sendJSON(['company' => maskCompanySecrets($stmt->fetch())]);
+        sendJSON(['company' => snakeToCamel(maskCompanySecrets($stmt->fetch()))]);
     }
 
     public function delete($id) {

@@ -72,6 +72,6 @@ class User extends BaseResource {
     public function companies($id = null) {
         $user = getAuthUser();
         $companies = getUserCompanies($user);
-        sendJSON(['companies' => array_map('maskCompanySecrets', $companies)]);
+        sendJSON(['companies' => array_map('snakeToCamel', array_map('maskCompanySecrets', $companies))]);
     }
 }
