@@ -723,9 +723,9 @@ class Invoice extends BaseResource {
         if (!$company) sendJSON(['error' => 'Company not found'], 404);
         if (!$company['vecticum_enabled']) sendJSON(['error' => 'Vecticum not enabled for this company'], 400);
 
-        // Resolve file path
+        // Resolve file path (stored_filename already includes company subdirectory)
         $uploadDir = rtrim(getenv('UPLOAD_DIR') ?: '../uploads', '/');
-        $filePath = $uploadDir . '/' . $invoice['company_id'] . '/' . $invoice['stored_filename'];
+        $filePath = $uploadDir . '/' . $invoice['stored_filename'];
 
         $result = uploadToVecticum($company, [
             'invoiceNumber' => $invoice['invoice_number'],
