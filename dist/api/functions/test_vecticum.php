@@ -639,7 +639,6 @@ if ($action === 'test-file-upload') {
     }
     if (!file_exists($filePath)) sendJSON(['error' => "File not found", 'tried' => [$uploadDir . '/' . $companyIdDir . '/' . $storedFilename, $filePath], 'uploadDir' => $uploadDir], 404);
 
-    $fileContent = file_get_contents($filePath);
     $mimeType = function_exists('mime_content_type') ? (mime_content_type($filePath) ?: 'application/octet-stream') : ($invoice['file_type'] ?? 'application/pdf');
     $fileName = $invoice['original_filename'];
 
@@ -692,27 +691,8 @@ if ($action === 'test-file-upload') {
     // Try multiple approaches
     $results = [];
 
-    // Approach A: Raw body with Content-Type + Content-Disposition
+    // Upload via multipart with filename as field name
     $url = $baseUrl . '/files/' . $companyEndpoint . '/' . $recordId . '/files';
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => $fileContent,
-        CURLOPT_HTTPHEADER => [
-            'Accept: application/json',
-            "Content-Type: $mimeType",
-            "Content-Disposition: attachment; filename=\"$fileName\"",
-            "Authorization: Bearer $token",
-        ],
-        CURLOPT_TIMEOUT => 60,
-    ]);
-    $response = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    $results['A_raw_body'] = ['url' => $url, 'httpCode' => $code, 'response' => json_decode($response, true) ?? substr($response, 0, 300)];
-
-    // Approach B: Multipart with filename as field name (Vecticum uses field name as stored name)
     $cfile = new \CURLFile($filePath, $mimeType, $fileName);
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -728,13 +708,8 @@ if ($action === 'test-file-upload') {
     $response = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    $results['B_multipart_filename_as_field'] = ['httpCode' => $code, 'response' => json_decode($response, true) ?? substr($response, 0, 300)];
 
-    // Find the best result
-    $bestCode = 500;
-    foreach ($results as $r) { if ($r['httpCode'] === 201) $bestCode = 201; }
-
-    $steps['2_upload'] = ['approaches' => $results, 'success' => $bestCode === 201];
+    $steps['2_upload'] = ['url' => $url, 'httpCode' => $code, 'success' => $code === 201, 'response' => json_decode($response, true) ?? substr($response, 0, 300)];
 
     // STEP 3: Verify — GET the record to check files[]
     $ch = curl_init($baseUrl . '/' . $companyEndpoint . '/' . $recordId);
