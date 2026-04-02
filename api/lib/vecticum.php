@@ -200,9 +200,12 @@ function uploadToVecticum($company, $metadata) {
             $body['counterpartyCode'] = $metadata['vendorVatId'];
         }
 
-        $currency = $metadata['currency'] ?? 'EUR';
-        if (!$currency || $currency === 'EUR') {
+        $currency = strtoupper(trim($metadata['currency'] ?? 'EUR'));
+        if ($currency === 'EUR') {
             $body['currency'] = ['id' => 'O18j5zeck1yHYb5W4H86', 'name' => 'EUR'];
+        } else {
+            // Try name-only — Vecticum may resolve the ID
+            $body['currency'] = ['name' => $currency];
         }
 
         // Match author by sender email
