@@ -23,7 +23,8 @@ export function getStatusClasses(status: string): string {
  */
 export function formatRelativeTime(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
-  const date = new Date(dateStr);
+  const normalized = dateStr.includes("T") || dateStr.includes("Z") ? dateStr : dateStr.replace(" ", "T") + "Z";
+  const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return "";
 
   const now = new Date();
@@ -47,7 +48,9 @@ export function formatRelativeTime(dateStr: string | null | undefined): string {
  */
 export function formatDateTime(value: string | null | undefined): string {
   if (!value) return "\u2014";
-  const date = new Date(value);
+  // DB stores UTC without timezone suffix — append Z so JS converts to local
+  const normalized = value.includes("T") || value.includes("Z") ? value : value.replace(" ", "T") + "Z";
+  const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return "\u2014";
   return date.toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
 }
