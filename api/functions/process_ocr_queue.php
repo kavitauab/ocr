@@ -176,6 +176,76 @@ foreach ($jobs as $job) {
         $jobResult['status'] = 'completed';
         $summary['succeeded']++;
 
+        // Auto-send to Vecticum if enabled
+        try {
+            $companyStmt = $db->prepare("SELECT * FROM companies WHERE id = :id");
+            $companyStmt->execute(['id' => $companyId]);
+            $companyData = $companyStmt->fetch();
+
+            if ($companyData && $companyData['vecticum_enabled'] && $companyData['vecticum_auto_send']) {
+                require_once __DIR__ . '/../lib/vecticum.php';
+
+                // Re-fetch invoice with updated data
+                $invStmt = $db->prepare("SELECT * FROM invoices WHERE id = :id");
+                $invStmt->execute(['id' => $invoiceId]);
+                $updatedInvoice = $invStmt->fetch();
+
+                // Check buyer mismatch
+                $buyerOk = true;
+                $buyerKeywords = trim($companyData['buyer_keywords'] ?? '');
+                if ($buyerKeywords && !empty($updatedInvoice['buyer_name'])) {
+                    $buyerOk = false;
+                    $buyerNameLower = strtolower($updatedInvoice['buyer_name']);
+                    foreach (explode(',', $buyerKeywords) as $kw) {
+                        if (trim($kw) && strpos($buyerNameLower, strtolower(trim($kw))) !== false) {
+                            $buyerOk = true;
+                            break;
+                        }
+                    }
+                }
+
+                if ($buyerOk && empty($updatedInvoice['vecticum_id'])) {
+                    $uploadDir = rtrim(UPLOAD_DIR, '/');
+                    $filePath = $uploadDir . '/' . $updatedInvoice['stored_filename'];
+                    $senderEmail = null;
+                    if (!empty($updatedInvoice['email_inbox_id'])) {
+                        $emailStmt = $db->prepare("SELECT from_email FROM email_inbox WHERE id = :id");
+                        $emailStmt->execute(['id' => $updatedInvoice['email_inbox_id']]);
+                        $emailRow = $emailStmt->fetch();
+                        if ($emailRow) $senderEmail = $emailRow['from_email'];
+                    }
+
+                    $vecResult = uploadToVecticum($companyData, [
+                        'invoiceNumber' => $updatedInvoice['invoice_number'],
+                        'invoiceDate' => $updatedInvoice['invoice_date'],
+                        'dueDate' => $updatedInvoice['due_date'],
+                        'vendorName' => $updatedInvoice['vendor_name'],
+                        'vendorVatId' => $updatedInvoice['vendor_vat_id'],
+                        'subtotalAmount' => $updatedInvoice['subtotal_amount'],
+                        'taxAmount' => $updatedInvoice['tax_amount'],
+                        'totalAmount' => $updatedInvoice['total_amount'],
+                        'currency' => $updatedInvoice['currency'],
+                        '_filePath' => $filePath,
+                        '_fileName' => $updatedInvoice['original_filename'],
+                        '_senderEmail' => $senderEmail,
+                    ]);
+
+                    if ($vecResult['success'] && !empty($vecResult['externalId'])) {
+                        $db->prepare("UPDATE invoices SET vecticum_id = :vid, updated_at = NOW() WHERE id = :id")
+                            ->execute(['vid' => $vecResult['externalId'], 'id' => $invoiceId]);
+                        $jobResult['vecticumAutoSend'] = 'success';
+                    } else {
+                        $jobResult['vecticumAutoSend'] = 'failed: ' . ($vecResult['error'] ?? 'unknown');
+                    }
+                } elseif (!$buyerOk) {
+                    $jobResult['vecticumAutoSend'] = 'skipped: buyer mismatch';
+                }
+            }
+        } catch (\Throwable $vecErr) {
+            error_log("Queue: Auto-send to Vecticum failed for $invoiceId: " . $vecErr->getMessage());
+            $jobResult['vecticumAutoSend'] = 'error: ' . $vecErr->getMessage();
+        }
+
     } catch (\Throwable $e) {
         error_log("Queue: Job $jobId failed (attempt $attempt): " . $e->getMessage());
 

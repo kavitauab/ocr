@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useState } from "react";
 import api from "@/api/client";
+import { useCompany } from "@/lib/company";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -105,6 +106,7 @@ export default function InvoiceDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { hasCompanyRole } = useCompany();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Record<string, any>>({});
 
@@ -228,9 +230,11 @@ export default function InvoiceDetail() {
               <RotateCcw className="h-3 w-3" />Retry
             </Button>
           )}
-          <Button variant="outline" size="sm" className="gap-1 h-7 text-xs px-2.5 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => { if (confirm("Delete this invoice?")) deleteMutation.mutate(); }}>
-            <Trash2 className="h-3 w-3" />Delete
-          </Button>
+          {hasCompanyRole("admin") && (
+            <Button variant="outline" size="sm" className="gap-1 h-7 text-xs px-2.5 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => { if (confirm("Delete this invoice?")) deleteMutation.mutate(); }}>
+              <Trash2 className="h-3 w-3" />Delete
+            </Button>
+          )}
         </div>
       </div>
 

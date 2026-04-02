@@ -64,7 +64,7 @@ export default function CompanyEdit() {
     name: "", code: "", vatNumber: "", buyerKeywords: "", logoUrl: "",
     msClientId: "", msClientSecret: "", msTenantId: "", msSenderEmail: "",
     msFetchEnabled: false, msFetchFolder: "INBOX",
-    vecticumEnabled: false, vecticumApiBaseUrl: "", vecticumClientId: "",
+    vecticumEnabled: false, vecticumAutoSend: false, vecticumApiBaseUrl: "", vecticumClientId: "",
     vecticumClientSecret: "", vecticumCompanyId: "", vecticumPartnerEndpoint: "",
     vecticumAuthorId: "", vecticumAuthorName: "",
     extractionFields: null,
@@ -399,6 +399,11 @@ export default function CompanyEdit() {
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Partner Endpoint</label><Input value={form.vecticumPartnerEndpoint} onChange={(e) => set("vecticumPartnerEndpoint", e.target.value)} disabled={!canEditIntegrations} placeholder="Counterparty class ID" /></div>
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Author ID</label><Input value={form.vecticumAuthorId} onChange={(e) => set("vecticumAuthorId", e.target.value)} disabled={!canEditIntegrations} /></div>
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Author Name</label><Input value={form.vecticumAuthorName} onChange={(e) => set("vecticumAuthorName", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <label className="flex items-center gap-2 text-sm text-foreground pt-2">
+                    <input type="checkbox" checked={form.vecticumAutoSend as boolean} onChange={(e) => set("vecticumAutoSend", e.target.checked)} disabled={!canEditIntegrations} />
+                    Auto-send to Vecticum after OCR
+                    <span className="text-xs text-muted-foreground">(only if buyer matches and no errors)</span>
+                  </label>
                   {canEditIntegrations && <Button variant="outline" size="sm" onClick={testVecticum}>Test Connection</Button>}
                 </CardContent>
               )}
