@@ -215,6 +215,15 @@ function uploadToVecticum($company, $metadata) {
             'totalInclVat' => $totalInclVat,
         ];
 
+        // Set document type booleans
+        $docType = strtolower(trim($metadata['documentType'] ?? ''));
+        if ($docType === 'proforma' || strpos($docType, 'pro forma') !== false || strpos($docType, 'pro-forma') !== false) {
+            $body['proFormaInvoice'] = true;
+        }
+        if ($docType === 'credit_note' || $docType === 'credit note' || strpos($docType, 'credit') !== false) {
+            $body['creditInvoice'] = true;
+        }
+
         // Set "from" field to sender email
         if (!empty($metadata['_senderEmail'])) {
             $body['from'] = $metadata['_senderEmail'];

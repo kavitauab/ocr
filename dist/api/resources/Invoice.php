@@ -794,6 +794,7 @@ class Invoice extends BaseResource {
         }
 
         $result = uploadToVecticum($company, [
+            'documentType' => $invoice['document_type'],
             'invoiceNumber' => $invoice['invoice_number'],
             'invoiceDate' => $invoice['invoice_date'],
             'dueDate' => $invoice['due_date'],

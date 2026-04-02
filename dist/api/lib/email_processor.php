@@ -174,6 +174,7 @@ function processCompanyEmails($companyId) {
                                 if ($buyerOk && empty($updatedInv['vecticum_id'])) {
                                     $fp = getFilePath($saved['storedFilename']);
                                     $vecResult = uploadToVecticum($company, [
+                                        'documentType' => $updatedInv['document_type'],
                                         'invoiceNumber' => $updatedInv['invoice_number'],
                                         'invoiceDate' => $updatedInv['invoice_date'],
                                         'dueDate' => $updatedInv['due_date'],

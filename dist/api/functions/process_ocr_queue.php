@@ -216,6 +216,7 @@ foreach ($jobs as $job) {
                     }
 
                     $vecResult = uploadToVecticum($companyData, [
+                        'documentType' => $updatedInvoice['document_type'],
                         'invoiceNumber' => $updatedInvoice['invoice_number'],
                         'invoiceDate' => $updatedInvoice['invoice_date'],
                         'dueDate' => $updatedInvoice['due_date'],
