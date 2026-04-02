@@ -49,7 +49,13 @@ function fetchEmails($company, $sinceHours = 5) {
     $email = $company['ms_sender_email'];
     $since = gmdate('Y-m-d\TH:i:s\Z', time() - $sinceHours * 3600);
 
-    $url = "https://graph.microsoft.com/v1.0/users/{$email}/mailFolders/{$folder}/messages?\$filter=receivedDateTime ge {$since}&\$orderby=receivedDateTime desc&\$top=50&\$select=id,subject,from,receivedDateTime,hasAttachments,isRead";
+    $query = http_build_query([
+        '$filter' => "receivedDateTime ge $since",
+        '$orderby' => 'receivedDateTime desc',
+        '$top' => '50',
+        '$select' => 'id,subject,from,receivedDateTime,hasAttachments,isRead',
+    ]);
+    $url = "https://graph.microsoft.com/v1.0/users/$email/mailFolders/$folder/messages?$query";
 
     $ch = curl_init($url);
     curl_setopt_array($ch, [
