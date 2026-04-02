@@ -684,9 +684,11 @@ if ($action === 'test-file-upload') {
     }
 
     // STEP 2: Upload file via /files/{classId}/{documentId}/files
-    $url = $baseUrl . '/files/' . $companyEndpoint . '/' . $recordId . '/files';
-    $steps['2_upload_url'] = $url;
+    // Try multiple approaches
+    $results = [];
 
+    // Approach A: Raw body with Content-Type + Content-Disposition
+    $url = $baseUrl . '/files/' . $companyEndpoint . '/' . $recordId . '/files';
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -703,12 +705,49 @@ if ($action === 'test-file-upload') {
     $response = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
+    $results['A_raw_body'] = ['url' => $url, 'httpCode' => $code, 'response' => json_decode($response, true) ?? substr($response, 0, 300)];
 
-    $steps['2_upload'] = [
-        'httpCode' => $code,
-        'success' => $code === 201,
-        'response' => json_decode($response, true) ?? substr($response, 0, 500),
-    ];
+    // Approach B: Multipart form-data with CURLFile
+    $cfile = new \CURLFile($filePath, $mimeType, $fileName);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => ['file' => $cfile],
+        CURLOPT_HTTPHEADER => [
+            'Accept: application/json',
+            "Authorization: Bearer $token",
+        ],
+        CURLOPT_TIMEOUT => 60,
+    ]);
+    $response = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $results['B_multipart'] = ['httpCode' => $code, 'response' => json_decode($response, true) ?? substr($response, 0, 300)];
+
+    // Approach C: key = "file" instead of "files"
+    $url_file = $baseUrl . '/files/' . $companyEndpoint . '/' . $recordId . '/file';
+    $ch = curl_init($url_file);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => ['file' => $cfile],
+        CURLOPT_HTTPHEADER => [
+            'Accept: application/json',
+            "Authorization: Bearer $token",
+        ],
+        CURLOPT_TIMEOUT => 60,
+    ]);
+    $response = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $results['C_multipart_file_key'] = ['url' => $url_file, 'httpCode' => $code, 'response' => json_decode($response, true) ?? substr($response, 0, 300)];
+
+    // Find the best result
+    $bestCode = 500;
+    foreach ($results as $r) { if ($r['httpCode'] === 201) $bestCode = 201; }
+
+    $steps['2_upload'] = ['approaches' => $results, 'success' => $bestCode === 201];
 
     // STEP 3: Verify — GET the record to check files[]
     $ch = curl_init($baseUrl . '/' . $companyEndpoint . '/' . $recordId);
