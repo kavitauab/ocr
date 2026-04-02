@@ -28,6 +28,13 @@ if (!$task) {
 $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . CRON_SECRET;
 
 switch ($task) {
+    case 'all':
+        // Run both fetch-emails and process-ocr sequentially via subprocess
+        $phpBin = PHP_BINARY ?: 'php';
+        $dir = __DIR__;
+        passthru("$phpBin $dir/cron.php fetch-emails 2>&1");
+        passthru("$phpBin $dir/cron.php process-ocr 2>&1");
+        exit(0);
     case 'process-ocr':
         require_once __DIR__ . '/functions/process_ocr_queue.php';
         break;

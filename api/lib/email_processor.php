@@ -152,6 +152,50 @@ function processCompanyEmails($companyId) {
                         completeOcrJob($ocrJobId, $ocrUsage);
                         trackInvoiceProcessed($companyId, $attachment['size'] ?? strlen($buffer), $ocrUsage);
                         $processed++;
+
+                        // Auto-send to Vecticum if enabled
+                        if ($company['vecticum_enabled'] && $company['vecticum_auto_send']) {
+                            try {
+                                require_once __DIR__ . '/vecticum.php';
+                                $invStmt = $db->prepare("SELECT * FROM invoices WHERE id = :id");
+                                $invStmt->execute(['id' => $invoiceId]);
+                                $updatedInv = $invStmt->fetch();
+
+                                $buyerOk = true;
+                                $bkw = trim($company['buyer_keywords'] ?? '');
+                                if ($bkw && !empty($updatedInv['buyer_name'])) {
+                                    $buyerOk = false;
+                                    $bn = strtolower($updatedInv['buyer_name']);
+                                    foreach (explode(',', $bkw) as $kw) {
+                                        if (trim($kw) && strpos($bn, strtolower(trim($kw))) !== false) { $buyerOk = true; break; }
+                                    }
+                                }
+
+                                if ($buyerOk && empty($updatedInv['vecticum_id'])) {
+                                    $fp = getFilePath($saved['storedFilename']);
+                                    $vecResult = uploadToVecticum($company, [
+                                        'invoiceNumber' => $updatedInv['invoice_number'],
+                                        'invoiceDate' => $updatedInv['invoice_date'],
+                                        'dueDate' => $updatedInv['due_date'],
+                                        'vendorName' => $updatedInv['vendor_name'],
+                                        'vendorVatId' => $updatedInv['vendor_vat_id'],
+                                        'subtotalAmount' => $updatedInv['subtotal_amount'],
+                                        'taxAmount' => $updatedInv['tax_amount'],
+                                        'totalAmount' => $updatedInv['total_amount'],
+                                        'currency' => $updatedInv['currency'],
+                                        '_filePath' => $fp,
+                                        '_fileName' => $updatedInv['original_filename'],
+                                        '_senderEmail' => $fromEmail,
+                                    ]);
+                                    if ($vecResult['success'] && !empty($vecResult['externalId'])) {
+                                        $db->prepare("UPDATE invoices SET vecticum_id = :vid, updated_at = NOW() WHERE id = :id")
+                                            ->execute(['vid' => $vecResult['externalId'], 'id' => $invoiceId]);
+                                    }
+                                }
+                            } catch (\Throwable $vecErr) {
+                                error_log("Email auto-send to Vecticum failed for $invoiceId: " . $vecErr->getMessage());
+                            }
+                        }
                     } catch (Exception $e) {
                         try {
                             $db->prepare("UPDATE invoices

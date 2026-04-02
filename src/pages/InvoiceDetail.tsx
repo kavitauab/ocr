@@ -192,6 +192,7 @@ export default function InvoiceDetail() {
     { label: "Uploaded", time: uploadedAt, color: "bg-slate-500", active: !!uploadedAt },
     { label: "Sent to OCR", time: sentToOcrAt, color: "bg-blue-500", active: !!sentToOcrAt },
     { label: "OCR Returned", time: returnedAt, color: "bg-emerald-500", active: !!returnedAt },
+    ...(invoice.vecticumId ? [{ label: "Sent to Vecticum", time: null, color: "bg-purple-500", active: true }] : []),
   ];
 
   return (
@@ -396,6 +397,12 @@ export default function InvoiceDetail() {
                 <div className="flex justify-between"><span className="text-muted-foreground">File</span><span className="font-medium text-foreground truncate ml-3">{invoice.originalFilename}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Size</span><span className="font-medium text-foreground">{invoice.fileSize ? `${(invoice.fileSize / 1024).toFixed(1)} KB` : "\u2014"}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">ID</span><span className="font-mono text-muted-foreground">{invoice.id}</span></div>
+                {invoice.vecticumId && (
+                  <div className="flex justify-between"><span className="text-muted-foreground">Vecticum</span><span className="font-mono text-purple-600">{invoice.vecticumId}</span></div>
+                )}
+                {invoice.senderEmail && (
+                  <div className="flex justify-between"><span className="text-muted-foreground">Sender</span><span className="text-foreground">{invoice.senderEmail}</span></div>
+                )}
               </div>
             </CardContent>
           </Card>
