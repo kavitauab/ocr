@@ -215,6 +215,9 @@ $ensureColumn('companies', 'vecticum_partner_endpoint', 'VARCHAR(255) NULL');
 // --- Vecticum sent timestamp on invoices ---
 $ensureColumn('invoices', 'vecticum_sent_at', 'DATETIME NULL');
 
+// --- Vecticum error tracking on invoices ---
+$ensureColumn('invoices', 'vecticum_error', 'TEXT NULL');
+
 // --- Vecticum auto-send on companies ---
 $ensureColumn('companies', 'vecticum_auto_send', 'TINYINT(1) NOT NULL DEFAULT 0');
 

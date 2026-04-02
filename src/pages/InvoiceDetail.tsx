@@ -400,6 +400,9 @@ export default function InvoiceDetail() {
                 {invoice.vecticumId && (
                   <div className="flex justify-between"><span className="text-muted-foreground">Vecticum</span><span className="font-mono text-purple-600">{invoice.vecticumId}</span></div>
                 )}
+                {!invoice.vecticumId && invoice.vecticumError && (
+                  <div className="flex justify-between"><span className="text-muted-foreground">Vecticum</span><span className="text-red-600 text-right max-w-[200px]">{invoice.vecticumError}</span></div>
+                )}
                 {invoice.senderEmail && (
                   <div className="flex justify-between"><span className="text-muted-foreground">Sender</span><span className="text-foreground">{invoice.senderEmail}</span></div>
                 )}

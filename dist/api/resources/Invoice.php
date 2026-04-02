@@ -812,7 +812,7 @@ class Invoice extends BaseResource {
         if ($result['success']) {
             // Save external ID
             if (!empty($result['externalId'])) {
-                $stmt = $this->db->prepare("UPDATE invoices SET vecticum_id = :vid, vecticum_sent_at = NOW(), updated_at = NOW() WHERE id = :id");
+                $stmt = $this->db->prepare("UPDATE invoices SET vecticum_id = :vid, vecticum_sent_at = NOW(), vecticum_error = NULL, updated_at = NOW() WHERE id = :id");
                 $stmt->execute(['vid' => $result['externalId'], 'id' => $id]);
             }
             sendJSON([
@@ -822,7 +822,11 @@ class Invoice extends BaseResource {
                 'message' => "Invoice sent to Vecticum (ID: {$result['externalId']})"
             ]);
         }
-        sendJSON(['error' => $result['error'] ?? 'Failed to upload to Vecticum'], 500);
+        // Save error
+        $vecError = $result['error'] ?? 'Failed to upload to Vecticum';
+        $this->db->prepare("UPDATE invoices SET vecticum_error = :err, updated_at = NOW() WHERE id = :id")
+            ->execute(['err' => $vecError, 'id' => $id]);
+        sendJSON(['error' => $vecError], 500);
     }
 
     /**

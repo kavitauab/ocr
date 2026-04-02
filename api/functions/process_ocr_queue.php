@@ -236,7 +236,10 @@ foreach ($jobs as $job) {
                             ->execute(['vid' => $vecResult['externalId'], 'id' => $invoiceId]);
                         $jobResult['vecticumAutoSend'] = 'success';
                     } else {
-                        $jobResult['vecticumAutoSend'] = 'failed: ' . ($vecResult['error'] ?? 'unknown');
+                        $vecErr = $vecResult['error'] ?? 'unknown';
+                        $db->prepare("UPDATE invoices SET vecticum_error = :err, updated_at = NOW() WHERE id = :id")
+                            ->execute(['err' => $vecErr, 'id' => $invoiceId]);
+                        $jobResult['vecticumAutoSend'] = 'failed: ' . $vecErr;
                     }
                 } elseif (!$buyerOk) {
                     $jobResult['vecticumAutoSend'] = 'skipped: buyer mismatch';
