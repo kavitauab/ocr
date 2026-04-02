@@ -11,10 +11,14 @@ import { getStatusClasses } from "@/lib/ui-utils";
 import { toast } from "sonner";
 import { Plus, Trash2, Users as UsersIcon } from "lucide-react";
 
+const emptyForm = { name: "", email: "", password: "", role: "user" };
+
 export default function Users() {
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "user" });
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [form, setForm] = useState(emptyForm);
+  const [editForm, setEditForm] = useState({ name: "", email: "", password: "", role: "user" });
 
   const { data, isLoading } = useQuery({
     queryKey: ["users"],
@@ -26,8 +30,18 @@ export default function Users() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setShowCreate(false);
-      setForm({ name: "", email: "", password: "", role: "user" });
+      setForm(emptyForm);
       toast.success("User created");
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || "Failed"),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: any }) => api.patch(`/users/${id}`, body).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setEditingUser(null);
+      toast.success("User updated");
     },
     onError: (err: any) => toast.error(err.response?.data?.error || "Failed"),
   });
@@ -36,9 +50,21 @@ export default function Users() {
     mutationFn: (id: string) => api.delete(`/users/${id}`).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
+      setEditingUser(null);
       toast.success("User deleted");
     },
   });
+
+  const openEdit = (u: any) => {
+    setEditingUser(u);
+    setEditForm({ name: u.name, email: u.email, password: "", role: u.role });
+  };
+
+  const saveEdit = () => {
+    const body: any = { name: editForm.name, email: editForm.email, role: editForm.role };
+    if (editForm.password) body.password = editForm.password;
+    updateMutation.mutate({ id: editingUser.id, body });
+  };
 
   return (
     <div className="space-y-4">
@@ -59,23 +85,17 @@ export default function Users() {
                   <TableHead className="font-semibold">Name</TableHead>
                   <TableHead className="font-semibold">Email</TableHead>
                   <TableHead className="font-semibold">Role</TableHead>
-                  <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data?.users?.map((u: any) => (
-                  <TableRow key={u.id} className="hover:bg-primary/[0.03] transition-colors duration-150">
+                  <TableRow key={u.id} className="hover:bg-primary/[0.03] transition-colors duration-150 cursor-pointer" onClick={() => openEdit(u)}>
                     <TableCell className="font-medium">{u.name}</TableCell>
                     <TableCell className="text-muted-foreground">{u.email}</TableCell>
                     <TableCell>
                       <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getStatusClasses(u.role === "superadmin" ? "active" : "")}`}>
                         {u.role}
                       </span>
-                    </TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon" onClick={() => { if (confirm("Delete user?")) deleteMutation.mutate(u.id); }}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -86,14 +106,13 @@ export default function Users() {
                         <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-40" /></TableCell>
                         <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
-                        <TableCell><Skeleton className="h-8 w-8" /></TableCell>
                       </TableRow>
                     ))}
                   </>
                 )}
                 {!isLoading && (!data?.users || data.users.length === 0) && (
                   <TableRow>
-                    <TableCell colSpan={4} className="py-12">
+                    <TableCell colSpan={3} className="py-12">
                       <div className="flex flex-col items-center justify-center text-center">
                         <div className="rounded-full bg-muted p-3 mb-3">
                           <UsersIcon className="h-5 w-5 text-muted-foreground" />
@@ -110,6 +129,7 @@ export default function Users() {
         </CardContent>
       </Card>
 
+      {/* Create dialog */}
       <Dialog open={showCreate} onClose={() => setShowCreate(false)}>
         <DialogTitle>Create User</DialogTitle>
         <div className="space-y-4 mt-4">
@@ -126,6 +146,35 @@ export default function Users() {
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button onClick={() => createMutation.mutate(form)} disabled={createMutation.isPending}>Create</Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Edit dialog */}
+      <Dialog open={!!editingUser} onClose={() => setEditingUser(null)}>
+        <DialogTitle>Edit User</DialogTitle>
+        <div className="space-y-4 mt-4">
+          <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Name</label><Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></div>
+          <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Email</label><Input value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} /></div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">New Password</label>
+            <Input type="password" value={editForm.password} onChange={(e) => setEditForm({ ...editForm, password: e.target.value })} placeholder="Leave blank to keep current" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Role</label>
+            <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value })} className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background text-foreground">
+              <option value="user">User</option>
+              <option value="superadmin">Superadmin</option>
+            </select>
+          </div>
+          <div className="flex justify-between pt-2">
+            <Button variant="outline" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => { if (confirm(`Delete user ${editingUser?.name}?`)) deleteMutation.mutate(editingUser.id); }}>
+              <Trash2 className="h-3.5 w-3.5 mr-1" />Delete
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setEditingUser(null)}>Cancel</Button>
+              <Button onClick={saveEdit} disabled={updateMutation.isPending}>Save</Button>
+            </div>
           </div>
         </div>
       </Dialog>
