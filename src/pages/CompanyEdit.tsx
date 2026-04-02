@@ -61,7 +61,7 @@ export default function CompanyEdit() {
   ];
 
   const [form, setForm] = useState<Record<string, any>>({
-    name: "", code: "", vatNumber: "", logoUrl: "",
+    name: "", code: "", vatNumber: "", buyerKeywords: "", logoUrl: "",
     msClientId: "", msClientSecret: "", msTenantId: "", msSenderEmail: "",
     msFetchEnabled: false, msFetchFolder: "INBOX",
     vecticumEnabled: false, vecticumApiBaseUrl: "", vecticumClientId: "",
@@ -224,6 +224,11 @@ export default function CompanyEdit() {
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">VAT Number</label>
             <Input value={form.vatNumber} onChange={(e) => set("vatNumber", e.target.value)} disabled={!isNew && !canEdit} placeholder="e.g. LT100007165618" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Buyer Keywords</label>
+            <Input value={form.buyerKeywords} onChange={(e) => set("buyerKeywords", e.target.value)} disabled={!isNew && !canEdit} placeholder="e.g. Desmita Solutions, Desmita" />
+            <p className="text-xs text-muted-foreground">Comma-separated keywords to match invoice buyer name. If buyer doesn't contain any keyword, it's flagged as mismatch.</p>
           </div>
         </CardContent>
       </Card>

@@ -15,13 +15,29 @@ class Invoice extends BaseResource {
         if (isset($row['confidence_scores'])) $row['confidence_scores'] = json_decode($row['confidence_scores'], true);
         if (isset($row['raw_extraction'])) $row['raw_extraction'] = json_decode($row['raw_extraction'], true);
 
-        // Compute buyer mismatch
-        $companyVat = strtoupper(preg_replace('/\s+/', '', $row['company_vat_number'] ?? ''));
-        $buyerVat = strtoupper(preg_replace('/\s+/', '', $row['buyer_vat_id'] ?? ''));
-        if ($companyVat && $buyerVat && $row['status'] === 'completed') {
-            $row['buyer_mismatch'] = $companyVat !== $buyerVat;
-        } else {
-            $row['buyer_mismatch'] = false;
+        // Compute buyer mismatch using keywords or VAT
+        $row['buyer_mismatch'] = false;
+        if ($row['status'] === 'completed' && !empty($row['buyer_name'])) {
+            $keywords = trim($row['company_buyer_keywords'] ?? '');
+            $companyVat = strtoupper(preg_replace('/\s+/', '', $row['company_vat_number'] ?? ''));
+            $buyerVat = strtoupper(preg_replace('/\s+/', '', $row['buyer_vat_id'] ?? ''));
+            $buyerName = strtolower($row['buyer_name']);
+
+            if ($keywords) {
+                // Check if buyer name contains any of the keywords (comma-separated)
+                $matched = false;
+                foreach (explode(',', $keywords) as $kw) {
+                    $kw = trim(strtolower($kw));
+                    if ($kw && strpos($buyerName, $kw) !== false) {
+                        $matched = true;
+                        break;
+                    }
+                }
+                $row['buyer_mismatch'] = !$matched;
+            } elseif ($companyVat && $buyerVat) {
+                // Fallback to VAT comparison if no keywords set
+                $row['buyer_mismatch'] = $companyVat !== $buyerVat;
+            }
         }
 
         // Convert snake_case to camelCase for frontend
@@ -141,7 +157,7 @@ class Invoice extends BaseResource {
         $stmt->execute($params);
         $total = (int)$stmt->fetchColumn();
 
-        $sql = "SELECT i.*, c.name as company_name, c.code as company_code, c.vat_number as company_vat_number FROM invoices i LEFT JOIN companies c ON c.id = i.company_id $where ORDER BY i.`$orderField` $orderDir LIMIT $limit OFFSET $offset";
+        $sql = "SELECT i.*, c.name as company_name, c.code as company_code, c.vat_number as company_vat_number, c.buyer_keywords as company_buyer_keywords FROM invoices i LEFT JOIN companies c ON c.id = i.company_id $where ORDER BY i.`$orderField` $orderDir LIMIT $limit OFFSET $offset";
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
         $items = $stmt->fetchAll();
@@ -226,7 +242,7 @@ class Invoice extends BaseResource {
         }
 
         $user = getAuthUser();
-        $stmt = $this->db->prepare("SELECT i.*, c.name as company_name, c.vat_number as company_vat_number FROM invoices i LEFT JOIN companies c ON c.id = i.company_id WHERE i.id = :id");
+        $stmt = $this->db->prepare("SELECT i.*, c.name as company_name, c.vat_number as company_vat_number, c.buyer_keywords as company_buyer_keywords FROM invoices i LEFT JOIN companies c ON c.id = i.company_id WHERE i.id = :id");
         $stmt->execute(['id' => $id]);
         $invoice = $stmt->fetch();
         if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
@@ -735,13 +751,30 @@ class Invoice extends BaseResource {
 
         // Buyer validation — check if invoice buyer matches the company
         $force = ($_GET['force'] ?? '') === 'true';
-        if (!$force && !empty($company['vat_number']) && !empty($invoice['buyer_vat_id'])) {
-            $companyVat = strtoupper(preg_replace('/\s+/', '', $company['vat_number']));
-            $buyerVat = strtoupper(preg_replace('/\s+/', '', $invoice['buyer_vat_id']));
-            if ($companyVat !== $buyerVat) {
+        if (!$force && !empty($invoice['buyer_name'])) {
+            $keywords = trim($company['buyer_keywords'] ?? '');
+            $buyerName = strtolower($invoice['buyer_name']);
+            $mismatch = false;
+
+            if ($keywords) {
+                $mismatch = true;
+                foreach (explode(',', $keywords) as $kw) {
+                    $kw = trim(strtolower($kw));
+                    if ($kw && strpos($buyerName, $kw) !== false) {
+                        $mismatch = false;
+                        break;
+                    }
+                }
+            } elseif (!empty($company['vat_number']) && !empty($invoice['buyer_vat_id'])) {
+                $companyVat = strtoupper(preg_replace('/\s+/', '', $company['vat_number']));
+                $buyerVat = strtoupper(preg_replace('/\s+/', '', $invoice['buyer_vat_id']));
+                $mismatch = $companyVat !== $buyerVat;
+            }
+
+            if ($mismatch) {
                 sendJSON([
                     'error' => 'Buyer mismatch',
-                    'message' => "Invoice buyer ({$invoice['buyer_name']}, VAT: {$invoice['buyer_vat_id']}) does not match company ({$company['name']}, VAT: {$company['vat_number']})",
+                    'message' => "Invoice buyer ({$invoice['buyer_name']}) does not match company ({$company['name']})",
                     'buyerMismatch' => true,
                 ], 400);
             }
