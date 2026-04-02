@@ -52,7 +52,7 @@ export function formatDateTime(value: string | null | undefined): string {
   const normalized = value.includes("T") || value.includes("Z") ? value : value.replace(" ", "T") + "Z";
   const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return "\u2014";
-  return date.toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
+  return date.toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "medium" });
 }
 
 /**
