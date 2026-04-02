@@ -188,6 +188,11 @@ function uploadToVecticum($company, $metadata) {
             'totalInclVat' => $totalInclVat,
         ];
 
+        // Set "from" field to sender email
+        if (!empty($metadata['_senderEmail'])) {
+            $body['from'] = $metadata['_senderEmail'];
+        }
+
         if (!empty($metadata['vendorName'])) {
             $body['description'] = $metadata['vendorName'];
         }
