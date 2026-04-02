@@ -65,7 +65,7 @@ export default function CompanyEdit() {
     msClientId: "", msClientSecret: "", msTenantId: "", msSenderEmail: "",
     msFetchEnabled: false, msFetchFolder: "INBOX",
     vecticumEnabled: false, vecticumApiBaseUrl: "", vecticumClientId: "",
-    vecticumClientSecret: "", vecticumCompanyId: "",
+    vecticumClientSecret: "", vecticumCompanyId: "", vecticumPartnerEndpoint: "",
     vecticumAuthorId: "", vecticumAuthorName: "",
     extractionFields: null,
   });
@@ -387,6 +387,7 @@ export default function CompanyEdit() {
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client ID</label><Input value={form.vecticumClientId} onChange={(e) => set("vecticumClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client Secret</label><Input type="password" value={form.vecticumClientSecret} onChange={(e) => set("vecticumClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Company ID (Endpoint)</label><Input value={form.vecticumCompanyId} onChange={(e) => set("vecticumCompanyId", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Partner Endpoint</label><Input value={form.vecticumPartnerEndpoint} onChange={(e) => set("vecticumPartnerEndpoint", e.target.value)} disabled={!canEditIntegrations} placeholder="Counterparty class ID" /></div>
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Author ID</label><Input value={form.vecticumAuthorId} onChange={(e) => set("vecticumAuthorId", e.target.value)} disabled={!canEditIntegrations} /></div>
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Author Name</label><Input value={form.vecticumAuthorName} onChange={(e) => set("vecticumAuthorName", e.target.value)} disabled={!canEditIntegrations} /></div>
                   {canEditIntegrations && <Button variant="outline" size="sm" onClick={testVecticum}>Test Connection</Button>}

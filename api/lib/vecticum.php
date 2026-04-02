@@ -65,6 +65,64 @@ function testVecticumConnection($company) {
     }
 }
 
+function findVecticumPartner($company, $vatId, $companyName, $token = null) {
+    if (!$token) $token = getVecticumToken($company);
+    if (empty($company['vecticum_partner_endpoint'])) return null;
+
+    $url = $company['vecticum_api_base_url'] . '/' . $company['vecticum_partner_endpoint'];
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['Accept: application/json', "Authorization: Bearer $token"],
+        CURLOPT_TIMEOUT => 15,
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200) return null;
+    $partners = json_decode($response, true);
+    if (!is_array($partners)) return null;
+
+    // Match by VAT number first (most reliable)
+    if ($vatId) {
+        $normalizedVat = preg_replace('/\s+/', '', strtoupper($vatId));
+        foreach ($partners as $p) {
+            $pVat = preg_replace('/\s+/', '', strtoupper($p['vatNumber'] ?? ''));
+            if ($pVat && $pVat === $normalizedVat) {
+                return ['id' => $p['id'], 'name' => $p['name'] ?? ''];
+            }
+        }
+        // Try matching company code against VAT suffix
+        foreach ($partners as $p) {
+            $pCode = trim($p['companyCode'] ?? '');
+            if ($pCode && strpos($normalizedVat, $pCode) !== false) {
+                return ['id' => $p['id'], 'name' => $p['name'] ?? ''];
+            }
+        }
+    }
+
+    // Fallback: match by company name (fuzzy)
+    if ($companyName) {
+        $normalizedName = mb_strtolower(trim($companyName));
+        // Remove common suffixes for comparison
+        $cleanName = preg_replace('/\b(uab|ab|mb|vši|įi|bv|gmbh|ltd|llc|s\.?a\.?|srl)\b/iu', '', $normalizedName);
+        $cleanName = trim(preg_replace('/[,.\s]+$/', '', $cleanName));
+
+        foreach ($partners as $p) {
+            $pName = mb_strtolower(trim($p['name'] ?? ''));
+            $pClean = preg_replace('/\b(uab|ab|mb|vši|įi|bv|gmbh|ltd|llc|s\.?a\.?|srl)\b/iu', '', $pName);
+            $pClean = trim(preg_replace('/[,.\s]+$/', '', $pClean));
+
+            if ($pClean && $cleanName && ($pClean === $cleanName || strpos($pClean, $cleanName) !== false || strpos($cleanName, $pClean) !== false)) {
+                return ['id' => $p['id'], 'name' => $p['name'] ?? ''];
+            }
+        }
+    }
+
+    return null;
+}
+
 function uploadToVecticum($company, $metadata) {
     if (empty($company['vecticum_company_id'])) {
         return ['success' => false, 'error' => 'Vecticum endpoint ID not configured'];
@@ -102,6 +160,12 @@ function uploadToVecticum($company, $metadata) {
 
         if (!empty($company['vecticum_author_id'])) {
             $body['author'] = ['id' => $company['vecticum_author_id'], 'name' => $company['vecticum_author_name'] ?? ''];
+        }
+
+        // Match partner/counterparty
+        $partner = findVecticumPartner($company, $metadata['vendorVatId'] ?? '', $metadata['vendorName'] ?? '', $token);
+        if ($partner) {
+            $body['counterparty'] = $partner;
         }
 
         // Remove null values

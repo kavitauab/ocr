@@ -209,5 +209,8 @@ $ensureColumn('subscriptions', 'rate_limit_per_day', 'INT NULL');
 // --- Vecticum external ID on invoices ---
 $ensureColumn('invoices', 'vecticum_id', 'VARCHAR(255) NULL');
 
+// --- Vecticum partner endpoint on companies ---
+$ensureColumn('companies', 'vecticum_partner_endpoint', 'VARCHAR(255) NULL');
+
 $statusCode = $summary['errors'] > 0 ? 500 : 200;
 sendJSON($summary, $statusCode);
