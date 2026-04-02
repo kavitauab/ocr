@@ -613,7 +613,8 @@ if ($action === 'full-send') {
 }
 
 if ($action === 'test-file-upload') {
-    // Test the official /files/ endpoint: POST raw body to /files/{classId}/{documentId}/{key}
+    // Test the official /files/ endpoint
+    try {
     $token = getVecticumToken($company);
     $baseUrl = $company['vecticum_api_base_url'];
     $companyEndpoint = $company['vecticum_company_id'];
@@ -626,13 +627,17 @@ if ($action === 'test-file-upload') {
     $invoice = $stmt->fetch();
     if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
 
+    // Debug: show what we have
+    $storedFilename = $invoice['stored_filename'] ?? 'NULL';
+    $companyIdDir = $invoice['company_id'] ?? 'NULL';
+
     // Resolve file path - try both with and without company subdirectory
     $uploadDir = rtrim(UPLOAD_DIR, '/');
-    $filePath = $uploadDir . '/' . $invoice['company_id'] . '/' . $invoice['stored_filename'];
+    $filePath = $uploadDir . '/' . $companyIdDir . '/' . $storedFilename;
     if (!file_exists($filePath)) {
-        $filePath = $uploadDir . '/' . $invoice['stored_filename'];
+        $filePath = $uploadDir . '/' . $storedFilename;
     }
-    if (!file_exists($filePath)) sendJSON(['error' => "File not found at $filePath"], 404);
+    if (!file_exists($filePath)) sendJSON(['error' => "File not found", 'tried' => [$uploadDir . '/' . $companyIdDir . '/' . $storedFilename, $filePath], 'uploadDir' => $uploadDir], 404);
 
     $fileContent = file_get_contents($filePath);
     $mimeType = function_exists('mime_content_type') ? (mime_content_type($filePath) ?: 'application/octet-stream') : ($invoice['file_type'] ?? 'application/pdf');
@@ -749,6 +754,9 @@ if ($action === 'test-file-upload') {
     ];
 
     sendJSON(['action' => 'test-file-upload', 'success' => $code === 201, 'recordId' => $recordId, 'steps' => $steps]);
+    } catch (\Throwable $e) {
+        sendJSON(['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()], 500);
+    }
 }
 
 sendJSON(['error' => 'Unknown action'], 400);
