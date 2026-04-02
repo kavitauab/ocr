@@ -41,6 +41,28 @@ $stmt->execute(['id' => $companyId]);
 $company = $stmt->fetch();
 if (!$company) sendJSON(['error' => 'Company not found'], 404);
 
+if ($action === 'fetch') {
+    // Fetch any Vecticum endpoint - for exploration
+    $endpoint = $_GET['endpoint'] ?? '';
+    if (!$endpoint) sendJSON(['error' => 'Need endpoint param'], 400);
+    $token = getVecticumToken($company);
+    $url = $company['vecticum_api_base_url'] . '/' . $endpoint;
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['Accept: application/json', "Authorization: Bearer $token"],
+        CURLOPT_TIMEOUT => 15,
+    ]);
+    $response = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $data = json_decode($response, true);
+    $count = is_array($data) ? count($data) : 0;
+    // Show first 3 records as sample
+    $sample = is_array($data) ? array_slice($data, 0, 3) : $data;
+    sendJSON(['action' => 'fetch', 'url' => $url, 'httpCode' => $code, 'count' => $count, 'sample' => $sample]);
+}
+
 if ($action === 'test-connection') {
     $result = testVecticumConnection($company);
     sendJSON(['action' => 'test-connection', 'company' => $company['name'], 'result' => $result]);
