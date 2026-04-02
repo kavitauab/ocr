@@ -209,7 +209,15 @@ function uploadToVecticum($company, $metadata) {
         $subtotal = floatval($metadata['subtotalAmount'] ?? 0);
         $totalInclVat = number_format($total && $tax ? $total + $tax : $total, 2, '.', '');
 
+        // Build facet: "{vendorName}, No: {invoiceNo},  Date: {invoiceDate}"
+        $facetParts = [];
+        if (!empty($metadata['vendorName'])) $facetParts[] = $metadata['vendorName'];
+        if (!empty($metadata['invoiceNumber'])) $facetParts[] = 'No: ' . $metadata['invoiceNumber'];
+        if (!empty($metadata['invoiceDate'])) $facetParts[] = ' Date: ' . $metadata['invoiceDate'];
+        $facet = implode(', ', $facetParts);
+
         $body = [
+            '_facet' => $facet ?: null,
             'invoiceNo' => $metadata['invoiceNumber'] ?? null,
             'invoiceDate' => $metadata['invoiceDate'] ?? null,
             'paymentDate' => $metadata['dueDate'] ?? null,
