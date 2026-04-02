@@ -723,6 +723,10 @@ class Invoice extends BaseResource {
         if (!$company) sendJSON(['error' => 'Company not found'], 404);
         if (!$company['vecticum_enabled']) sendJSON(['error' => 'Vecticum not enabled for this company'], 400);
 
+        // Resolve file path
+        $uploadDir = rtrim(getenv('UPLOAD_DIR') ?: '../uploads', '/');
+        $filePath = $uploadDir . '/' . $invoice['company_id'] . '/' . $invoice['stored_filename'];
+
         $result = uploadToVecticum($company, [
             'invoiceNumber' => $invoice['invoice_number'],
             'invoiceDate' => $invoice['invoice_date'],
@@ -733,10 +737,22 @@ class Invoice extends BaseResource {
             'taxAmount' => $invoice['tax_amount'],
             'totalAmount' => $invoice['total_amount'],
             'currency' => $invoice['currency'],
+            '_filePath' => $filePath,
+            '_fileName' => $invoice['original_filename'],
         ]);
 
         if ($result['success']) {
-            sendJSON(['success' => true, 'externalId' => $result['externalId'], 'message' => "Invoice sent to Vecticum (ID: {$result['externalId']})"]);
+            // Save external ID
+            if (!empty($result['externalId'])) {
+                $stmt = $this->db->prepare("UPDATE invoices SET vecticum_id = :vid, updated_at = NOW() WHERE id = :id");
+                $stmt->execute(['vid' => $result['externalId'], 'id' => $id]);
+            }
+            sendJSON([
+                'success' => true,
+                'externalId' => $result['externalId'],
+                'fileUpload' => $result['fileUpload'] ?? null,
+                'message' => "Invoice sent to Vecticum (ID: {$result['externalId']})"
+            ]);
         }
         sendJSON(['error' => $result['error'] ?? 'Failed to upload to Vecticum'], 500);
     }

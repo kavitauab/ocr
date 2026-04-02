@@ -131,8 +131,56 @@ function uploadToVecticum($company, $metadata) {
         }
 
         $data = json_decode($response, true);
-        return ['success' => true, 'externalId' => $data['id'] ?? null];
+        $externalId = $data['id'] ?? null;
+
+        // Upload file if available
+        if ($externalId && !empty($metadata['_filePath']) && file_exists($metadata['_filePath'])) {
+            $fileResult = uploadFileToVecticum($company, $externalId, $metadata['_filePath'], $metadata['_fileName'] ?? 'invoice.pdf', $token);
+            return ['success' => true, 'externalId' => $externalId, 'fileUpload' => $fileResult];
+        }
+
+        return ['success' => true, 'externalId' => $externalId];
     } catch (Exception $e) {
         return ['success' => false, 'error' => $e->getMessage()];
     }
+}
+
+function uploadFileToVecticum($company, $documentId, $filePath, $fileName, $token = null) {
+    if (!$token) {
+        $token = getVecticumToken($company);
+    }
+
+    $fileContent = file_get_contents($filePath);
+    if ($fileContent === false) {
+        return ['success' => false, 'error' => 'Could not read file: ' . $filePath];
+    }
+
+    $mimeType = mime_content_type($filePath) ?: 'application/octet-stream';
+
+    // POST raw file content to /files/{classId}/{documentId}/files
+    $url = $company['vecticum_api_base_url'] . '/files/' . $company['vecticum_company_id'] . '/' . $documentId . '/files';
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $fileContent,
+        CURLOPT_HTTPHEADER => [
+            'Accept: application/json',
+            "Content-Type: $mimeType",
+            "Content-Disposition: attachment; filename=\"$fileName\"",
+            "Authorization: Bearer $token",
+        ],
+        CURLOPT_TIMEOUT => 60,
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode === 201) {
+        return ['success' => true, 'message' => 'File uploaded successfully'];
+    }
+
+    return ['success' => false, 'error' => "File upload failed: HTTP $httpCode", 'response' => $response];
 }
