@@ -615,6 +615,11 @@ if ($action === 'full-send') {
 if ($action === 'test-file-upload') {
     // Test the official /files/ endpoint
     try {
+
+    if (isset($_GET['debug'])) {
+        sendJSON(['debug' => 'entered test-file-upload block']);
+    }
+
     $token = getVecticumToken($company);
     $baseUrl = $company['vecticum_api_base_url'];
     $companyEndpoint = $company['vecticum_company_id'];
