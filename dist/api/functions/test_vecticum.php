@@ -41,6 +41,16 @@ $stmt->execute(['id' => $companyId]);
 $company = $stmt->fetch();
 if (!$company) sendJSON(['error' => 'Company not found'], 404);
 
+if ($action === 'clear-all-invoices') {
+    // Delete all invoices, ocr_jobs, email_inbox, reset usage_logs
+    $counts = [];
+    $counts['ocr_jobs'] = $db->exec("DELETE FROM ocr_jobs");
+    $counts['invoices'] = $db->exec("DELETE FROM invoices");
+    $counts['email_inbox'] = $db->exec("DELETE FROM email_inbox");
+    $counts['usage_logs'] = $db->exec("UPDATE usage_logs SET invoices_processed = 0, api_calls_count = 0, ocr_jobs_count = 0, ocr_input_tokens = 0, ocr_output_tokens = 0, ocr_total_tokens = 0, ocr_cost_usd = 0, storage_used_bytes = 0");
+    sendJSON(['action' => 'clear-all-invoices', 'deleted' => $counts]);
+}
+
 if ($action === 'fetch') {
     // Fetch any Vecticum endpoint - for exploration
     $endpoint = $_GET['endpoint'] ?? '';
