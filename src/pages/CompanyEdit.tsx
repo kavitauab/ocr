@@ -86,7 +86,12 @@ export default function CompanyEdit() {
 
   useEffect(() => {
     if (data?.company) {
-      setForm((prev) => ({ ...prev, ...data.company }));
+      // Coerce null values to empty strings so Inputs stay controlled
+      const cleaned: Record<string, any> = {};
+      for (const [k, v] of Object.entries(data.company)) {
+        cleaned[k] = v ?? "";
+      }
+      setForm((prev) => ({ ...prev, ...cleaned }));
     }
   }, [data]);
 
@@ -98,8 +103,13 @@ export default function CompanyEdit() {
 
   const saveMutation = useMutation({
     mutationFn: (body: any) => isNew ? api.post("/companies", body).then((r) => r.data) : api.patch(`/companies/${id}`, body).then((r) => r.data),
-    onSuccess: () => {
+    onSuccess: (responseData) => {
+      // Update form with the response data to prevent stale state
+      if (responseData?.company) {
+        setForm((prev) => ({ ...prev, ...responseData.company }));
+      }
       queryClient.invalidateQueries({ queryKey: ["companies"] });
+      queryClient.invalidateQueries({ queryKey: ["company", id] });
       toast.success(isNew ? "Company created" : "Company updated");
       if (isNew) navigate("/settings/companies");
     },
@@ -223,11 +233,11 @@ export default function CompanyEdit() {
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">VAT Number</label>
-            <Input value={form.vatNumber} onChange={(e) => set("vatNumber", e.target.value)} disabled={!isNew && !canEdit} placeholder="e.g. LT100007165618" />
+            <Input value={form.vatNumber ?? ""} onChange={(e) => set("vatNumber", e.target.value)} disabled={!isNew && !canEdit} placeholder="e.g. LT100007165618" />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Buyer Keywords</label>
-            <Input value={form.buyerKeywords} onChange={(e) => set("buyerKeywords", e.target.value)} disabled={!isNew && !canEdit} placeholder="e.g. Desmita Solutions, Desmita" />
+            <Input value={form.buyerKeywords ?? ""} onChange={(e) => set("buyerKeywords", e.target.value)} disabled={!isNew && !canEdit} placeholder="e.g. Desmita Solutions, Desmita" />
             <p className="text-xs text-muted-foreground">Comma-separated keywords to match invoice buyer name. If buyer doesn't contain any keyword, it's flagged as mismatch.</p>
           </div>
         </CardContent>
