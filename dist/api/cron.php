@@ -23,20 +23,17 @@ $task = $argv[1] ?? 'all';
 $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . CRON_SECRET;
 
 if ($task === 'all') {
-    // Run fetch-emails then process-ocr via curl to own API
-    $base = 'http://localhost';
-    $secret = CRON_SECRET;
-
-    $ch = curl_init("$base/api/cron/fetch-emails");
-    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ["Authorization: Bearer $secret"], CURLOPT_TIMEOUT => 120]);
-    $r1 = curl_exec($ch); curl_close($ch);
-    echo "fetch-emails: $r1\n";
-
-    $ch = curl_init("$base/api/cron/process-ocr");
-    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ["Authorization: Bearer $secret"], CURLOPT_TIMEOUT => 120]);
-    $r2 = curl_exec($ch); curl_close($ch);
-    echo "process-ocr: $r2\n";
-
+    // Run both tasks in sequence via subprocesses
+    $php = PHP_BINARY;
+    if (!$php || !file_exists($php)) {
+        // Fallback: find php binary
+        $php = trim(shell_exec('which php 2>/dev/null') ?: '/usr/bin/php');
+    }
+    $dir = __DIR__;
+    echo "=== fetch-emails ===\n";
+    passthru("$php " . escapeshellarg("$dir/cron.php") . " fetch-emails 2>&1");
+    echo "\n=== process-ocr ===\n";
+    passthru("$php " . escapeshellarg("$dir/cron.php") . " process-ocr 2>&1");
     exit(0);
 }
 
