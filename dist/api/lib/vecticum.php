@@ -150,25 +150,23 @@ function uploadFileToVecticum($company, $documentId, $filePath, $fileName, $toke
         $token = getVecticumToken($company);
     }
 
-    $fileContent = file_get_contents($filePath);
-    if ($fileContent === false) {
-        return ['success' => false, 'error' => 'Could not read file: ' . $filePath];
+    if (!file_exists($filePath)) {
+        return ['success' => false, 'error' => 'File not found: ' . $filePath];
     }
 
     $mimeType = function_exists('mime_content_type') ? (mime_content_type($filePath) ?: 'application/octet-stream') : 'application/pdf';
 
-    // POST raw file content to /files/{classId}/{documentId}/files
+    // POST multipart to /files/{classId}/{documentId}/files
     $url = $company['vecticum_api_base_url'] . '/files/' . $company['vecticum_company_id'] . '/' . $documentId . '/files';
+    $cfile = new \CURLFile($filePath, $mimeType, $fileName);
 
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => $fileContent,
+        CURLOPT_POSTFIELDS => ['file' => $cfile],
         CURLOPT_HTTPHEADER => [
             'Accept: application/json',
-            "Content-Type: $mimeType",
-            "Content-Disposition: attachment; filename=\"$fileName\"",
             "Authorization: Bearer $token",
         ],
         CURLOPT_TIMEOUT => 60,
