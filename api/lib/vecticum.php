@@ -54,7 +54,11 @@ function testVecticumConnection($company) {
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
 
-            if ($httpCode !== 200) return ['success' => false, 'error' => "Endpoint returned $httpCode"];
+            if ($httpCode !== 200) {
+                $errData = json_decode($response, true);
+                $errMsg = $errData['message'] ?? $response;
+                return ['success' => false, 'error' => "Endpoint returned $httpCode: $errMsg"];
+            }
             $data = json_decode($response, true);
             $count = is_array($data) ? count($data) : 0;
             return ['success' => true, 'message' => "Connected. Found $count records."];
