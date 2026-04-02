@@ -17,12 +17,7 @@ $_SERVER['REQUEST_URI'] = '/api/cron';
 
 require_once __DIR__ . '/config.php';
 
-$task = $argv[1] ?? '';
-
-if (!$task) {
-    fwrite(STDERR, "Usage: php cron.php <task>\nTasks: process-ocr, fetch-emails, migrate-schema\n");
-    exit(1);
-}
+$task = $argv[1] ?? 'all';
 
 // Set auth header so included scripts pass their CRON_SECRET check
 $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . CRON_SECRET;
