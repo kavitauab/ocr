@@ -8,6 +8,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { getStatusClasses } from "@/lib/ui-utils";
+import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { Plus, Trash2, Users as UsersIcon } from "lucide-react";
 
@@ -15,6 +16,7 @@ const emptyForm = { name: "", email: "", password: "", role: "user" };
 
 export default function Users() {
   const queryClient = useQueryClient();
+  const { user: currentUser, refreshUser } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [form, setForm] = useState(emptyForm);
@@ -38,8 +40,9 @@ export default function Users() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: any }) => api.patch(`/users/${id}`, body).then((r) => r.data),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
+      if (variables.id === currentUser?.id) refreshUser();
       setEditingUser(null);
       toast.success("User updated");
     },

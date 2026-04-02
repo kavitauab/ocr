@@ -4,10 +4,11 @@ interface DropdownMenuProps {
   trigger: ReactNode;
   children: ReactNode;
   align?: "left" | "right";
+  position?: "bottom" | "top";
   className?: string;
 }
 
-export function DropdownMenu({ trigger, children, align = "right", className = "" }: DropdownMenuProps) {
+export function DropdownMenu({ trigger, children, align = "right", position = "bottom", className = "" }: DropdownMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -31,9 +32,9 @@ export function DropdownMenu({ trigger, children, align = "right", className = "
       <div onClick={() => setOpen(!open)}>{trigger}</div>
       {open && (
         <div
-          className={`absolute top-full mt-1 z-50 min-w-[10rem] rounded-lg border bg-popover p-1 shadow-lg animate-scale-in ${
-            align === "right" ? "right-0" : "left-0"
-          } ${className}`}
+          className={`absolute z-50 min-w-[10rem] rounded-lg border bg-popover p-1 shadow-lg animate-scale-in ${
+            position === "top" ? "bottom-full mb-1" : "top-full mt-1"
+          } ${align === "right" ? "right-0" : "left-0"} ${className}`}
           onClick={() => setOpen(false)}
         >
           {children}

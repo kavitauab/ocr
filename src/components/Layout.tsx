@@ -245,11 +245,12 @@ export default function Layout() {
           </Tooltip>
         ) : (
           <DropdownMenu
+            position="top"
             trigger={
               <button className="flex items-center gap-2.5 w-full px-2 py-1.5 rounded-lg hover:bg-muted transition-colors text-left">
                 <Avatar email={user?.email} size="sm" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-foreground truncate">{user?.email}</div>
+                  <div className="text-xs font-medium text-foreground truncate">{user?.name || user?.email}</div>
                   <div className="text-[10px] text-muted-foreground capitalize">{user?.role || "user"}</div>
                 </div>
                 <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
