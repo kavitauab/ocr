@@ -15,6 +15,7 @@ import SystemSettings from "@/pages/SystemSettings";
 import Billing from "@/pages/Billing";
 import BillingEdit from "@/pages/BillingEdit";
 import Health from "@/pages/Health";
+import Profile from "@/pages/Profile";
 import { Toaster } from "@/components/ui/sonner";
 
 export default function App() {
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/invoices/:id" element={<InvoiceDetail />} />
           <Route path="/upload" element={<Upload />} />
           <Route path="/emails" element={<Emails />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Navigate to="/settings/companies" replace />} />
           <Route path="/settings/companies" element={<Companies />} />
           <Route path="/settings/companies/new" element={<CompanyEdit />} />

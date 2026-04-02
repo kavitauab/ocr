@@ -35,7 +35,10 @@ class User extends BaseResource {
     }
 
     public function update($id) {
-        requireRole('superadmin');
+        $user = getAuthUser();
+        // Allow users to edit their own profile, superadmins can edit anyone
+        if ($user['id'] !== $id) requireRole('superadmin');
+
         $data = $this->getRequestBody();
 
         $sets = ['updated_at = NOW()'];
@@ -43,7 +46,8 @@ class User extends BaseResource {
 
         if (isset($data['name'])) { $sets[] = "name = :name"; $params['name'] = $data['name']; }
         if (isset($data['email'])) { $sets[] = "email = :email"; $params['email'] = $data['email']; }
-        if (isset($data['role'])) { $sets[] = "role = :role"; $params['role'] = $data['role']; }
+        // Only superadmins can change roles
+        if (isset($data['role']) && $user['role'] === 'superadmin') { $sets[] = "role = :role"; $params['role'] = $data['role']; }
         if (!empty($data['password'])) { $sets[] = "password_hash = :hash"; $params['hash'] = password_hash($data['password'], PASSWORD_BCRYPT, ['cost' => 12]); }
 
         $this->db->prepare("UPDATE users SET " . implode(', ', $sets) . " WHERE id = :id")->execute($params);

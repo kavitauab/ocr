@@ -258,6 +258,11 @@ export default function Layout() {
             }
             align="left"
           >
+            <DropdownItem onClick={() => navigate("/profile")}>
+              <Users className="h-3.5 w-3.5" />
+              Profile
+            </DropdownItem>
+            <DropdownSeparator />
             <DropdownItem onClick={handleLogout} variant="destructive">
               <LogOut className="h-3.5 w-3.5" />
               Sign out
