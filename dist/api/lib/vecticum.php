@@ -104,13 +104,13 @@ function findVecticumPartner($company, $vatId, $companyName, $token = null) {
 
     // Fallback: match by company name (fuzzy)
     if ($companyName) {
-        $normalizedName = mb_strtolower(trim($companyName));
+        $normalizedName = strtolower(trim($companyName));
         // Remove common suffixes for comparison
         $cleanName = preg_replace('/\b(uab|ab|mb|vši|įi|bv|gmbh|ltd|llc|s\.?a\.?|srl)\b/iu', '', $normalizedName);
         $cleanName = trim(preg_replace('/[,.\s]+$/', '', $cleanName));
 
         foreach ($partners as $p) {
-            $pName = mb_strtolower(trim($p['name'] ?? ''));
+            $pName = strtolower(trim($p['name'] ?? ''));
             $pClean = preg_replace('/\b(uab|ab|mb|vši|įi|bv|gmbh|ltd|llc|s\.?a\.?|srl)\b/iu', '', $pName);
             $pClean = trim(preg_replace('/[,.\s]+$/', '', $pClean));
 
