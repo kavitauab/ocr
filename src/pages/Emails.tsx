@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getStatusClasses } from "@/lib/ui-utils";
+import { getStatusClasses, formatDateTime } from "@/lib/ui-utils";
 import { toast } from "sonner";
 import { useState } from "react";
 import { Mail } from "lucide-react";
@@ -65,8 +65,11 @@ export default function Emails() {
                 {data?.emails?.map((email: any) => (
                   <TableRow key={email.id} className="hover:bg-primary/[0.03] transition-colors duration-150">
                     <TableCell className="max-w-xs truncate font-medium">{email.subject}</TableCell>
-                    <TableCell className="text-muted-foreground">{email.fromName || email.fromEmail}</TableCell>
-                    <TableCell className="text-muted-foreground">{email.receivedDate ? new Date(email.receivedDate).toLocaleDateString() : "—"}</TableCell>
+                    <TableCell>
+                      <div>{email.fromName || "—"}</div>
+                      {email.fromEmail && <div className="text-xs text-muted-foreground">{email.fromEmail}</div>}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{formatDateTime(email.receivedDate)}</TableCell>
                     <TableCell className="text-muted-foreground">{email.attachmentCount ?? 0}</TableCell>
                     <TableCell>
                       <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getStatusClasses(email.status)}`}>

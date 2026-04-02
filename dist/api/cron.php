@@ -22,14 +22,25 @@ $task = $argv[1] ?? 'all';
 // Set auth header so included scripts pass their CRON_SECRET check
 $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . CRON_SECRET;
 
+if ($task === 'all') {
+    // Run fetch-emails then process-ocr via curl to own API
+    $base = 'http://localhost';
+    $secret = CRON_SECRET;
+
+    $ch = curl_init("$base/api/cron/fetch-emails");
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ["Authorization: Bearer $secret"], CURLOPT_TIMEOUT => 120]);
+    $r1 = curl_exec($ch); curl_close($ch);
+    echo "fetch-emails: $r1\n";
+
+    $ch = curl_init("$base/api/cron/process-ocr");
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ["Authorization: Bearer $secret"], CURLOPT_TIMEOUT => 120]);
+    $r2 = curl_exec($ch); curl_close($ch);
+    echo "process-ocr: $r2\n";
+
+    exit(0);
+}
+
 switch ($task) {
-    case 'all':
-        // Run both fetch-emails and process-ocr sequentially via subprocess
-        $phpBin = PHP_BINARY ?: 'php';
-        $dir = __DIR__;
-        passthru("$phpBin $dir/cron.php fetch-emails 2>&1");
-        passthru("$phpBin $dir/cron.php process-ocr 2>&1");
-        exit(0);
     case 'process-ocr':
         require_once __DIR__ . '/functions/process_ocr_queue.php';
         break;
