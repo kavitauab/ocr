@@ -165,6 +165,33 @@ function findVecticumAuthor($company, $senderEmail, $token = null) {
     return null;
 }
 
+function findVecticumCurrency($company, $currencyCode, $token = null) {
+    if (!$token) $token = getVecticumToken($company);
+    $currencyCode = strtoupper(trim($currencyCode));
+
+    $url = $company['vecticum_api_base_url'] . '/onP41CBuLz8oiwokgLWb';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['Accept: application/json', "Authorization: Bearer $token"],
+        CURLOPT_TIMEOUT => 15,
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200) return null;
+    $currencies = json_decode($response, true);
+    if (!is_array($currencies)) return null;
+
+    foreach ($currencies as $c) {
+        if (strtoupper(trim($c['name'] ?? '')) === $currencyCode) {
+            return ['id' => $c['id'], 'name' => $c['name']];
+        }
+    }
+    return null;
+}
+
 function uploadToVecticum($company, $metadata) {
     if (empty($company['vecticum_company_id'])) {
         return ['success' => false, 'error' => 'Vecticum endpoint ID not configured'];
@@ -201,11 +228,9 @@ function uploadToVecticum($company, $metadata) {
         }
 
         $currency = strtoupper(trim($metadata['currency'] ?? 'EUR'));
-        if ($currency === 'EUR') {
-            $body['currency'] = ['id' => 'O18j5zeck1yHYb5W4H86', 'name' => 'EUR'];
-        } else {
-            // Try name-only — Vecticum may resolve the ID
-            $body['currency'] = ['name' => $currency];
+        $currencyRef = findVecticumCurrency($company, $currency, $token);
+        if ($currencyRef) {
+            $body['currency'] = $currencyRef;
         }
 
         // Match author by sender email
