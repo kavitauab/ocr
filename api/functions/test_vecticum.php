@@ -51,6 +51,36 @@ if ($action === 'clear-all-invoices') {
     sendJSON(['action' => 'clear-all-invoices', 'deleted' => $counts]);
 }
 
+if ($action === 'debug-email-attachments') {
+    $emailId = $_GET['emailId'] ?? '';
+    if (!$emailId) sendJSON(['error' => 'Need emailId'], 400);
+    $stmt = $db->prepare("SELECT * FROM email_inbox WHERE id = :id");
+    $stmt->execute(['id' => $emailId]);
+    $email = $stmt->fetch();
+    if (!$email) sendJSON(['error' => 'Email not found'], 404);
+
+    $cStmt = $db->prepare("SELECT * FROM companies WHERE id = :id");
+    $cStmt->execute(['id' => $email['company_id']]);
+    $emailCompany = $cStmt->fetch();
+
+    require_once __DIR__ . '/../lib/microsoft_graph.php';
+    $attachments = fetchAttachments($emailCompany, $email['message_id']);
+
+    $summary = [];
+    foreach ($attachments as $a) {
+        $summary[] = [
+            'name' => $a['name'] ?? null,
+            'contentType' => $a['contentType'] ?? null,
+            'size' => $a['size'] ?? null,
+            'isInline' => $a['isInline'] ?? null,
+            'hasContentBytes' => !empty($a['contentBytes']),
+            'contentBytesLength' => strlen($a['contentBytes'] ?? ''),
+            '@odata.type' => $a['@odata.type'] ?? null,
+        ];
+    }
+    sendJSON(['action' => 'debug-email-attachments', 'email' => $email['subject'], 'attachmentCount' => count($attachments), 'attachments' => $summary]);
+}
+
 if ($action === 'fetch') {
     // Fetch any Vecticum endpoint - for exploration
     $endpoint = $_GET['endpoint'] ?? '';
