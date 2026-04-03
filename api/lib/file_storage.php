@@ -6,7 +6,12 @@ function saveFile($fileData, $originalName, $companyId = null) {
 
     $subdir = $companyId ? UPLOAD_DIR . '/' . $companyId : UPLOAD_DIR;
     if (!is_dir($subdir)) {
-        mkdir($subdir, 0755, true);
+        mkdir($subdir, 0777, true);
+        chmod($subdir, 0777);
+    }
+    // Ensure writable even if created by a different user (cron vs web)
+    if (!is_writable($subdir)) {
+        @chmod($subdir, 0777);
     }
 
     $storedFilename = $companyId ? $companyId . '/' . $filename : $filename;
