@@ -60,9 +60,13 @@ function processCompanyEmails($companyId) {
 
             $attachments = fetchAttachments($company, $message['id']);
             $invoiceAttachments = array_filter($attachments, function($a) use ($ALLOWED_ATTACHMENT_TYPES) {
-                return in_array(strtolower($a['contentType'] ?? ''), $ALLOWED_ATTACHMENT_TYPES)
-                    && empty($a['isInline'])
-                    && !empty($a['contentBytes']);
+                $contentType = strtolower($a['contentType'] ?? '');
+                $fileName = strtolower($a['name'] ?? '');
+                $ext = pathinfo($fileName, PATHINFO_EXTENSION);
+                // Accept known types, or octet-stream with a valid file extension
+                $typeOk = in_array($contentType, $ALLOWED_ATTACHMENT_TYPES)
+                    || ($contentType === 'application/octet-stream' && in_array($ext, ['pdf', 'png', 'jpg', 'jpeg']));
+                return $typeOk && empty($a['isInline']) && !empty($a['contentBytes']);
             });
 
             $db->prepare("UPDATE email_inbox SET attachment_count = :count WHERE id = :id")->execute(['count' => count($invoiceAttachments), 'id' => $emailId]);
