@@ -64,9 +64,10 @@ export default function CompanyEdit() {
     name: "", code: "", vatNumber: "", buyerKeywords: "", logoUrl: "",
     msClientId: "", msClientSecret: "", msTenantId: "", msSenderEmail: "",
     msFetchEnabled: false, msFetchFolder: "INBOX",
-    vecticumEnabled: false, vecticumAutoSend: false, vecticumApiBaseUrl: "", vecticumClientId: "",
-    vecticumClientSecret: "", vecticumCompanyId: "", vecticumPartnerEndpoint: "",
-    vecticumAuthorId: "", vecticumAuthorName: "",
+    vecticumEnabled: false, vecticumAutoSend: false,
+    vecticumApiBaseUrl: "https://app.vecticum.com/api/v1", vecticumClientId: "",
+    vecticumClientSecret: "", vecticumCompanyId: "Rsk9Jv9bV7bGBFupWlE3",
+    vecticumPartnerEndpoint: "gnzSuOSBmKbBdytb1OGc",
     extractionFields: null,
   });
 
@@ -399,13 +400,11 @@ export default function CompanyEdit() {
               </CardHeader>
               {form.vecticumEnabled && (
                 <CardContent className="space-y-4">
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">API Base URL</label><Input value={v("vecticumApiBaseUrl")} onChange={(e) => set("vecticumApiBaseUrl", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">API Base URL</label><Input value={v("vecticumApiBaseUrl")} onChange={(e) => set("vecticumApiBaseUrl", e.target.value)} disabled={!canEditIntegrations} placeholder="https://app.vecticum.com/api/v1" /></div>
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client ID</label><Input value={v("vecticumClientId")} onChange={(e) => set("vecticumClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client Secret</label><Input type="password" value={v("vecticumClientSecret")} onChange={(e) => set("vecticumClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Invoice Class ID</label><Input value={v("vecticumCompanyId")} onChange={(e) => set("vecticumCompanyId", e.target.value)} disabled={!canEditIntegrations} placeholder="Purchase invoice class endpoint" /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Partner Endpoint</label><Input value={v("vecticumPartnerEndpoint")} onChange={(e) => set("vecticumPartnerEndpoint", e.target.value)} disabled={!canEditIntegrations} placeholder="Counterparty class ID" /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Author ID</label><Input value={v("vecticumAuthorId")} onChange={(e) => set("vecticumAuthorId", e.target.value)} disabled={!canEditIntegrations} /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Author Name</label><Input value={v("vecticumAuthorName")} onChange={(e) => set("vecticumAuthorName", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Invoice Class ID</label><Input value={v("vecticumCompanyId")} onChange={(e) => set("vecticumCompanyId", e.target.value)} disabled={!canEditIntegrations} placeholder="Rsk9Jv9bV7bGBFupWlE3" /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Partner Endpoint</label><Input value={v("vecticumPartnerEndpoint")} onChange={(e) => set("vecticumPartnerEndpoint", e.target.value)} disabled={!canEditIntegrations} placeholder="gnzSuOSBmKbBdytb1OGc" /></div>
                   <label className="flex items-center gap-2 text-sm text-foreground pt-2">
                     <input type="checkbox" checked={form.vecticumAutoSend as boolean} onChange={(e) => set("vecticumAutoSend", e.target.checked)} disabled={!canEditIntegrations} />
                     Auto-send to Vecticum after OCR
