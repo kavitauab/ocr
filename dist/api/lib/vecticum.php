@@ -209,15 +209,7 @@ function uploadToVecticum($company, $metadata) {
         $subtotal = floatval($metadata['subtotalAmount'] ?? 0);
         $totalInclVat = number_format($total && $tax ? $total + $tax : $total, 2, '.', '');
 
-        // Build facet: "{vendorName}, No: {invoiceNo},  Date: {invoiceDate}"
-        $facetParts = [];
-        if (!empty($metadata['vendorName'])) $facetParts[] = $metadata['vendorName'];
-        if (!empty($metadata['invoiceNumber'])) $facetParts[] = 'No: ' . $metadata['invoiceNumber'];
-        if (!empty($metadata['invoiceDate'])) $facetParts[] = ' Date: ' . $metadata['invoiceDate'];
-        $facet = implode(', ', $facetParts);
-
         $body = [
-            '_facet' => $facet ?: null,
             'invoiceNo' => $metadata['invoiceNumber'] ?? null,
             'invoiceDate' => $metadata['invoiceDate'] ?? null,
             'paymentDate' => $metadata['dueDate'] ?? null,
@@ -251,12 +243,15 @@ function uploadToVecticum($company, $metadata) {
             $body['currency'] = $currencyRef;
         }
 
-        // Match author by sender email — if no match, leave empty (Vecticum defaults to accountant)
+        // Match author by sender email, fall back to company default (required for workflow)
+        $author = null;
         if (!empty($metadata['_senderEmail'])) {
             $author = findVecticumAuthor($company, $metadata['_senderEmail'], $token);
-            if ($author) {
-                $body['author'] = $author;
-            }
+        }
+        if ($author) {
+            $body['author'] = $author;
+        } elseif (!empty($company['vecticum_author_id'])) {
+            $body['author'] = ['id' => $company['vecticum_author_id'], 'name' => $company['vecticum_author_name'] ?? ''];
         }
 
         // Match partner/counterparty
