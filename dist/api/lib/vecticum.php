@@ -243,15 +243,12 @@ function uploadToVecticum($company, $metadata) {
             $body['currency'] = $currencyRef;
         }
 
-        // Match author by sender email, fall back to company default (required for workflow)
-        $author = null;
+        // Match author by sender email only — author is required for Vecticum workflow to start
         if (!empty($metadata['_senderEmail'])) {
             $author = findVecticumAuthor($company, $metadata['_senderEmail'], $token);
-        }
-        if ($author) {
-            $body['author'] = $author;
-        } elseif (!empty($company['vecticum_author_id'])) {
-            $body['author'] = ['id' => $company['vecticum_author_id'], 'name' => $company['vecticum_author_name'] ?? ''];
+            if ($author) {
+                $body['author'] = $author;
+            }
         }
 
         // Match partner/counterparty
