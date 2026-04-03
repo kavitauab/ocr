@@ -92,6 +92,11 @@ if ($action === 'reprocess-email') {
                 'fs' => $a['size'] ?? strlen($buffer),
             ]);
 
+        // Create OCR job so the queue processor picks it up
+        $jobId = generateId();
+        $db->prepare("INSERT INTO ocr_jobs (id, invoice_id, company_id, provider, model, status, queued_at, attempt, max_attempts) VALUES (:id, :iid, :cid, 'anthropic', 'claude-sonnet-4-20250514', 'queued', NOW(), 1, 3)")
+            ->execute(['id' => $jobId, 'iid' => $invoiceId, 'cid' => $email['company_id']]);
+
         $results[] = ['invoiceId' => $invoiceId, 'fileName' => $fileName, 'size' => $a['size']];
     }
 
