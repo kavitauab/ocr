@@ -196,6 +196,33 @@ function findVecticumCurrency($company, $currencyCode, $token = null) {
     return null;
 }
 
+function getVecticumDefaultAuthor($company, $token = null) {
+    if (!$token) $token = getVecticumToken($company);
+
+    $url = $company['vecticum_api_base_url'] . '/_inboxSetup';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['Accept: application/json', "Authorization: Bearer $token"],
+        CURLOPT_TIMEOUT => 10,
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200) return null;
+    $inboxes = json_decode($response, true);
+    if (!is_array($inboxes)) return null;
+
+    // Find the first inbox with a defaultAuthor set
+    foreach ($inboxes as $inbox) {
+        if (!empty($inbox['defaultAuthor']['id'])) {
+            return ['id' => $inbox['defaultAuthor']['id'], 'name' => $inbox['defaultAuthor']['name'] ?? ''];
+        }
+    }
+    return null;
+}
+
 function uploadToVecticum($company, $metadata) {
     if (empty($company['vecticum_company_id'])) {
         return ['success' => false, 'error' => 'Vecticum endpoint ID not configured'];
@@ -243,12 +270,17 @@ function uploadToVecticum($company, $metadata) {
             $body['currency'] = $currencyRef;
         }
 
-        // Match author by sender email only — author is required for Vecticum workflow to start
+        // Match author by sender email, fall back to inbox defaultAuthor
+        $author = null;
         if (!empty($metadata['_senderEmail'])) {
             $author = findVecticumAuthor($company, $metadata['_senderEmail'], $token);
-            if ($author) {
-                $body['author'] = $author;
-            }
+        }
+        if (!$author) {
+            // Fetch defaultAuthor from Vecticum inbox setup
+            $author = getVecticumDefaultAuthor($company, $token);
+        }
+        if ($author) {
+            $body['author'] = $author;
         }
 
         // Match partner/counterparty
