@@ -51,6 +51,56 @@ if ($action === 'clear-all-invoices') {
     sendJSON(['action' => 'clear-all-invoices', 'deleted' => $counts]);
 }
 
+if ($action === 'reprocess-email') {
+    $emailId = $_GET['emailId'] ?? '';
+    if (!$emailId) sendJSON(['error' => 'Need emailId'], 400);
+    $stmt = $db->prepare("SELECT * FROM email_inbox WHERE id = :id");
+    $stmt->execute(['id' => $emailId]);
+    $email = $stmt->fetch();
+    if (!$email) sendJSON(['error' => 'Email not found'], 404);
+
+    $cStmt = $db->prepare("SELECT * FROM companies WHERE id = :id");
+    $cStmt->execute(['id' => $email['company_id']]);
+    $emailCompany = $cStmt->fetch();
+
+    require_once __DIR__ . '/../lib/microsoft_graph.php';
+    require_once __DIR__ . '/../lib/file_storage.php';
+    require_once __DIR__ . '/../lib/claude.php';
+    require_once __DIR__ . '/../lib/usage.php';
+
+    $attachments = fetchAttachments($emailCompany, $email['message_id']);
+    $ALLOWED = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+    $results = [];
+
+    foreach ($attachments as $a) {
+        $contentType = strtolower($a['contentType'] ?? '');
+        $fileName = $a['name'] ?? 'attachment';
+        $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+        $typeOk = in_array($contentType, $ALLOWED)
+            || ($contentType === 'application/octet-stream' && in_array($ext, ['pdf', 'png', 'jpg', 'jpeg']));
+
+        if (!$typeOk || !empty($a['isInline']) || empty($a['contentBytes'])) continue;
+
+        $buffer = base64_decode($a['contentBytes']);
+        $saved = saveFile($buffer, $fileName, $email['company_id']);
+        $invoiceId = generateId();
+
+        $db->prepare("INSERT INTO invoices (id, company_id, email_inbox_id, source, original_filename, stored_filename, file_type, file_size, status) VALUES (:id, :cid, :eid, 'email', :fn, :sf, :ft, :fs, 'queued')")
+            ->execute([
+                'id' => $invoiceId, 'cid' => $email['company_id'], 'eid' => $emailId,
+                'fn' => $fileName, 'sf' => $saved['storedFilename'], 'ft' => $saved['fileType'],
+                'fs' => $a['size'] ?? strlen($buffer),
+            ]);
+
+        $results[] = ['invoiceId' => $invoiceId, 'fileName' => $fileName, 'size' => $a['size']];
+    }
+
+    $db->prepare("UPDATE email_inbox SET attachment_count = :c, status = 'processed' WHERE id = :id")
+        ->execute(['c' => count($results), 'id' => $emailId]);
+
+    sendJSON(['action' => 'reprocess-email', 'invoicesCreated' => count($results), 'results' => $results]);
+}
+
 if ($action === 'debug-email-attachments') {
     $emailId = $_GET['emailId'] ?? '';
     if (!$emailId) sendJSON(['error' => 'Need emailId'], 400);
