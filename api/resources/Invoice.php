@@ -1039,4 +1039,53 @@ class Invoice extends BaseResource {
             'rateLimits' => $rateLimits,
         ]);
     }
+
+    /**
+     * GET /invoices/usage — Monthly usage breakdown per company
+     */
+    public function usage($id = null) {
+        $user = getAuthUser();
+        if ($user['role'] !== 'superadmin') sendJSON(['error' => 'Superadmin only'], 403);
+
+        $companyId = $_GET['companyId'] ?? '';
+        $month = $_GET['month'] ?? '';
+
+        $conditions = [];
+        $params = [];
+
+        if ($companyId) {
+            $conditions[] = "u.company_id = :companyId";
+            $params['companyId'] = $companyId;
+        }
+        if ($month) {
+            $conditions[] = "u.month = :month";
+            $params['month'] = $month;
+        }
+
+        $where = $conditions ? 'WHERE ' . implode(' AND ', $conditions) : '';
+
+        $stmt = $this->db->prepare("
+            SELECT u.*, c.name as company_name, c.code as company_code
+            FROM usage_logs u
+            LEFT JOIN companies c ON c.id = u.company_id
+            $where
+            ORDER BY u.month DESC, c.name ASC
+        ");
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+
+        // Get available months
+        $monthsStmt = $this->db->query("SELECT DISTINCT month FROM usage_logs ORDER BY month DESC");
+        $months = array_column($monthsStmt->fetchAll(), 'month');
+
+        // Get all companies
+        $companiesStmt = $this->db->query("SELECT id, name, code FROM companies ORDER BY name");
+        $companies = $companiesStmt->fetchAll();
+
+        sendJSON([
+            'usage' => array_map('snakeToCamel', $rows),
+            'months' => $months,
+            'companies' => array_map('snakeToCamel', $companies),
+        ]);
+    }
 }

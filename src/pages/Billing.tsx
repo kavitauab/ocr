@@ -1,35 +1,29 @@
 import { useMemo, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/api/client";
 import { useAuth } from "@/lib/auth";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getStatusClasses } from "@/lib/ui-utils";
-import { BarChart3, FileText, Cpu, DollarSign, HardDrive } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { BarChart3, FileText, Cpu, DollarSign, HardDrive, Download } from "lucide-react";
 
 function fmtNum(v: any): string {
-  if (v === null || v === undefined || v === "") return "—";
-  const n = Number(v);
-  if (isNaN(n)) return "—";
-  return new Intl.NumberFormat("en-US").format(n);
+  if (v === null || v === undefined || v === "" || v === 0) return "—";
+  return new Intl.NumberFormat("en-US").format(Number(v));
 }
 
 function fmtUsd(v: any): string {
   if (v === null || v === undefined || v === "" || v === 0) return "$0.00";
-  const n = Number(v);
-  if (isNaN(n)) return "—";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(n);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(Number(v));
 }
 
 function fmtBytes(v: any): string {
   if (!v || v === 0) return "0 B";
   const n = Math.abs(Number(v));
   const units = ["B", "KB", "MB", "GB"];
-  let i = 0;
-  let val = n;
+  let i = 0, val = n;
   while (val >= 1024 && i < units.length - 1) { val /= 1024; i++; }
   return `${val.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
@@ -41,50 +35,107 @@ function fmtTokens(v: any): string {
   return fmtNum(n);
 }
 
+function fmtMonth(m: string): string {
+  const [y, mo] = m.split("-");
+  const months = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  return `${months[parseInt(mo)] || mo} ${y}`;
+}
+
 export default function Billing() {
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const [search, setSearch] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedCompany, setSelectedCompany] = useState("");
 
   if (user?.role !== "superadmin") return <Navigate to="/dashboard" replace />;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["usage-stats"],
-    queryFn: () => api.get("/invoices/stats").then((r) => r.data),
+    queryKey: ["usage", selectedMonth, selectedCompany],
+    queryFn: () => {
+      const params: Record<string, string> = {};
+      if (selectedMonth) params.month = selectedMonth;
+      if (selectedCompany) params.companyId = selectedCompany;
+      return api.get("/invoices/usage", { params }).then((r) => r.data);
+    },
   });
 
+  const usage = data?.usage || [];
+  const months = data?.months || [];
   const companies = data?.companies || [];
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return companies;
-    return companies.filter((c: any) =>
-      `${c.companyName} ${c.companyCode}`.toLowerCase().includes(term)
-    );
-  }, [companies, search]);
-
-  // Totals
   const totals = useMemo(() => {
-    return companies.reduce((acc: any, c: any) => ({
-      invoices: acc.invoices + (c.totalInvoices || 0),
-      tokens: acc.tokens + (c.totalTokens || 0),
-      cost: acc.cost + (c.ocrCostUsd || 0),
-      storage: acc.storage + (c.storageUsedBytes || 0),
-    }), { invoices: 0, tokens: 0, cost: 0, storage: 0 });
-  }, [companies]);
+    return usage.reduce((acc: any, u: any) => ({
+      invoices: acc.invoices + (u.invoicesProcessed || 0),
+      tokens: acc.tokens + (u.ocrTotalTokens || 0),
+      cost: acc.cost + parseFloat(u.ocrCostUsd || 0),
+      storage: acc.storage + (u.storageUsedBytes || 0),
+      apiCalls: acc.apiCalls + (u.apiCallsCount || 0),
+      ocrJobs: acc.ocrJobs + (u.ocrJobsCount || 0),
+    }), { invoices: 0, tokens: 0, cost: 0, storage: 0, apiCalls: 0, ocrJobs: 0 });
+  }, [usage]);
 
   const statCards = [
-    { label: "Total Invoices", value: fmtNum(totals.invoices), icon: FileText, color: "text-blue-600", bg: "bg-blue-50" },
-    { label: "Total Tokens", value: fmtTokens(totals.tokens), icon: Cpu, color: "text-purple-600", bg: "bg-purple-50" },
-    { label: "Total OCR Cost", value: fmtUsd(totals.cost), icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-50" },
-    { label: "Total Storage", value: fmtBytes(totals.storage), icon: HardDrive, color: "text-amber-600", bg: "bg-amber-50" },
+    { label: "Invoices Processed", value: fmtNum(totals.invoices), icon: FileText, color: "text-blue-600", bg: "bg-blue-50" },
+    { label: "OCR Jobs", value: fmtNum(totals.ocrJobs), icon: Cpu, color: "text-purple-600", bg: "bg-purple-50" },
+    { label: "Total Cost", value: fmtUsd(totals.cost), icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-50" },
+    { label: "Storage Used", value: fmtBytes(totals.storage), icon: HardDrive, color: "text-amber-600", bg: "bg-amber-50" },
   ];
+
+  const handleExport = () => {
+    const rows = usage.map((u: any) => [
+      u.month, u.companyName, u.companyCode,
+      u.invoicesProcessed, u.ocrJobsCount, u.apiCallsCount,
+      u.ocrInputTokens, u.ocrOutputTokens, u.ocrTotalTokens,
+      u.ocrCostUsd, u.storageUsedBytes,
+    ]);
+    const header = ["Month", "Company", "Code", "Invoices", "OCR Jobs", "API Calls", "Input Tokens", "Output Tokens", "Total Tokens", "OCR Cost (USD)", "Storage (bytes)"];
+    const csv = [header, ...rows].map(r => r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `usage${selectedMonth ? `-${selectedMonth}` : ""}${selectedCompany ? `-${selectedCompany}` : ""}.csv`;
+    a.click();
+  };
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight text-foreground">Usage & Billing</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">Token consumption, invoice counts, and OCR costs per company</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">Usage & Billing</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Monthly usage breakdown per company for invoicing</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleExport} disabled={!usage.length} className="gap-1">
+          <Download className="h-3.5 w-3.5" />Export CSV
+        </Button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3">
+        <select
+          value={selectedMonth}
+          onChange={(e) => setSelectedMonth(e.target.value)}
+          className="h-9 rounded-md border border-border bg-card px-3 text-sm text-foreground"
+        >
+          <option value="">All months</option>
+          {months.map((m: string) => (
+            <option key={m} value={m}>{fmtMonth(m)}</option>
+          ))}
+        </select>
+        <select
+          value={selectedCompany}
+          onChange={(e) => setSelectedCompany(e.target.value)}
+          className="h-9 rounded-md border border-border bg-card px-3 text-sm text-foreground"
+        >
+          <option value="">All companies</option>
+          {companies.map((c: any) => (
+            <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
+          ))}
+        </select>
+        {(selectedMonth || selectedCompany) && (
+          <Button variant="ghost" size="sm" onClick={() => { setSelectedMonth(""); setSelectedCompany(""); }} className="text-muted-foreground">
+            Clear filters
+          </Button>
+        )}
       </div>
 
       {/* Summary cards */}
@@ -112,28 +163,21 @@ export default function Billing() {
         )}
       </div>
 
-      {/* Company usage table */}
+      {/* Usage table */}
       <Card className="overflow-hidden">
-        <CardContent className="p-4 border-b border-border">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search companies..."
-            className="w-full sm:w-80"
-          />
-        </CardContent>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/30">
+                  <TableHead className="font-semibold">Month</TableHead>
                   <TableHead className="font-semibold">Company</TableHead>
-                  <TableHead className="font-semibold">Plan</TableHead>
                   <TableHead className="text-right font-semibold">Invoices</TableHead>
-                  <TableHead className="text-right font-semibold">Completed</TableHead>
-                  <TableHead className="text-right font-semibold">Failed</TableHead>
-                  <TableHead className="text-right font-semibold">Tokens</TableHead>
-                  <TableHead className="text-right font-semibold">OCR Cost</TableHead>
+                  <TableHead className="text-right font-semibold">OCR Jobs</TableHead>
+                  <TableHead className="text-right font-semibold">Input Tokens</TableHead>
+                  <TableHead className="text-right font-semibold">Output Tokens</TableHead>
+                  <TableHead className="text-right font-semibold">Total Tokens</TableHead>
+                  <TableHead className="text-right font-semibold">Cost (USD)</TableHead>
                   <TableHead className="text-right font-semibold">Storage</TableHead>
                 </TableRow>
               </TableHeader>
@@ -141,38 +185,43 @@ export default function Billing() {
                 {isLoading && (
                   Array.from({ length: 3 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 8 }).map((_, j) => (
+                      {Array.from({ length: 9 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-16" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 )}
-                {!isLoading && filtered.map((c: any) => (
-                  <TableRow
-                    key={c.companyId}
-                    className="cursor-pointer hover:bg-primary/[0.03] transition-colors"
-                    onClick={() => navigate(`/invoices?companyId=${c.companyId}`)}
-                  >
+                {!isLoading && usage.map((u: any, idx: number) => (
+                  <TableRow key={`${u.companyId}-${u.month}-${idx}`} className="hover:bg-primary/[0.03] transition-colors">
+                    <TableCell className="font-medium">{fmtMonth(u.month)}</TableCell>
                     <TableCell>
-                      <div className="font-medium text-foreground">{c.companyName}</div>
-                      <div className="text-xs text-muted-foreground">{c.companyCode}</div>
+                      <div className="font-medium text-foreground">{u.companyName}</div>
+                      <div className="text-xs text-muted-foreground">{u.companyCode}</div>
                     </TableCell>
-                    <TableCell>
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getStatusClasses(c.billingStatus)}`}>
-                        {c.plan || "free"}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">{fmtNum(c.totalInvoices)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-600">{fmtNum(c.completedCount)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-red-600">{c.failedCount > 0 ? fmtNum(c.failedCount) : "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">{fmtTokens(c.totalTokens)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">{fmtUsd(c.ocrCostUsd)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">{fmtBytes(c.storageUsedBytes)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmtNum(u.invoicesProcessed)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmtNum(u.ocrJobsCount)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">{fmtTokens(u.ocrInputTokens)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">{fmtTokens(u.ocrOutputTokens)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmtTokens(u.ocrTotalTokens)}</TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">{fmtUsd(u.ocrCostUsd)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">{fmtBytes(u.storageUsedBytes)}</TableCell>
                   </TableRow>
                 ))}
-                {!isLoading && filtered.length === 0 && (
+                {!isLoading && usage.length > 0 && (
+                  <TableRow className="bg-muted/20 font-semibold border-t-2">
+                    <TableCell colSpan={2}>Total</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmtNum(totals.invoices)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmtNum(totals.ocrJobs)}</TableCell>
+                    <TableCell></TableCell>
+                    <TableCell></TableCell>
+                    <TableCell className="text-right tabular-nums">{fmtTokens(totals.tokens)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmtUsd(totals.cost)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmtBytes(totals.storage)}</TableCell>
+                  </TableRow>
+                )}
+                {!isLoading && usage.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-12">
+                    <TableCell colSpan={9} className="py-12">
                       <div className="flex flex-col items-center justify-center text-center">
                         <div className="rounded-full bg-muted p-3 mb-3">
                           <BarChart3 className="h-5 w-5 text-muted-foreground" />
