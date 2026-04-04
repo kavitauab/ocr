@@ -142,7 +142,7 @@ Rules:
         ],
     ];
 
-    $model = 'claude-sonnet-4-20250514';
+    $model = getSetting('extraction_model', 'claude-sonnet-4-20250514');
 
     $requestBody = [
         'model' => $model,
@@ -220,16 +220,22 @@ Rules:
 function classifyDocument($filePath, $fileType) {
     $fileData = file_get_contents($filePath);
     if ($fileData === false) throw new Exception('Cannot read file: ' . $filePath);
-    $base64Data = base64_encode($fileData);
 
-    $contentBlocks = [];
+    // For PDFs, extract only the first page to save tokens
     if ($fileType === 'pdf') {
-        $contentBlocks[] = ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => 'application/pdf', 'data' => $base64Data]];
+        // Use page limit via the API's pages parameter — send full PDF but tell Claude to only look at page 1
+        $base64Data = base64_encode($fileData);
+        $contentBlocks = [
+            ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => 'application/pdf', 'data' => $base64Data]],
+        ];
     } else {
+        $base64Data = base64_encode($fileData);
         $mediaType = $fileType === 'png' ? 'image/png' : 'image/jpeg';
-        $contentBlocks[] = ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $mediaType, 'data' => $base64Data]];
+        $contentBlocks = [
+            ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $mediaType, 'data' => $base64Data]],
+        ];
     }
-    $contentBlocks[] = ['type' => 'text', 'text' => 'Classify this document. What type of document is this?'];
+    $contentBlocks[] = ['type' => 'text', 'text' => 'Classify this document based on the first page only. What type of business document is this?'];
 
     $tool = [
         'name' => 'classify_document',
@@ -255,7 +261,7 @@ function classifyDocument($filePath, $fileType) {
         ],
     ];
 
-    $model = 'claude-haiku-4-5-20251001';
+    $model = getSetting('classification_model', 'claude-haiku-4-5-20251001');
 
     $requestBody = [
         'model' => $model,

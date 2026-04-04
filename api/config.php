@@ -31,6 +31,17 @@ define('UPLOAD_DIR', $_ENV['UPLOAD_DIR'] ?? __DIR__ . '/../uploads');
 define('CRON_SECRET', $_ENV['CRON_SECRET'] ?? '');
 
 // Get effective API key (DB settings override .env)
+function getSetting($key, $default = null) {
+    try {
+        $db = getDBConnection();
+        $stmt = $db->prepare("SELECT `value` FROM settings WHERE `key` = :key");
+        $stmt->execute(['key' => $key]);
+        $row = $stmt->fetch();
+        if ($row && $row['value'] !== null && $row['value'] !== '') return $row['value'];
+    } catch (\Throwable $e) {}
+    return $default;
+}
+
 function getAnthropicApiKey() {
     if (!empty(ANTHROPIC_API_KEY) && ANTHROPIC_API_KEY !== 'your-anthropic-api-key') {
         return ANTHROPIC_API_KEY;

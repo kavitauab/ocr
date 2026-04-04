@@ -12,11 +12,18 @@ export default function SystemSettings() {
   const [form, setForm] = useState<Record<string, string>>({
     anthropic_api_key: "",
     cron_secret: "",
+    extraction_model: "",
+    classification_model: "",
   });
 
   const { data } = useQuery({
     queryKey: ["settings"],
     queryFn: () => api.get("/settings").then((r) => r.data),
+  });
+
+  const { data: modelsData } = useQuery({
+    queryKey: ["models"],
+    queryFn: () => api.get("/settings/models").then((r) => r.data).catch(() => ({ models: [] })),
   });
 
   useEffect(() => {
@@ -34,6 +41,8 @@ export default function SystemSettings() {
     },
     onError: (err: any) => toast.error(err.response?.data?.error || "Failed to save"),
   });
+
+  const models = modelsData?.models || [];
 
   return (
     <div className="space-y-4">
@@ -66,6 +75,42 @@ export default function SystemSettings() {
               placeholder="Secret key for cron endpoints"
             />
             <p className="text-xs text-muted-foreground mt-1">Required for automated email fetch</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>AI Models</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Extraction Model</label>
+            <select
+              value={form.extraction_model || ""}
+              onChange={(e) => setForm({ ...form, extraction_model: e.target.value })}
+              className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background text-foreground"
+            >
+              <option value="">Default (claude-sonnet-4-20250514)</option>
+              {models.map((m: any) => (
+                <option key={m.id} value={m.id}>{m.name} ({m.id})</option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">Model used for full invoice data extraction (higher accuracy, more tokens)</p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Classification Model</label>
+            <select
+              value={form.classification_model || ""}
+              onChange={(e) => setForm({ ...form, classification_model: e.target.value })}
+              className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background text-foreground"
+            >
+              <option value="">Default (claude-haiku-4-5-20251001)</option>
+              {models.map((m: any) => (
+                <option key={m.id} value={m.id}>{m.name} ({m.id})</option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">Model used for document type classification (cheaper, faster)</p>
           </div>
         </CardContent>
       </Card>
