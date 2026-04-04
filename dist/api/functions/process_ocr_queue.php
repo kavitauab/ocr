@@ -105,7 +105,28 @@ foreach ($jobs as $job) {
             throw new \RuntimeException("File not found: " . $job['stored_filename']);
         }
 
-        // Call Claude for extraction
+        // Classify document first (cheap Haiku call)
+        try {
+            $classification = classifyDocument($filePath, $job['file_type']);
+            if (!isInvoiceCategory($classification['category'])) {
+                // Not an invoice — skip OCR extraction
+                $db->prepare("UPDATE invoices SET status = 'skipped', document_type = :dt, skip_reason = :sr, updated_at = NOW() WHERE id = :id")
+                    ->execute(['dt' => $classification['category'], 'sr' => $classification['detail'], 'id' => $invoiceId]);
+                $db->prepare("UPDATE ocr_jobs SET status = 'completed', returned_at = NOW() WHERE id = :id")
+                    ->execute(['id' => $jobId]);
+                if (isset($classification['usage'])) {
+                    trackApiCall($companyId, $classification['usage']);
+                }
+                $jobResult['status'] = 'skipped';
+                $jobResult['skipReason'] = $classification['detail'];
+                $summary['succeeded']++;
+                continue;
+            }
+        } catch (\Throwable $classifyErr) {
+            error_log("Classification failed for $invoiceId, proceeding with extraction: " . $classifyErr->getMessage());
+        }
+
+        // Call Claude for extraction (full Sonnet call)
         $extractionResult = extractInvoiceData($filePath, $job['file_type'], $enabledFields, true);
         $extracted = $extractionResult['data'] ?? $extractionResult;
         if (isset($extractionResult['usage']) && is_array($extractionResult['usage'])) {
