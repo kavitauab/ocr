@@ -25,11 +25,11 @@ class Setting extends BaseResource {
         $apiKey = getAnthropicApiKey();
         if (!$apiKey) sendJSON(['error' => 'API key not configured'], 400);
 
-        $ch = curl_init('https://api.anthropic.com/v1/models');
+        $ch = curl_init('https://api.anthropic.com/v1/models?limit=100');
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER => [
-                'x-api-key: ' . $apiKey,
+                'X-Api-Key: ' . $apiKey,
                 'anthropic-version: 2023-06-01',
             ],
             CURLOPT_TIMEOUT => 15,
@@ -38,15 +38,22 @@ class Setting extends BaseResource {
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        if ($httpCode !== 200) sendJSON(['error' => 'Failed to fetch models'], 500);
+        if ($httpCode !== 200) {
+            $err = json_decode($response, true);
+            sendJSON(['error' => 'Failed to fetch models: ' . ($err['error']['message'] ?? "HTTP $httpCode")], 500);
+        }
 
         $data = json_decode($response, true);
         $models = [];
         foreach ($data['data'] ?? [] as $m) {
-            $models[] = ['id' => $m['id'], 'name' => $m['display_name'] ?? $m['id'], 'created' => $m['created_at'] ?? null];
+            $models[] = [
+                'id' => $m['id'],
+                'name' => $m['display_name'] ?? $m['id'],
+                'created' => $m['created_at'] ?? null,
+                'maxTokens' => $m['max_tokens'] ?? null,
+                'supportsPdf' => $m['capabilities']['pdf_input']['supported'] ?? false,
+            ];
         }
-        // Sort by name
-        usort($models, fn($a, $b) => strcmp($a['name'], $b['name']));
         sendJSON(['models' => $models]);
     }
 
