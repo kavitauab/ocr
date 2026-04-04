@@ -107,7 +107,7 @@ if (($pathParts[0] ?? '') === 'user' && ($pathParts[1] ?? '') === 'companies') {
 
 // Resource routing
 $resourceKey = $pathParts[0] ?? '';
-$reservedActions = ['stats', 'filter', 'health'];
+$reservedActions = ['stats', 'filter', 'health', 'models'];
 $id = isset($pathParts[1]) && !in_array($pathParts[1], $reservedActions) ? $pathParts[1] : null;
 $action = $pathParts[2] ?? (isset($pathParts[1]) && in_array($pathParts[1], $reservedActions) ? $pathParts[1] : null);
 
