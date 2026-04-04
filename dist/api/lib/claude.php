@@ -4,7 +4,7 @@
 function getAllExtractionFields() {
     return [
         'documentType' => ['type' => 'string', 'enum' => ['invoice', 'proforma', 'credit_note'], 'description' => 'Type of document: "invoice" for commercial/standard invoices, "proforma" for proforma/advance invoices (išankstinė sąskaita faktūra), "credit_note" for credit notes (kreditinė sąskaita faktūra)'],
-        'invoiceNumber' => ['type' => 'string', 'description' => 'The invoice number/ID. If the document shows a series and number separately (e.g. "Serija TE2023 Nr. 285"), combine them into a single identifier without spaces or separators (e.g. "TE2023285"). Remove prefixes like "Nr.", "No.", "Serija" etc.'],
+        'invoiceNumber' => ['type' => 'string', 'description' => 'The invoice number/ID. If the document shows a series and number separately (e.g. "Serija TE2023 Nr. 285"), combine them with a dash (e.g. "TE2023-285"). Remove prefixes like "Nr.", "No.", "Serija" etc. If the invoice number is already a single value (e.g. "SJ-152138"), keep it as-is.'],
         'invoiceDate' => ['type' => 'string', 'description' => 'Invoice issue date in YYYY-MM-DD format'],
         'dueDate' => ['type' => ['string', 'null'], 'description' => 'Payment due date in YYYY-MM-DD format, or null if not stated'],
         'vendorName' => ['type' => 'string', 'description' => 'Name of the company/person issuing the invoice'],
