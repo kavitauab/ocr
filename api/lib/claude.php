@@ -147,7 +147,7 @@ Rules:
     $requestBody = [
         'model' => $model,
         'max_tokens' => 4096,
-        'system' => $systemPrompt,
+        'system' => [['type' => 'text', 'text' => $systemPrompt, 'cache_control' => ['type' => 'ephemeral']]],
         'tools' => [$tool],
         'tool_choice' => ['type' => 'tool', 'name' => 'save_invoice_data'],
         'messages' => [
@@ -169,7 +169,6 @@ Rules:
             'Content-Type: application/json',
             'x-api-key: ' . $apiKey,
             'anthropic-version: 2023-06-01',
-            'anthropic-beta: pdfs-2024-09-25',
         ],
         CURLOPT_TIMEOUT => 120,
     ]);
@@ -266,7 +265,7 @@ function classifyDocument($filePath, $fileType) {
     $requestBody = [
         'model' => $model,
         'max_tokens' => 256,
-        'system' => 'You are a document classifier. Identify the type of business document shown. Be precise — distinguish between invoices, proforma invoices, credit notes, order confirmations, work acceptance acts, and other document types.',
+        'system' => [['type' => 'text', 'text' => 'You are a document classifier. Identify the type of business document shown. Be precise — distinguish between invoices, proforma invoices, credit notes, order confirmations, work acceptance acts, and other document types.', 'cache_control' => ['type' => 'ephemeral']]],
         'tools' => [$tool],
         'tool_choice' => ['type' => 'tool', 'name' => 'classify_document'],
         'messages' => [['role' => 'user', 'content' => $contentBlocks]],
@@ -284,7 +283,6 @@ function classifyDocument($filePath, $fileType) {
             'Content-Type: application/json',
             'x-api-key: ' . $apiKey,
             'anthropic-version: 2023-06-01',
-            'anthropic-beta: pdfs-2024-09-25',
         ],
         CURLOPT_TIMEOUT => 30,
     ]);
