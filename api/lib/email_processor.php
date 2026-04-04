@@ -90,6 +90,11 @@ function processCompanyEmails($companyId) {
                     // Classify with Haiku (cheap)
                     $classification = classifyDocument($filePath, $saved['fileType']);
 
+                    // Track classification API usage
+                    if (!empty($classification['usage'])) {
+                        trackApiCall($companyId, $classification['usage']);
+                    }
+
                     $classified[] = [
                         'attachment' => $attachment,
                         'saved' => $saved,

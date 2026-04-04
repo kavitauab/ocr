@@ -122,6 +122,10 @@ foreach ($jobs as $job) {
                 $summary['succeeded']++;
                 continue;
             }
+            // Track classification usage even when proceeding to extraction
+            if (isset($classification['usage'])) {
+                trackApiCall($companyId, $classification['usage']);
+            }
         } catch (\Throwable $classifyErr) {
             error_log("Classification failed for $invoiceId, proceeding with extraction: " . $classifyErr->getMessage());
         }

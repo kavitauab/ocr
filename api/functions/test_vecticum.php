@@ -86,6 +86,9 @@ if ($action === 'reprocess-email') {
         $filePath = getFilePath($saved['storedFilename']);
 
         $classification = classifyDocument($filePath, $saved['fileType']);
+        if (!empty($classification['usage'])) {
+            trackApiCall($email['company_id'], $classification['usage']);
+        }
         $classified[] = [
             'attachment' => $a, 'saved' => $saved, 'buffer' => $buffer,
             'filePath' => $filePath, 'classification' => $classification,
