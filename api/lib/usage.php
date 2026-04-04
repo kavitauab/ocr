@@ -1,16 +1,29 @@
 <?php
 
 function getOcrModelPricingUsdPerMillion($model) {
+    // Pricing per million tokens (USD)
     $pricing = [
-        'claude-sonnet-4-20250514' => [
-            'input' => 3.00,
-            'output' => 15.00,
-            'cache_creation_input' => 3.75,
-            'cache_read_input' => 0.30,
-        ],
+        // Haiku models: $1 input, $5 output
+        'claude-haiku-4-5-20251001' => ['input' => 1.00, 'output' => 5.00, 'cache_creation_input' => 1.25, 'cache_read_input' => 0.10],
+        // Sonnet models: $3 input, $15 output
+        'claude-sonnet-4-20250514' => ['input' => 3.00, 'output' => 15.00, 'cache_creation_input' => 3.75, 'cache_read_input' => 0.30],
+        'claude-sonnet-4-5-20250929' => ['input' => 3.00, 'output' => 15.00, 'cache_creation_input' => 3.75, 'cache_read_input' => 0.30],
+        'claude-sonnet-4-6' => ['input' => 3.00, 'output' => 15.00, 'cache_creation_input' => 3.75, 'cache_read_input' => 0.30],
+        // Opus models: $15 input, $75 output
+        'claude-opus-4-20250514' => ['input' => 15.00, 'output' => 75.00, 'cache_creation_input' => 18.75, 'cache_read_input' => 1.50],
+        'claude-opus-4-1-20250805' => ['input' => 15.00, 'output' => 75.00, 'cache_creation_input' => 18.75, 'cache_read_input' => 1.50],
+        'claude-opus-4-5-20251101' => ['input' => 15.00, 'output' => 75.00, 'cache_creation_input' => 18.75, 'cache_read_input' => 1.50],
+        'claude-opus-4-6' => ['input' => 15.00, 'output' => 75.00, 'cache_creation_input' => 18.75, 'cache_read_input' => 1.50],
     ];
 
-    return $pricing[$model] ?? null;
+    if (isset($pricing[$model])) return $pricing[$model];
+
+    // Fallback: guess pricing from model name
+    if (strpos($model, 'haiku') !== false) return $pricing['claude-haiku-4-5-20251001'];
+    if (strpos($model, 'opus') !== false) return $pricing['claude-opus-4-6'];
+    if (strpos($model, 'sonnet') !== false) return $pricing['claude-sonnet-4-6'];
+
+    return null;
 }
 
 function calculateEstimatedOcrCostUsd($model, $inputTokens, $outputTokens, $cacheCreationInputTokens, $cacheReadInputTokens) {

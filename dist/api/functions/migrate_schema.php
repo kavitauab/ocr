@@ -228,6 +228,10 @@ $ensureColumn('companies', 'vecticum_auto_send', 'TINYINT(1) NOT NULL DEFAULT 0'
 $ensureColumn('companies', 'vat_number', 'VARCHAR(100) NULL');
 $ensureColumn('companies', 'buyer_keywords', 'VARCHAR(500) NULL');
 
+// --- OCR model tracking on invoices ---
+$ensureColumn('invoices', 'ocr_model', 'VARCHAR(100) NULL');
+$ensureColumn('invoices', 'ocr_escalated', 'TINYINT(1) NOT NULL DEFAULT 0');
+
 // --- Document classification: skip_reason + additional_files + skipped status ---
 $ensureColumn('invoices', 'skip_reason', 'VARCHAR(255) NULL');
 $ensureColumn('invoices', 'additional_files', 'JSON NULL');

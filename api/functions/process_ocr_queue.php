@@ -130,12 +130,14 @@ foreach ($jobs as $job) {
             error_log("Classification failed for $invoiceId, proceeding with extraction: " . $classifyErr->getMessage());
         }
 
-        // Call Claude for extraction (full Sonnet call)
+        // Call Claude for extraction (smart: tries cheap model first, escalates if needed)
         $extractionResult = extractInvoiceData($filePath, $job['file_type'], $enabledFields, true);
         $extracted = $extractionResult['data'] ?? $extractionResult;
         if (isset($extractionResult['usage']) && is_array($extractionResult['usage'])) {
             $ocrUsage = $extractionResult['usage'];
         }
+        $modelUsed = $extractionResult['model_used'] ?? ($ocrUsage['model'] ?? 'unknown');
+        $escalated = $extractionResult['escalated'] ?? false;
 
         // Update invoice with extracted data
         $invoiceUpdateParams = [
@@ -158,6 +160,8 @@ foreach ($jobs as $job) {
             'bankDetails' => $extracted['bankDetails'] ?? null,
             'confidence' => json_encode($extracted['confidence'] ?? []),
             'raw' => json_encode($extracted),
+            'ocrModel' => $modelUsed,
+            'ocrEscalated' => $escalated ? 1 : 0,
             'id' => $invoiceId,
         ];
 
@@ -169,6 +173,7 @@ foreach ($jobs as $job) {
             total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
             subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
             bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
+            ocr_model = :ocrModel, ocr_escalated = :ocrEscalated,
             processing_error = NULL, ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id");
         $stmt->execute($invoiceUpdateParams);
 
