@@ -51,18 +51,33 @@ class Email extends BaseResource {
         $enriched = array_map(function($email) use ($db) {
             $email = snakeToCamel($email);
             // Get invoices linked to this email
-            $invStmt = $db->prepare("SELECT id, original_filename, status, document_type, skip_reason FROM invoices WHERE email_inbox_id = :eid ORDER BY created_at");
+            $invStmt = $db->prepare("SELECT id, original_filename, status, document_type, skip_reason, additional_files FROM invoices WHERE email_inbox_id = :eid ORDER BY created_at");
             $invStmt->execute(['eid' => $email['id']]);
             $invoices = $invStmt->fetchAll();
-            $email['attachments'] = array_map(function($inv) {
-                return [
+            $atts = [];
+            foreach ($invoices as $inv) {
+                $atts[] = [
                     'invoiceId' => $inv['id'],
                     'filename' => $inv['original_filename'],
                     'status' => $inv['status'],
                     'documentType' => $inv['document_type'],
                     'skipReason' => $inv['skip_reason'],
                 ];
-            }, $invoices);
+                // Include additional files linked to this invoice
+                $af = json_decode($inv['additional_files'] ?? '[]', true);
+                if (is_array($af)) {
+                    foreach ($af as $f) {
+                        $atts[] = [
+                            'invoiceId' => $inv['id'],
+                            'filename' => $f['filename'],
+                            'status' => 'additional',
+                            'documentType' => $f['documentType'] ?? null,
+                            'skipReason' => $f['documentDetail'] ?? null,
+                        ];
+                    }
+                }
+            }
+            $email['attachments'] = $atts;
             return $email;
         }, $emails);
 

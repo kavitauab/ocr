@@ -256,6 +256,20 @@ foreach ($jobs as $job) {
                         $db->prepare("UPDATE invoices SET vecticum_id = :vid, vecticum_sent_at = NOW(), updated_at = NOW() WHERE id = :id")
                             ->execute(['vid' => $vecResult['externalId'], 'id' => $invoiceId]);
                         $jobResult['vecticumAutoSend'] = 'success';
+
+                        // Upload additional files to Vecticum
+                        $additionalFiles = json_decode($updatedInvoice['additional_files'] ?? '[]', true);
+                        if (!empty($additionalFiles)) {
+                            $uploadDir = rtrim(UPLOAD_DIR, '/');
+                            foreach ($additionalFiles as $af) {
+                                try {
+                                    $afPath = $uploadDir . '/' . $af['storedFilename'];
+                                    uploadAdditionalFileToVecticum($companyData, $vecResult['externalId'], $afPath, $af['filename']);
+                                } catch (\Throwable $afErr) {
+                                    error_log("Additional file upload to Vecticum failed: " . $afErr->getMessage());
+                                }
+                            }
+                        }
                     } else {
                         $vecErr = $vecResult['error'] ?? 'unknown';
                         $db->prepare("UPDATE invoices SET vecticum_error = :err, updated_at = NOW() WHERE id = :id")
