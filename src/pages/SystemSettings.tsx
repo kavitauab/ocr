@@ -13,7 +13,10 @@ export default function SystemSettings() {
     anthropic_api_key: "",
     cron_secret: "",
     extraction_model: "",
+    extraction_model_fast: "",
     classification_model: "",
+    smart_extraction: "1",
+    extraction_confidence_threshold: "0.9",
   });
 
   const { data } = useQuery({
@@ -84,19 +87,52 @@ export default function SystemSettings() {
           <CardTitle>AI Models</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <input type="checkbox" checked={form.smart_extraction !== "0"} onChange={(e) => setForm({ ...form, smart_extraction: e.target.checked ? "1" : "0" })} />
+            Smart Extraction (try cheap model first, escalate if low confidence)
+          </label>
+          <p className="text-xs text-muted-foreground -mt-2">Saves ~80% on well-formatted invoices by using the fast model first</p>
+
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Extraction Model</label>
+            <label className="text-sm font-medium text-foreground">Primary Extraction Model</label>
             <select
               value={form.extraction_model || ""}
               onChange={(e) => setForm({ ...form, extraction_model: e.target.value })}
               className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background text-foreground"
             >
-              <option value="">Default (claude-sonnet-4-20250514)</option>
+              <option value="">Default (claude-sonnet-4-6)</option>
               {models.map((m: any) => (
                 <option key={m.id} value={m.id}>{m.name} ({m.id})</option>
               ))}
             </select>
-            <p className="text-xs text-muted-foreground">Model used for full invoice data extraction (higher accuracy, more tokens)</p>
+            <p className="text-xs text-muted-foreground">High-accuracy model used for extraction (or as fallback when smart extraction escalates)</p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Fast Extraction Model</label>
+            <select
+              value={form.extraction_model_fast || ""}
+              onChange={(e) => setForm({ ...form, extraction_model_fast: e.target.value })}
+              className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background text-foreground"
+            >
+              <option value="">Default (claude-haiku-4-5-20251001)</option>
+              {models.map((m: any) => (
+                <option key={m.id} value={m.id}>{m.name} ({m.id})</option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">Cheap model tried first when smart extraction is enabled (~3x cheaper)</p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Confidence Threshold</label>
+            <Input
+              type="number"
+              step="0.05"
+              min="0"
+              max="1"
+              value={form.extraction_confidence_threshold || "0.9"}
+              onChange={(e) => setForm({ ...form, extraction_confidence_threshold: e.target.value })}
+              className="w-32"
+            />
+            <p className="text-xs text-muted-foreground">Minimum confidence score on critical fields (invoice#, vendor, total, currency) to accept cheap model result. Below this → escalate to primary model. (0.0-1.0)</p>
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Classification Model</label>
@@ -110,7 +146,7 @@ export default function SystemSettings() {
                 <option key={m.id} value={m.id}>{m.name} ({m.id})</option>
               ))}
             </select>
-            <p className="text-xs text-muted-foreground">Model used for document type classification (cheaper, faster)</p>
+            <p className="text-xs text-muted-foreground">Model used for document type classification (invoice vs act vs other)</p>
           </div>
         </CardContent>
       </Card>

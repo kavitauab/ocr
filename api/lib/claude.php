@@ -44,6 +44,57 @@ function buildClaudeUsageMetadata($responseData, $fallbackModel) {
 }
 
 function extractInvoiceData($filePath, $fileType, $enabledFields = null, $includeUsage = false) {
+    // Two-tier extraction: try cheap model first, escalate if low confidence
+    $smartExtraction = getSetting('smart_extraction', '1') === '1';
+    $primaryModel = getSetting('extraction_model', 'claude-sonnet-4-6');
+    $cheapModel = getSetting('extraction_model_fast', 'claude-haiku-4-5-20251001');
+    $confidenceThreshold = floatval(getSetting('extraction_confidence_threshold', '0.9'));
+
+    if ($smartExtraction && $cheapModel && $cheapModel !== $primaryModel) {
+        // Try cheap model first
+        $cheapResult = _callExtractionApi($filePath, $fileType, $enabledFields, $cheapModel);
+        $extracted = $cheapResult['data'] ?? $cheapResult;
+        $cheapUsage = $cheapResult['usage'] ?? null;
+
+        // Check confidence scores
+        $confidences = $extracted['confidence'] ?? [];
+        $criticalFields = ['invoiceNumber', 'vendorName', 'totalAmount', 'currency'];
+        $minConfidence = 1.0;
+        foreach ($criticalFields as $field) {
+            if (isset($confidences[$field])) {
+                $minConfidence = min($minConfidence, floatval($confidences[$field]));
+            }
+        }
+
+        if ($minConfidence >= $confidenceThreshold) {
+            // Cheap model is confident enough
+            if (!$includeUsage) return $extracted;
+            return ['data' => $extracted, 'usage' => $cheapUsage, 'model_used' => $cheapModel, 'escalated' => false];
+        }
+
+        // Low confidence — escalate to primary model
+        $primaryResult = _callExtractionApi($filePath, $fileType, $enabledFields, $primaryModel);
+        $primaryExtracted = $primaryResult['data'] ?? $primaryResult;
+        $primaryUsage = $primaryResult['usage'] ?? null;
+
+        // Merge usage (sum tokens from both calls)
+        if ($cheapUsage && $primaryUsage) {
+            $primaryUsage['inputTokens'] += $cheapUsage['inputTokens'];
+            $primaryUsage['outputTokens'] += $cheapUsage['outputTokens'];
+            $primaryUsage['totalTokens'] += $cheapUsage['totalTokens'];
+            $primaryUsage['cacheCreationInputTokens'] += $cheapUsage['cacheCreationInputTokens'] ?? 0;
+            $primaryUsage['cacheReadInputTokens'] += $cheapUsage['cacheReadInputTokens'] ?? 0;
+        }
+
+        if (!$includeUsage) return $primaryExtracted;
+        return ['data' => $primaryExtracted, 'usage' => $primaryUsage, 'model_used' => $primaryModel, 'escalated' => true];
+    }
+
+    // No smart extraction — use primary model directly
+    return _callExtractionApi($filePath, $fileType, $enabledFields, $primaryModel, $includeUsage);
+}
+
+function _callExtractionApi($filePath, $fileType, $enabledFields, $model, $includeUsage = true) {
     $fileData = file_get_contents($filePath);
     if ($fileData === false) {
         throw new Exception('Cannot read file: ' . $filePath);
@@ -141,8 +192,6 @@ Rules:
             'required' => $required,
         ],
     ];
-
-    $model = getSetting('extraction_model', 'claude-sonnet-4-6');
 
     $requestBody = [
         'model' => $model,
