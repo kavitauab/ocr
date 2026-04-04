@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useCompany } from "@/lib/company";
 import { useAuth } from "@/lib/auth";
 import api from "@/api/client";
@@ -37,6 +37,7 @@ export default function Invoices() {
   const { user } = useAuth();
   const isSuperadmin = user?.role === "superadmin";
   const { selectedCompany, companies } = useCompany();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const page = parseInt(searchParams.get("page") || "1");
   const status = searchParams.get("status") || "";
@@ -132,16 +133,16 @@ export default function Invoices() {
   const colCount = isSuperadmin && !groupByCompany ? 9 : 8;
 
   const renderInvoiceRow = (inv: any, showCompany: boolean) => (
-    <TableRow key={inv.id} className="transition-colors duration-150 hover:bg-primary/[0.03] group">
+    <TableRow key={inv.id} className="transition-colors duration-150 hover:bg-primary/[0.03] group cursor-pointer" onClick={() => navigate(`/invoices/${inv.id}`)}>
       {showCompany && (
         <TableCell>
           <span className="text-sm text-foreground">{inv.companyName || "\u2014"}</span>
         </TableCell>
       )}
       <TableCell>
-        <Link to={`/invoices/${inv.id}`} className="text-primary hover:text-primary-dark text-sm font-medium hover:underline">
+        <span className="text-primary text-sm font-medium">
           {inv.invoiceNumber || inv.originalFilename}
-        </Link>
+        </span>
       </TableCell>
       <TableCell className="text-sm text-foreground">{inv.vendorName || "\u2014"}</TableCell>
       <TableCell className="text-sm text-muted-foreground hidden md:table-cell">{inv.invoiceDate || "\u2014"}</TableCell>
