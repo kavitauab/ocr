@@ -91,11 +91,11 @@ export default function Layout() {
     <>
       {/* Logo */}
       <div className={`flex items-center gap-2.5 border-b border-border/60 ${isCollapsed ? "justify-center p-3" : "px-4 py-3.5"}`}>
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 text-white font-bold text-sm shadow-sm">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#1a1a1a] text-[#b8965c] font-bold text-sm shadow-sm">
           S
         </div>
         {!isCollapsed && (
-          <span className="font-semibold text-sm tracking-tight text-foreground">ScanInvoice</span>
+          <span className="font-semibold text-sm tracking-tight text-foreground" style={{fontFamily: "'Playfair Display', serif"}}>Gentrula<span className="text-[#b8965c]">.</span></span>
         )}
       </div>
 
@@ -301,10 +301,10 @@ export default function Layout() {
         >
           <Menu className="h-5 w-5 text-foreground" />
         </button>
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-blue-600 to-blue-700 text-white font-bold text-xs">
-          S
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#1a1a1a] text-[#b8965c] font-bold text-xs" style={{fontFamily: "'Playfair Display', serif"}}>
+          G
         </div>
-        <span className="font-semibold text-sm text-foreground">ScanInvoice</span>
+        <span className="font-semibold text-sm text-foreground" style={{fontFamily: "'Playfair Display', serif"}}>Gentrula<span className="text-[#b8965c]">.</span></span>
         <div className="flex-1" />
         <Avatar email={user?.email} size="sm" />
       </header>
@@ -313,10 +313,10 @@ export default function Layout() {
       <Sheet open={mobileOpen} onClose={() => setMobileOpen(false)} side="left">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 text-white font-bold text-sm">
-              S
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1a1a1a] text-[#b8965c] font-bold text-sm" style={{fontFamily: "'Playfair Display', serif"}}>
+              G
             </div>
-            <span className="font-semibold text-sm">ScanInvoice</span>
+            <span className="font-semibold text-sm" style={{fontFamily: "'Playfair Display', serif"}}>Gentrula<span className="text-[#b8965c]">.</span></span>
           </div>
           <button
             onClick={() => setMobileOpen(false)}

@@ -30,38 +30,38 @@ export default function Login() {
   return (
     <div className="flex min-h-screen">
       {/* Brand panel - desktop only */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 bg-[#1a1a1a] relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-20 left-20 h-64 w-64 rounded-full bg-white/20 blur-3xl" />
-          <div className="absolute bottom-20 right-20 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
+          <div className="absolute top-20 left-20 h-64 w-64 rounded-full bg-[#b8965c]/30 blur-3xl" />
+          <div className="absolute bottom-20 right-20 h-96 w-96 rounded-full bg-[#b8965c]/20 blur-3xl" />
         </div>
         <div className="relative z-10 flex flex-col justify-center px-16">
           <div className="flex items-center gap-3 mb-8">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm text-white font-bold text-lg shadow-lg">
-              S
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#b8965c]/20 backdrop-blur-sm text-[#b8965c] font-bold text-lg shadow-lg" style={{fontFamily: "'Playfair Display', serif"}}>
+              G
             </div>
-            <span className="text-2xl font-bold text-white tracking-tight">ScanInvoice</span>
+            <span className="text-2xl font-bold text-white tracking-tight" style={{fontFamily: "'Playfair Display', serif"}}>Gentrula<span className="text-[#b8965c]">.</span></span>
           </div>
-          <h2 className="text-4xl font-bold text-white leading-tight mb-4">
+          <h2 className="text-4xl font-bold text-white leading-tight mb-4" style={{fontFamily: "'Playfair Display', serif"}}>
             AI-Powered<br />Invoice Processing
           </h2>
-          <p className="text-blue-100 text-lg leading-relaxed max-w-md">
+          <p className="text-[#b0b0b0] text-lg leading-relaxed max-w-md">
             Extract data from invoices automatically with high accuracy. Save time and reduce manual entry errors.
           </p>
           <div className="mt-10 flex items-center gap-6">
             <div className="text-center">
               <div className="text-2xl font-bold text-white">99%</div>
-              <div className="text-xs text-blue-200 mt-0.5">Accuracy</div>
+              <div className="text-xs text-[#b0b0b0] mt-0.5">Accuracy</div>
             </div>
             <div className="h-8 w-px bg-white/20" />
             <div className="text-center">
               <div className="text-2xl font-bold text-white">&lt;10s</div>
-              <div className="text-xs text-blue-200 mt-0.5">Per Invoice</div>
+              <div className="text-xs text-[#b0b0b0] mt-0.5">Per Invoice</div>
             </div>
             <div className="h-8 w-px bg-white/20" />
             <div className="text-center">
               <div className="text-2xl font-bold text-white">PDF</div>
-              <div className="text-xs text-blue-200 mt-0.5">& Images</div>
+              <div className="text-xs text-[#b0b0b0] mt-0.5">& Images</div>
             </div>
           </div>
         </div>
@@ -72,10 +72,10 @@ export default function Login() {
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
           <div className="lg:hidden flex flex-col items-center mb-8">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white font-bold text-lg shadow-lg mb-3">
-              S
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#1a1a1a] text-[#b8965c] font-bold text-lg shadow-lg mb-3" style={{fontFamily: "'Playfair Display', serif"}}>
+              G
             </div>
-            <span className="text-xl font-bold text-foreground tracking-tight">ScanInvoice</span>
+            <span className="text-xl font-bold text-foreground tracking-tight" style={{fontFamily: "'Playfair Display', serif"}}>Gentrula<span className="text-[#b8965c]">.</span></span>
           </div>
 
           <Card className="shadow-xl border-border/50">
