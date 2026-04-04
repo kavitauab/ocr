@@ -90,13 +90,10 @@ export default function Layout() {
   const navContent = (isCollapsed: boolean) => (
     <>
       {/* Logo */}
-      <div className={`flex items-center gap-2.5 border-b border-border/60 ${isCollapsed ? "justify-center p-3" : "px-4 py-3.5"}`}>
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#1a1a1a] text-[#b8965c] font-bold text-sm shadow-sm">
-          S
-        </div>
-        {!isCollapsed && (
-          <span className="font-semibold text-sm tracking-tight text-foreground" style={{fontFamily: "'Playfair Display', serif"}}>Gentrula<span className="text-[#b8965c]">.</span></span>
-        )}
+      <div className={`flex items-center border-b border-border/60 ${isCollapsed ? "justify-center p-3" : "px-4 py-4"}`}>
+        <span className={`font-semibold tracking-tight text-foreground ${isCollapsed ? "text-base" : "text-lg"}`} style={{fontFamily: "'Playfair Display', serif"}}>
+          {isCollapsed ? "G" : "Gentrula"}<span className="text-[#b8965c]">.</span>
+        </span>
       </div>
 
       {/* Company switcher */}
@@ -238,9 +235,9 @@ export default function Layout() {
       {/* User section */}
       <div className={`border-t border-border/60 ${isCollapsed ? "p-2" : "px-3 py-3"}`}>
         {isCollapsed ? (
-          <Tooltip content={user?.email || "User"} side="right">
-            <button onClick={handleLogout} className="flex items-center justify-center mx-auto">
-              <Avatar email={user?.email} size="sm" />
+          <Tooltip content={user?.name || user?.email || "User"} side="right">
+            <button onClick={() => navigate("/profile")} className="flex items-center justify-center mx-auto text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+              {(user?.name || "U")[0].toUpperCase()}
             </button>
           </Tooltip>
         ) : (
@@ -248,7 +245,6 @@ export default function Layout() {
             position="top"
             trigger={
               <button className="flex items-center gap-2.5 w-full px-2 py-1.5 rounded-lg hover:bg-muted transition-colors text-left">
-                <Avatar email={user?.email} size="sm" />
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-medium text-foreground truncate">{user?.name || user?.email}</div>
                   <div className="text-[10px] text-muted-foreground capitalize">{user?.role || "user"}</div>
@@ -301,23 +297,14 @@ export default function Layout() {
         >
           <Menu className="h-5 w-5 text-foreground" />
         </button>
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#1a1a1a] text-[#b8965c] font-bold text-xs" style={{fontFamily: "'Playfair Display', serif"}}>
-          G
-        </div>
-        <span className="font-semibold text-sm text-foreground" style={{fontFamily: "'Playfair Display', serif"}}>Gentrula<span className="text-[#b8965c]">.</span></span>
+        <span className="font-semibold text-lg text-foreground" style={{fontFamily: "'Playfair Display', serif"}}>Gentrula<span className="text-[#b8965c]">.</span></span>
         <div className="flex-1" />
-        <Avatar email={user?.email} size="sm" />
       </header>
 
       {/* Mobile drawer */}
       <Sheet open={mobileOpen} onClose={() => setMobileOpen(false)} side="left">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1a1a1a] text-[#b8965c] font-bold text-sm" style={{fontFamily: "'Playfair Display', serif"}}>
-              G
-            </div>
-            <span className="font-semibold text-sm" style={{fontFamily: "'Playfair Display', serif"}}>Gentrula<span className="text-[#b8965c]">.</span></span>
-          </div>
+          <span className="font-semibold text-lg" style={{fontFamily: "'Playfair Display', serif"}}>Gentrula<span className="text-[#b8965c]">.</span></span>
           <button
             onClick={() => setMobileOpen(false)}
             className="flex items-center justify-center h-8 w-8 rounded-lg hover:bg-muted transition-colors"

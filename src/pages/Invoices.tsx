@@ -135,12 +135,7 @@ export default function Invoices() {
     <TableRow key={inv.id} className="transition-colors duration-150 hover:bg-primary/[0.03] group">
       {showCompany && (
         <TableCell>
-          <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-semibold text-muted-foreground">
-              {(inv.companyName || "?")[0].toUpperCase()}
-            </div>
-            <span className="text-sm text-foreground">{inv.companyName || "\u2014"}</span>
-          </div>
+          <span className="text-sm text-foreground">{inv.companyName || "\u2014"}</span>
         </TableCell>
       )}
       <TableCell>
@@ -361,9 +356,6 @@ export default function Invoices() {
                     <TableRow key={`group-${group.companyId}`} className="bg-muted/50 border-t-2 border-border">
                       <TableCell colSpan={8}>
                         <div className="flex items-center gap-2">
-                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-primary/10 text-[10px] font-bold text-primary">
-                            {group.name[0].toUpperCase()}
-                          </div>
                           <span className="font-semibold text-sm text-foreground">{group.name}</span>
                           {group.code && <span className="text-xs text-muted-foreground">{group.code}</span>}
                           <span className="text-xs text-muted-foreground">

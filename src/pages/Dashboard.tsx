@@ -238,16 +238,11 @@ export default function Dashboard() {
                         onClick={() => companyId && navigate(`/invoices?companyId=${companyId}`)}
                       >
                         <TableCell>
-                          <div className="flex items-center gap-2.5">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-semibold text-muted-foreground">
-                              {getCompanyName(c)[0].toUpperCase()}
-                            </div>
-                            <div>
-                              <div className="font-medium text-foreground">{getCompanyName(c)}</div>
-                              {getCompanyCode(c) && (
-                                <div className="text-xs text-muted-foreground">{getCompanyCode(c)}</div>
-                              )}
-                            </div>
+                          <div>
+                            <div className="font-medium text-foreground">{getCompanyName(c)}</div>
+                            {getCompanyCode(c) && (
+                              <div className="text-xs text-muted-foreground">{getCompanyCode(c)}</div>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-center tabular-nums font-medium">{formatNumber(c.totalInvoices)}</TableCell>
