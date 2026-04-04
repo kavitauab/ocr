@@ -255,7 +255,7 @@ function classifyDocument($filePath, $fileType) {
         ],
     ];
 
-    $model = 'claude-haiku-4-20250414';
+    $model = 'claude-haiku-4-5-20251001';
 
     $requestBody = [
         'model' => $model,
