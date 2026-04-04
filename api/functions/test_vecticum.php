@@ -70,40 +70,95 @@ if ($action === 'reprocess-email') {
 
     $attachments = fetchAttachments($emailCompany, $email['message_id']);
     $ALLOWED = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
-    $results = [];
 
+    // PASS 1: Save and classify all attachments
+    $classified = [];
     foreach ($attachments as $a) {
         $contentType = strtolower($a['contentType'] ?? '');
         $fileName = $a['name'] ?? 'attachment';
         $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
         $typeOk = in_array($contentType, $ALLOWED)
             || ($contentType === 'application/octet-stream' && in_array($ext, ['pdf', 'png', 'jpg', 'jpeg']));
-
         if (!$typeOk || !empty($a['isInline']) || empty($a['contentBytes'])) continue;
 
         $buffer = base64_decode($a['contentBytes']);
         $saved = saveFile($buffer, $fileName, $email['company_id']);
-        $invoiceId = generateId();
+        $filePath = getFilePath($saved['storedFilename']);
 
+        $classification = classifyDocument($filePath, $saved['fileType']);
+        $classified[] = [
+            'attachment' => $a, 'saved' => $saved, 'buffer' => $buffer,
+            'filePath' => $filePath, 'classification' => $classification,
+        ];
+    }
+
+    // PASS 2: Group into invoice-types and other-types
+    $invoiceDocs = [];
+    $otherDocs = [];
+    foreach ($classified as $item) {
+        if (isInvoiceCategory($item['classification']['category'])) {
+            $invoiceDocs[] = $item;
+        } else {
+            $otherDocs[] = $item;
+        }
+    }
+
+    // Create invoice records for invoice-type docs (queued for OCR)
+    $results = [];
+    $createdInvoiceIds = [];
+    foreach ($invoiceDocs as $item) {
+        $invoiceId = generateId();
         $db->prepare("INSERT INTO invoices (id, company_id, email_inbox_id, source, original_filename, stored_filename, file_type, file_size, status) VALUES (:id, :cid, :eid, 'email', :fn, :sf, :ft, :fs, 'queued')")
             ->execute([
                 'id' => $invoiceId, 'cid' => $email['company_id'], 'eid' => $emailId,
-                'fn' => $fileName, 'sf' => $saved['storedFilename'], 'ft' => $saved['fileType'],
-                'fs' => $a['size'] ?? strlen($buffer),
+                'fn' => $item['attachment']['name'], 'sf' => $item['saved']['storedFilename'],
+                'ft' => $item['saved']['fileType'], 'fs' => $item['attachment']['size'] ?? strlen($item['buffer']),
             ]);
-
-        // Create OCR job so the queue processor picks it up
         $jobId = generateId();
         $db->prepare("INSERT INTO ocr_jobs (id, invoice_id, company_id, provider, model, status, queued_at, attempt, max_attempts) VALUES (:id, :iid, :cid, 'anthropic', 'claude-sonnet-4-20250514', 'queued', NOW(), 1, 3)")
             ->execute(['id' => $jobId, 'iid' => $invoiceId, 'cid' => $email['company_id']]);
+        $createdInvoiceIds[] = $invoiceId;
+        $results[] = ['invoiceId' => $invoiceId, 'fileName' => $item['attachment']['name'], 'category' => $item['classification']['category']];
+    }
 
-        $results[] = ['invoiceId' => $invoiceId, 'fileName' => $fileName, 'size' => $a['size']];
+    // Handle non-invoice docs
+    if (!empty($otherDocs)) {
+        if (!empty($createdInvoiceIds)) {
+            // Link as additional files to first invoice
+            $additionalFiles = [];
+            foreach ($otherDocs as $item) {
+                $additionalFiles[] = [
+                    'filename' => $item['attachment']['name'],
+                    'storedFilename' => $item['saved']['storedFilename'],
+                    'fileType' => $item['saved']['fileType'],
+                    'fileSize' => $item['attachment']['size'] ?? strlen($item['buffer']),
+                    'documentType' => $item['classification']['category'],
+                    'documentDetail' => $item['classification']['detail'],
+                ];
+                $results[] = ['fileName' => $item['attachment']['name'], 'category' => $item['classification']['category'], 'linkedTo' => $createdInvoiceIds[0]];
+            }
+            $db->prepare("UPDATE invoices SET additional_files = :af, updated_at = NOW() WHERE id = :id")
+                ->execute(['af' => json_encode($additionalFiles), 'id' => $createdInvoiceIds[0]]);
+        } else {
+            // No invoices — create skipped records
+            foreach ($otherDocs as $item) {
+                $skipId = generateId();
+                $db->prepare("INSERT INTO invoices (id, company_id, email_inbox_id, source, original_filename, stored_filename, file_type, file_size, status, document_type, skip_reason) VALUES (:id, :cid, :eid, 'email', :fn, :sf, :ft, :fs, 'skipped', :dt, :sr)")
+                    ->execute([
+                        'id' => $skipId, 'cid' => $email['company_id'], 'eid' => $emailId,
+                        'fn' => $item['attachment']['name'], 'sf' => $item['saved']['storedFilename'],
+                        'ft' => $item['saved']['fileType'], 'fs' => $item['attachment']['size'] ?? strlen($item['buffer']),
+                        'dt' => $item['classification']['category'], 'sr' => $item['classification']['detail'],
+                    ]);
+                $results[] = ['invoiceId' => $skipId, 'fileName' => $item['attachment']['name'], 'category' => $item['classification']['category'], 'status' => 'skipped'];
+            }
+        }
     }
 
     $db->prepare("UPDATE email_inbox SET attachment_count = :c, status = 'processed' WHERE id = :id")
-        ->execute(['c' => count($results), 'id' => $emailId]);
+        ->execute(['c' => count($classified), 'id' => $emailId]);
 
-    sendJSON(['action' => 'reprocess-email', 'invoicesCreated' => count($results), 'results' => $results]);
+    sendJSON(['action' => 'reprocess-email', 'classified' => count($classified), 'invoices' => count($invoiceDocs), 'other' => count($otherDocs), 'results' => $results]);
 }
 
 if ($action === 'debug-email-attachments') {
