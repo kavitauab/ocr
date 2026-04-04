@@ -317,11 +317,11 @@ export default function Dashboard() {
                 </TableHeader>
                 <TableBody>
                   {sortedRecentInvoices.map((inv: any) => (
-                    <TableRow key={inv.id} className="transition-colors duration-150 hover:bg-primary/[0.03]">
+                    <TableRow key={inv.id} className="transition-colors duration-150 hover:bg-primary/[0.03] cursor-pointer" onClick={() => navigate(`/invoices/${inv.id}`)}>
                       <TableCell>
-                        <Link to={`/invoices/${inv.id}`} className="text-primary hover:text-primary-dark font-medium hover:underline">
+                        <span className="text-primary font-medium">
                           {inv.invoiceNumber || inv.originalFilename}
-                        </Link>
+                        </span>
                       </TableCell>
                       <TableCell className="text-foreground">{inv.vendorName || "\u2014"}</TableCell>
                       <TableCell className="text-muted-foreground hidden sm:table-cell">{inv.invoiceDate || "\u2014"}</TableCell>
