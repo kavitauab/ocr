@@ -63,7 +63,6 @@ function processCompanyEmails($companyId) {
                 $contentType = strtolower($a['contentType'] ?? '');
                 $fileName = strtolower($a['name'] ?? '');
                 $ext = pathinfo($fileName, PATHINFO_EXTENSION);
-                // Accept known types, or octet-stream with a valid file extension
                 $typeOk = in_array($contentType, $ALLOWED_ATTACHMENT_TYPES)
                     || ($contentType === 'application/octet-stream' && in_array($ext, ['pdf', 'png', 'jpg', 'jpeg']));
                 return $typeOk && empty($a['isInline']) && !empty($a['contentBytes']);
@@ -71,161 +70,222 @@ function processCompanyEmails($companyId) {
 
             $db->prepare("UPDATE email_inbox SET attachment_count = :count WHERE id = :id")->execute(['count' => count($invoiceAttachments), 'id' => $emailId]);
 
+            if (empty($invoiceAttachments)) {
+                $db->prepare("UPDATE email_inbox SET status = 'processed' WHERE id = :id")->execute(['id' => $emailId]);
+                continue;
+            }
+
+            // ========================================
+            // TWO-PASS APPROACH: Classify then Extract
+            // ========================================
+
+            // PASS 1: Save all files and classify each document
+            $classified = [];
             foreach ($invoiceAttachments as $attachment) {
                 try {
                     $buffer = base64_decode($attachment['contentBytes']);
                     $saved = saveFile($buffer, $attachment['name'], $companyId);
+                    $filePath = getFilePath($saved['storedFilename']);
+
+                    // Classify with Haiku (cheap)
+                    $classification = classifyDocument($filePath, $saved['fileType']);
+
+                    $classified[] = [
+                        'attachment' => $attachment,
+                        'saved' => $saved,
+                        'buffer' => $buffer,
+                        'classification' => $classification,
+                        'filePath' => $filePath,
+                    ];
+                } catch (Exception $e) {
+                    $errors[] = "Classification of {$attachment['name']}: " . $e->getMessage();
+                }
+            }
+
+            // PASS 2: Group into invoice-types and other-types
+            $invoiceDocs = [];
+            $otherDocs = [];
+            foreach ($classified as $item) {
+                if (isInvoiceCategory($item['classification']['category'])) {
+                    $invoiceDocs[] = $item;
+                } else {
+                    $otherDocs[] = $item;
+                }
+            }
+
+            // Process invoice documents (full OCR extraction)
+            $createdInvoiceIds = [];
+            foreach ($invoiceDocs as $item) {
+                try {
+                    $attachment = $item['attachment'];
+                    $saved = $item['saved'];
                     $invoiceId = generateId();
 
-                    $stmt = $db->prepare("INSERT INTO invoices (id, company_id, email_inbox_id, source, original_filename, stored_filename, file_type, file_size, status) VALUES (:id, :companyId, :emailId, 'email', :originalFilename, :storedFilename, :fileType, :fileSize, 'processing')");
-                    $stmt->execute([
-                        'id' => $invoiceId,
-                        'companyId' => $companyId,
-                        'emailId' => $emailId,
-                        'originalFilename' => $attachment['name'],
-                        'storedFilename' => $saved['storedFilename'],
-                        'fileType' => $saved['fileType'],
-                        'fileSize' => $attachment['size'] ?? strlen($buffer),
-                    ]);
+                    $db->prepare("INSERT INTO invoices (id, company_id, email_inbox_id, source, original_filename, stored_filename, file_type, file_size, status) VALUES (:id, :companyId, :emailId, 'email', :originalFilename, :storedFilename, :fileType, :fileSize, 'processing')")
+                        ->execute([
+                            'id' => $invoiceId, 'companyId' => $companyId, 'emailId' => $emailId,
+                            'originalFilename' => $attachment['name'],
+                            'storedFilename' => $saved['storedFilename'],
+                            'fileType' => $saved['fileType'],
+                            'fileSize' => $attachment['size'] ?? strlen($item['buffer']),
+                        ]);
 
+                    $ocrUsage = ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-20250514'];
+                    $ocrJobId = startOcrJob($invoiceId, $companyId, 'anthropic', 'claude-sonnet-4-20250514');
                     try {
-                        $filePath = getFilePath($saved['storedFilename']);
-                        $ocrRequestStarted = false;
-                        $ocrUsage = ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-20250514'];
-                        $ocrJobId = startOcrJob($invoiceId, $companyId, 'anthropic', 'claude-sonnet-4-20250514');
+                        $db->prepare("UPDATE invoices SET ocr_sent_at = NOW(), updated_at = NOW() WHERE id = :id")->execute(['id' => $invoiceId]);
+                    } catch (Throwable $e) {}
+
+                    $extractionResult = extractInvoiceData($item['filePath'], $saved['fileType'], null, true);
+                    $extracted = $extractionResult['data'] ?? $extractionResult;
+                    if (isset($extractionResult['usage'])) $ocrUsage = $extractionResult['usage'];
+
+                    // Map order_confirmation to proforma
+                    $docType = $extracted['documentType'] ?? $item['classification']['category'];
+                    if ($docType === 'order_confirmation') $docType = 'proforma';
+
+                    $invoiceUpdateParams = [
+                        'documentType' => $docType,
+                        'invoiceNumber' => $extracted['invoiceNumber'] ?? null,
+                        'invoiceDate' => $extracted['invoiceDate'] ?? null,
+                        'dueDate' => $extracted['dueDate'] ?? null,
+                        'vendorName' => $extracted['vendorName'] ?? null,
+                        'vendorAddress' => $extracted['vendorAddress'] ?? null,
+                        'vendorVatId' => $extracted['vendorVatId'] ?? null,
+                        'buyerName' => $extracted['buyerName'] ?? null,
+                        'buyerAddress' => $extracted['buyerAddress'] ?? null,
+                        'buyerVatId' => $extracted['buyerVatId'] ?? null,
+                        'totalAmount' => isset($extracted['totalAmount']) ? (string)$extracted['totalAmount'] : null,
+                        'currency' => $extracted['currency'] ?? null,
+                        'taxAmount' => isset($extracted['taxAmount']) ? (string)$extracted['taxAmount'] : null,
+                        'subtotalAmount' => isset($extracted['subtotalAmount']) ? (string)$extracted['subtotalAmount'] : null,
+                        'poNumber' => $extracted['poNumber'] ?? null,
+                        'paymentTerms' => $extracted['paymentTerms'] ?? null,
+                        'bankDetails' => $extracted['bankDetails'] ?? null,
+                        'confidence' => json_encode($extracted['confidence'] ?? []),
+                        'raw' => json_encode($extracted),
+                        'id' => $invoiceId,
+                    ];
+
+                    $db->prepare("UPDATE invoices SET status = 'completed',
+                        document_type = :documentType,
+                        invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
+                        vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
+                        buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
+                        total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
+                        subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
+                        bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
+                        ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id")
+                        ->execute($invoiceUpdateParams);
+
+                    completeOcrJob($ocrJobId, $ocrUsage);
+                    trackInvoiceProcessed($companyId, $attachment['size'] ?? strlen($item['buffer']), $ocrUsage);
+                    $createdInvoiceIds[] = $invoiceId;
+                    $processed++;
+
+                    // Auto-send to Vecticum if enabled
+                    if ($company['vecticum_enabled'] && $company['vecticum_auto_send']) {
                         try {
-                            $db->prepare("UPDATE invoices SET ocr_sent_at = NOW(), updated_at = NOW() WHERE id = :id")
-                                ->execute(['id' => $invoiceId]);
-                        } catch (Throwable $e) {
-                            // Allow processing to continue on DBs not yet migrated with ocr_sent_at.
-                        }
+                            require_once __DIR__ . '/vecticum.php';
+                            $invStmt = $db->prepare("SELECT * FROM invoices WHERE id = :id");
+                            $invStmt->execute(['id' => $invoiceId]);
+                            $updatedInv = $invStmt->fetch();
 
-                        $ocrRequestStarted = true;
-                        $extractionResult = extractInvoiceData($filePath, $saved['fileType'], null, true);
-                        $extracted = $extractionResult['data'] ?? $extractionResult;
-                        if (isset($extractionResult['usage']) && is_array($extractionResult['usage'])) {
-                            $ocrUsage = $extractionResult['usage'];
-                        }
-
-                        $invoiceUpdateParams = [
-                            'documentType' => $extracted['documentType'] ?? null,
-                            'invoiceNumber' => $extracted['invoiceNumber'] ?? null,
-                            'invoiceDate' => $extracted['invoiceDate'] ?? null,
-                            'dueDate' => $extracted['dueDate'] ?? null,
-                            'vendorName' => $extracted['vendorName'] ?? null,
-                            'vendorAddress' => $extracted['vendorAddress'] ?? null,
-                            'vendorVatId' => $extracted['vendorVatId'] ?? null,
-                            'buyerName' => $extracted['buyerName'] ?? null,
-                            'buyerAddress' => $extracted['buyerAddress'] ?? null,
-                            'buyerVatId' => $extracted['buyerVatId'] ?? null,
-                            'totalAmount' => isset($extracted['totalAmount']) ? (string)$extracted['totalAmount'] : null,
-                            'currency' => $extracted['currency'] ?? null,
-                            'taxAmount' => isset($extracted['taxAmount']) ? (string)$extracted['taxAmount'] : null,
-                            'subtotalAmount' => isset($extracted['subtotalAmount']) ? (string)$extracted['subtotalAmount'] : null,
-                            'poNumber' => $extracted['poNumber'] ?? null,
-                            'paymentTerms' => $extracted['paymentTerms'] ?? null,
-                            'bankDetails' => $extracted['bankDetails'] ?? null,
-                            'confidence' => json_encode($extracted['confidence'] ?? []),
-                            'raw' => json_encode($extracted),
-                            'id' => $invoiceId,
-                        ];
-                        try {
-                            $stmt = $db->prepare("UPDATE invoices SET status = 'completed',
-                                document_type = :documentType,
-                                invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
-                                vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
-                                buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
-                                total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
-                                subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
-                                bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
-                                ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id");
-                            $stmt->execute($invoiceUpdateParams);
-                        } catch (Throwable $e) {
-                            // Fallback for DBs without ocr_returned_at.
-                            $stmt = $db->prepare("UPDATE invoices SET status = 'completed',
-                                document_type = :documentType,
-                                invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
-                                vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
-                                buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
-                                total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
-                                subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
-                                bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
-                                updated_at = NOW() WHERE id = :id");
-                            $stmt->execute($invoiceUpdateParams);
-                        }
-                        completeOcrJob($ocrJobId, $ocrUsage);
-                        trackInvoiceProcessed($companyId, $attachment['size'] ?? strlen($buffer), $ocrUsage);
-                        $processed++;
-
-                        // Auto-send to Vecticum if enabled
-                        if ($company['vecticum_enabled'] && $company['vecticum_auto_send']) {
-                            try {
-                                require_once __DIR__ . '/vecticum.php';
-                                $invStmt = $db->prepare("SELECT * FROM invoices WHERE id = :id");
-                                $invStmt->execute(['id' => $invoiceId]);
-                                $updatedInv = $invStmt->fetch();
-
-                                $buyerOk = true;
-                                $bkw = trim($company['buyer_keywords'] ?? '');
-                                if ($bkw && !empty($updatedInv['buyer_name'])) {
-                                    $buyerOk = false;
-                                    $bn = strtolower($updatedInv['buyer_name']);
-                                    foreach (explode(',', $bkw) as $kw) {
-                                        if (trim($kw) && strpos($bn, strtolower(trim($kw))) !== false) { $buyerOk = true; break; }
-                                    }
+                            $buyerOk = true;
+                            $bkw = trim($company['buyer_keywords'] ?? '');
+                            if ($bkw && !empty($updatedInv['buyer_name'])) {
+                                $buyerOk = false;
+                                $bn = strtolower($updatedInv['buyer_name']);
+                                foreach (explode(',', $bkw) as $kw) {
+                                    if (trim($kw) && strpos($bn, strtolower(trim($kw))) !== false) { $buyerOk = true; break; }
                                 }
+                            }
 
-                                if ($buyerOk && empty($updatedInv['vecticum_id'])) {
-                                    $fp = getFilePath($saved['storedFilename']);
-                                    $vecResult = uploadToVecticum($company, [
-                                        'documentType' => $updatedInv['document_type'],
-                                        'invoiceNumber' => $updatedInv['invoice_number'],
-                                        'invoiceDate' => $updatedInv['invoice_date'],
-                                        'dueDate' => $updatedInv['due_date'],
-                                        'vendorName' => $updatedInv['vendor_name'],
-                                        'vendorVatId' => $updatedInv['vendor_vat_id'],
-                                        'subtotalAmount' => $updatedInv['subtotal_amount'],
-                                        'taxAmount' => $updatedInv['tax_amount'],
-                                        'totalAmount' => $updatedInv['total_amount'],
-                                        'currency' => $updatedInv['currency'],
-                                        '_filePath' => $fp,
-                                        '_fileName' => $updatedInv['original_filename'],
-                                        '_senderEmail' => $fromEmail,
-                                    ]);
-                                    if ($vecResult['success'] && !empty($vecResult['externalId'])) {
-                                        $db->prepare("UPDATE invoices SET vecticum_id = :vid, vecticum_sent_at = NOW(), vecticum_error = NULL, updated_at = NOW() WHERE id = :id")
-                                            ->execute(['vid' => $vecResult['externalId'], 'id' => $invoiceId]);
-                                    } else {
-                                        $db->prepare("UPDATE invoices SET vecticum_error = :err, updated_at = NOW() WHERE id = :id")
-                                            ->execute(['err' => $vecResult['error'] ?? 'Unknown error', 'id' => $invoiceId]);
+                            if ($buyerOk && empty($updatedInv['vecticum_id'])) {
+                                $fp = getFilePath($saved['storedFilename']);
+                                $vecResult = uploadToVecticum($company, [
+                                    'documentType' => $updatedInv['document_type'],
+                                    'invoiceNumber' => $updatedInv['invoice_number'],
+                                    'invoiceDate' => $updatedInv['invoice_date'],
+                                    'dueDate' => $updatedInv['due_date'],
+                                    'vendorName' => $updatedInv['vendor_name'],
+                                    'vendorVatId' => $updatedInv['vendor_vat_id'],
+                                    'subtotalAmount' => $updatedInv['subtotal_amount'],
+                                    'taxAmount' => $updatedInv['tax_amount'],
+                                    'totalAmount' => $updatedInv['total_amount'],
+                                    'currency' => $updatedInv['currency'],
+                                    '_filePath' => $fp,
+                                    '_fileName' => $updatedInv['original_filename'],
+                                    '_senderEmail' => $fromEmail,
+                                ]);
+                                if ($vecResult['success'] && !empty($vecResult['externalId'])) {
+                                    $db->prepare("UPDATE invoices SET vecticum_id = :vid, vecticum_sent_at = NOW(), vecticum_error = NULL, updated_at = NOW() WHERE id = :id")
+                                        ->execute(['vid' => $vecResult['externalId'], 'id' => $invoiceId]);
+
+                                    // Upload additional files to Vecticum
+                                    if (!empty($otherDocs)) {
+                                        foreach ($otherDocs as $otherItem) {
+                                            try {
+                                                uploadAdditionalFileToVecticum($company, $vecResult['externalId'], $otherItem['filePath'], $otherItem['attachment']['name']);
+                                            } catch (\Throwable $e) {
+                                                error_log("Vecticum additional file upload failed: " . $e->getMessage());
+                                            }
+                                        }
                                     }
+                                } else {
+                                    $db->prepare("UPDATE invoices SET vecticum_error = :err, updated_at = NOW() WHERE id = :id")
+                                        ->execute(['err' => $vecResult['error'] ?? 'Unknown error', 'id' => $invoiceId]);
                                 }
-                            } catch (\Throwable $vecErr) {
-                                error_log("Email auto-send to Vecticum failed for $invoiceId: " . $vecErr->getMessage());
                             }
-                        }
-                    } catch (Exception $e) {
-                        try {
-                            $db->prepare("UPDATE invoices
-                                SET status = 'failed',
-                                    processing_error = :error,
-                                    ocr_returned_at = CASE WHEN ocr_sent_at IS NULL THEN ocr_returned_at ELSE NOW() END,
-                                    updated_at = NOW()
-                                WHERE id = :id")
-                                ->execute(['error' => $e->getMessage(), 'id' => $invoiceId]);
-                        } catch (Throwable $e2) {
-                            $db->prepare("UPDATE invoices SET status = 'failed', processing_error = :error, updated_at = NOW() WHERE id = :id")
-                                ->execute(['error' => $e->getMessage(), 'id' => $invoiceId]);
-                        }
-                        if (!empty($ocrRequestStarted)) {
-                            if (isset($ocrJobId)) {
-                                failOcrJob($ocrJobId, $e->getMessage(), $ocrUsage ?? null);
-                            }
-                            trackApiCall($companyId, $ocrUsage ?? ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-20250514']);
+                        } catch (\Throwable $vecErr) {
+                            error_log("Email auto-send to Vecticum failed for $invoiceId: " . $vecErr->getMessage());
                         }
                     }
+
                 } catch (Exception $e) {
-                    $errors[] = "Attachment {$attachment['name']}: " . $e->getMessage();
+                    // OCR failed for this attachment
+                    if (isset($invoiceId)) {
+                        $db->prepare("UPDATE invoices SET status = 'failed', processing_error = :error, updated_at = NOW() WHERE id = :id")
+                            ->execute(['error' => $e->getMessage(), 'id' => $invoiceId]);
+                        if (isset($ocrJobId)) failOcrJob($ocrJobId, $e->getMessage(), $ocrUsage ?? null);
+                    }
+                    $errors[] = "Extraction of {$item['attachment']['name']}: " . $e->getMessage();
+                }
+            }
+
+            // Handle other documents (non-invoices)
+            if (!empty($otherDocs)) {
+                if (!empty($createdInvoiceIds)) {
+                    // Link as additional files to the first invoice
+                    $primaryInvoiceId = $createdInvoiceIds[0];
+                    $additionalFiles = [];
+                    foreach ($otherDocs as $item) {
+                        $additionalFiles[] = [
+                            'filename' => $item['attachment']['name'],
+                            'storedFilename' => $item['saved']['storedFilename'],
+                            'fileType' => $item['saved']['fileType'],
+                            'fileSize' => $item['attachment']['size'] ?? strlen($item['buffer']),
+                            'documentType' => $item['classification']['category'],
+                            'documentDetail' => $item['classification']['detail'],
+                        ];
+                    }
+                    $db->prepare("UPDATE invoices SET additional_files = :af, updated_at = NOW() WHERE id = :id")
+                        ->execute(['af' => json_encode($additionalFiles), 'id' => $primaryInvoiceId]);
+                } else {
+                    // No invoices in this email — create skipped records
+                    foreach ($otherDocs as $item) {
+                        $skipId = generateId();
+                        $db->prepare("INSERT INTO invoices (id, company_id, email_inbox_id, source, original_filename, stored_filename, file_type, file_size, status, document_type, skip_reason) VALUES (:id, :companyId, :emailId, 'email', :fn, :sf, :ft, :fs, 'skipped', :dt, :sr)")
+                            ->execute([
+                                'id' => $skipId, 'companyId' => $companyId, 'emailId' => $emailId,
+                                'fn' => $item['attachment']['name'],
+                                'sf' => $item['saved']['storedFilename'],
+                                'ft' => $item['saved']['fileType'],
+                                'fs' => $item['attachment']['size'] ?? strlen($item['buffer']),
+                                'dt' => $item['classification']['category'],
+                                'sr' => $item['classification']['detail'],
+                            ]);
+                    }
                 }
             }
 

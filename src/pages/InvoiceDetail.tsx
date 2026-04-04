@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getStatusClasses, formatRelativeTime } from "@/lib/ui-utils";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -94,6 +95,87 @@ const documentTypeColors: Record<string, string> = {
   proforma: "bg-amber-50 text-amber-700 border-amber-200",
   credit_note: "bg-red-50 text-red-700 border-red-200",
 };
+
+function PreviewPanel({ invoice, fileUrl }: { invoice: any; fileUrl: string }) {
+  const additionalFiles = invoice.additionalFiles || [];
+  const [selectedAdditionalIdx, setSelectedAdditionalIdx] = useState(0);
+  const token = localStorage.getItem("token");
+
+  if (additionalFiles.length === 0) {
+    // No additional files — simple preview without tabs
+    return (
+      <>
+        <CardHeader className="pb-1 px-4 pt-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xs font-semibold">Preview</CardTitle>
+            <a href={fileUrl} target="_blank" rel="noreferrer" className="text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+              <ExternalLink className="h-3 w-3" />Open
+            </a>
+          </div>
+        </CardHeader>
+        <CardContent className="p-2">
+          {invoice.fileType === "pdf" ? (
+            <iframe src={fileUrl} className="w-full h-[calc(100vh-8rem)] rounded-lg border border-border/50" />
+          ) : (
+            <img src={fileUrl} alt="Invoice" className="max-w-full rounded-lg" />
+          )}
+        </CardContent>
+      </>
+    );
+  }
+
+  const additionalFileUrl = `/api/invoices/${invoice.id}/additional-file?index=${selectedAdditionalIdx}&access_token=${token}`;
+  const selectedFile = additionalFiles[selectedAdditionalIdx];
+
+  return (
+    <Tabs defaultValue="invoice">
+      <CardHeader className="pb-1 px-4 pt-2">
+        <div className="flex items-center justify-between">
+          <TabsList>
+            <TabsTrigger value="invoice">Invoice</TabsTrigger>
+            <TabsTrigger value="additional">Additional Files ({additionalFiles.length})</TabsTrigger>
+          </TabsList>
+          <a href={fileUrl} target="_blank" rel="noreferrer" className="text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+            <ExternalLink className="h-3 w-3" />Open
+          </a>
+        </div>
+      </CardHeader>
+      <CardContent className="p-2">
+        <TabsContent value="invoice">
+          {invoice.fileType === "pdf" ? (
+            <iframe src={fileUrl} className="w-full h-[calc(100vh-8rem)] rounded-lg border border-border/50" />
+          ) : (
+            <img src={fileUrl} alt="Invoice" className="max-w-full rounded-lg" />
+          )}
+        </TabsContent>
+        <TabsContent value="additional">
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-1.5">
+              {additionalFiles.map((af: any, idx: number) => (
+                <button
+                  key={idx}
+                  onClick={() => setSelectedAdditionalIdx(idx)}
+                  className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors ${
+                    idx === selectedAdditionalIdx ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-muted border-border"
+                  }`}
+                >
+                  <FileText className="h-3 w-3" />
+                  {af.filename}
+                  {af.documentDetail && <span className="text-[10px] opacity-70">({af.documentDetail})</span>}
+                </button>
+              ))}
+            </div>
+            {selectedFile?.fileType === "pdf" ? (
+              <iframe src={additionalFileUrl} className="w-full h-[calc(100vh-12rem)] rounded-lg border border-border/50" />
+            ) : (
+              <img src={additionalFileUrl} alt={selectedFile?.filename} className="max-w-full rounded-lg" />
+            )}
+          </div>
+        </TabsContent>
+      </CardContent>
+    </Tabs>
+  );
+}
 
 const fieldSections: { title: string; fields: [string, string][] }[] = [
   { title: "Document Info", fields: [["documentType", "Type"], ["invoiceNumber", "Invoice #"], ["invoiceDate", "Date"], ["dueDate", "Due Date"], ["poNumber", "PO Number"]] },
@@ -414,21 +496,7 @@ export default function InvoiceDetail() {
         {/* Right: Preview */}
         <div className="lg:col-span-7">
           <Card className="overflow-hidden sticky top-2">
-            <CardHeader className="pb-1 px-4 pt-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold">Preview</CardTitle>
-                <a href={fileUrl} target="_blank" rel="noreferrer" className="text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
-                  <ExternalLink className="h-3 w-3" />Open
-                </a>
-              </div>
-            </CardHeader>
-            <CardContent className="p-2">
-              {invoice.fileType === "pdf" ? (
-                <iframe src={fileUrl} className="w-full h-[calc(100vh-8rem)] rounded-lg border border-border/50" />
-              ) : (
-                <img src={fileUrl} alt="Invoice" className="max-w-full rounded-lg" />
-              )}
-            </CardContent>
+            <PreviewPanel invoice={invoice} fileUrl={fileUrl} />
           </Card>
         </div>
       </div>

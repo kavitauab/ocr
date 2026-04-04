@@ -11,6 +11,8 @@ export function getStatusClasses(status: string): string {
     return "bg-amber-50 text-amber-700 border-amber-200";
   if (["retrying"].includes(s))
     return "bg-orange-50 text-orange-700 border-orange-200";
+  if (["skipped"].includes(s))
+    return "bg-slate-50 text-slate-600 border-slate-200";
   if (["failed", "error", "cancelled", "rejected", "overdue"].includes(s))
     return "bg-red-50 text-red-700 border-red-200";
   if (["suspended", "paused", "inactive"].includes(s))

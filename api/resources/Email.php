@@ -44,8 +44,28 @@ class Email extends BaseResource {
 
         $stmt = $this->db->prepare("SELECT e.*, c.name as company_name FROM email_inbox e LEFT JOIN companies c ON e.company_id = c.id $where ORDER BY e.created_at DESC LIMIT $limit OFFSET $offset");
         $stmt->execute($params);
+        $emails = $stmt->fetchAll();
 
-        $emails = array_map('snakeToCamel', $stmt->fetchAll());
-        sendJSON(['emails' => $emails, 'total' => $total, 'page' => $page, 'totalPages' => max(1, (int)ceil($total / $limit))]);
+        // Enrich each email with its attachment/invoice details
+        $db = $this->db;
+        $enriched = array_map(function($email) use ($db) {
+            $email = snakeToCamel($email);
+            // Get invoices linked to this email
+            $invStmt = $db->prepare("SELECT id, original_filename, status, document_type, skip_reason FROM invoices WHERE email_inbox_id = :eid ORDER BY created_at");
+            $invStmt->execute(['eid' => $email['id']]);
+            $invoices = $invStmt->fetchAll();
+            $email['attachments'] = array_map(function($inv) {
+                return [
+                    'invoiceId' => $inv['id'],
+                    'filename' => $inv['original_filename'],
+                    'status' => $inv['status'],
+                    'documentType' => $inv['document_type'],
+                    'skipReason' => $inv['skip_reason'],
+                ];
+            }, $invoices);
+            return $email;
+        }, $emails);
+
+        sendJSON(['emails' => $enriched, 'total' => $total, 'page' => $page, 'totalPages' => max(1, (int)ceil($total / $limit))]);
     }
 }

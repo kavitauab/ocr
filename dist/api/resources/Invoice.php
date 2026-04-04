@@ -14,6 +14,7 @@ class Invoice extends BaseResource {
         if (!$row) return $row;
         if (isset($row['confidence_scores'])) $row['confidence_scores'] = json_decode($row['confidence_scores'], true);
         if (isset($row['raw_extraction'])) $row['raw_extraction'] = json_decode($row['raw_extraction'], true);
+        if (isset($row['additional_files'])) $row['additional_files'] = json_decode($row['additional_files'], true);
 
         // Compute buyer mismatch using keywords or VAT
         $row['buyer_mismatch'] = false;
@@ -687,6 +688,29 @@ class Invoice extends BaseResource {
         exit;
     }
 
+    public function additional_file($id) {
+        $user = getAuthUser();
+        $stmt = $this->db->prepare("SELECT * FROM invoices WHERE id = :id");
+        $stmt->execute(['id' => $id]);
+        $invoice = $stmt->fetch();
+        if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
+        if ($invoice['company_id']) requireCompanyAccess($user, $invoice['company_id']);
+
+        $index = intval($_GET['index'] ?? 0);
+        $additionalFiles = json_decode($invoice['additional_files'] ?? '[]', true);
+        if (!isset($additionalFiles[$index])) sendJSON(['error' => 'Additional file not found'], 404);
+
+        $file = $additionalFiles[$index];
+        $filePath = getFilePath($file['storedFilename']);
+        if (!file_exists($filePath)) sendJSON(['error' => 'File not found on disk'], 404);
+
+        $contentType = $this->contentTypes[$file['fileType']] ?? 'application/octet-stream';
+        header("Content-Type: $contentType");
+        header("Content-Disposition: inline; filename=\"{$file['filename']}\"");
+        readfile($filePath);
+        exit;
+    }
+
     public function metadata($id) {
         $user = getAuthUser();
         $stmt = $this->db->prepare("SELECT * FROM invoices WHERE id = :id");
@@ -814,6 +838,20 @@ class Invoice extends BaseResource {
             if (!empty($result['externalId'])) {
                 $stmt = $this->db->prepare("UPDATE invoices SET vecticum_id = :vid, vecticum_sent_at = NOW(), vecticum_error = NULL, updated_at = NOW() WHERE id = :id");
                 $stmt->execute(['vid' => $result['externalId'], 'id' => $id]);
+
+                // Upload additional files if present
+                $additionalFiles = json_decode($invoice['additional_files'] ?? '[]', true);
+                if (!empty($additionalFiles)) {
+                    $uploadDir = rtrim(getenv('UPLOAD_DIR') ?: '../uploads', '/');
+                    foreach ($additionalFiles as $af) {
+                        try {
+                            $afPath = $uploadDir . '/' . $af['storedFilename'];
+                            uploadAdditionalFileToVecticum($company, $result['externalId'], $afPath, $af['filename']);
+                        } catch (\Throwable $e) {
+                            error_log("Additional file upload to Vecticum failed: " . $e->getMessage());
+                        }
+                    }
+                }
             }
             sendJSON([
                 'success' => true,

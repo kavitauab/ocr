@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCompany } from "@/lib/company";
+import { Link } from "react-router-dom";
 import api from "@/api/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -8,11 +9,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getStatusClasses, formatDateTime } from "@/lib/ui-utils";
 import { toast } from "sonner";
 import { useState } from "react";
-import { Mail } from "lucide-react";
+import { Mail, FileText, AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
 
 export default function Emails() {
   const { selectedCompany } = useCompany();
   const [fetching, setFetching] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["emails", selectedCompany?.id],
@@ -54,6 +56,7 @@ export default function Emails() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/30">
+                  <TableHead className="w-8"></TableHead>
                   <TableHead className="font-semibold">Subject</TableHead>
                   <TableHead className="font-semibold">From</TableHead>
                   <TableHead className="font-semibold">Received</TableHead>
@@ -62,26 +65,83 @@ export default function Emails() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data?.emails?.map((email: any) => (
-                  <TableRow key={email.id} className="hover:bg-primary/[0.03] transition-colors duration-150">
-                    <TableCell className="max-w-xs truncate font-medium">{email.subject}</TableCell>
-                    <TableCell>
-                      <div>{email.fromName || "—"}</div>
-                      {email.fromEmail && <div className="text-xs text-muted-foreground">{email.fromEmail}</div>}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{formatDateTime(email.receivedDate)}</TableCell>
-                    <TableCell className="text-muted-foreground">{email.attachmentCount ?? 0}</TableCell>
-                    <TableCell>
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getStatusClasses(email.status)}`}>
-                        {email.status}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {data?.emails?.map((email: any) => {
+                  const isExpanded = expandedId === email.id;
+                  const attachments = email.attachments || [];
+                  const hasAttachments = attachments.length > 0;
+                  const skippedCount = attachments.filter((a: any) => a.status === "skipped").length;
+                  const processedCount = attachments.filter((a: any) => a.status === "completed").length;
+
+                  return (
+                    <>
+                      <TableRow
+                        key={email.id}
+                        className="hover:bg-primary/[0.03] transition-colors duration-150 cursor-pointer"
+                        onClick={() => hasAttachments ? setExpandedId(isExpanded ? null : email.id) : null}
+                      >
+                        <TableCell className="w-8 px-2">
+                          {hasAttachments && (
+                            isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                          )}
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate font-medium">{email.subject}</TableCell>
+                        <TableCell>
+                          <div>{email.fromName || "—"}</div>
+                          {email.fromEmail && <div className="text-xs text-muted-foreground">{email.fromEmail}</div>}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{formatDateTime(email.receivedDate)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-muted-foreground">{email.attachmentCount ?? 0}</span>
+                            {processedCount > 0 && <span className="text-xs text-emerald-600">{processedCount} processed</span>}
+                            {skippedCount > 0 && <span className="text-xs text-slate-500">{skippedCount} skipped</span>}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getStatusClasses(email.status)}`}>
+                            {email.status}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                      {isExpanded && attachments.map((att: any, idx: number) => (
+                        <TableRow key={`${email.id}-att-${idx}`} className="bg-muted/10">
+                          <TableCell></TableCell>
+                          <TableCell colSpan={3} className="pl-8">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              {att.status === "skipped" ? (
+                                <span className="text-sm text-muted-foreground">{att.filename}</span>
+                              ) : (
+                                <Link to={`/invoices/${att.invoiceId}`} className="text-sm text-primary hover:underline">{att.filename}</Link>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {att.status === "skipped" && att.skipReason && (
+                              <div className="flex items-center gap-1 text-xs text-slate-500">
+                                <AlertCircle className="h-3 w-3" />
+                                {att.skipReason}
+                              </div>
+                            )}
+                            {att.documentType && att.status !== "skipped" && (
+                              <span className="text-xs text-muted-foreground">{att.documentType}</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getStatusClasses(att.status)}`}>
+                              {att.status}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </>
+                  );
+                })}
                 {isLoading && (
                   <>
                     {[...Array(4)].map((_, i) => (
                       <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-4" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-48" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-20" /></TableCell>
@@ -93,7 +153,7 @@ export default function Emails() {
                 )}
                 {!isLoading && (!data?.emails || data.emails.length === 0) && (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-12">
+                    <TableCell colSpan={6} className="py-12">
                       <div className="flex flex-col items-center justify-center text-center">
                         <div className="rounded-full bg-muted p-3 mb-3">
                           <Mail className="h-5 w-5 text-muted-foreground" />

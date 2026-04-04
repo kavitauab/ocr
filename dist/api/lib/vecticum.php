@@ -368,3 +368,27 @@ function uploadFileToVecticum($company, $documentId, $filePath, $fileName, $toke
 
     return ['success' => false, 'error' => "File upload failed: HTTP $httpCode", 'response' => $response];
 }
+
+function uploadAdditionalFileToVecticum($company, $documentId, $filePath, $fileName, $token = null) {
+    if (!$token) $token = getVecticumToken($company);
+    if (!file_exists($filePath)) return ['success' => false, 'error' => 'File not found'];
+
+    $mimeType = function_exists('mime_content_type') ? (mime_content_type($filePath) ?: 'application/octet-stream') : 'application/pdf';
+    $url = $company['vecticum_api_base_url'] . '/files/' . $company['vecticum_company_id'] . '/' . $documentId . '/additionalFiles';
+    $cfile = new \CURLFile($filePath, $mimeType, $fileName);
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => [$fileName => $cfile],
+        CURLOPT_HTTPHEADER => ['Accept: application/json', "Authorization: Bearer $token"],
+        CURLOPT_TIMEOUT => 60,
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode === 201) return ['success' => true];
+    return ['success' => false, 'error' => "Additional file upload failed: HTTP $httpCode"];
+}

@@ -212,3 +212,104 @@ Rules:
 
     throw new Exception('Claude did not return structured extraction data');
 }
+
+/**
+ * Classify a document type using Haiku (cheap, fast).
+ * Returns: ['category' => string, 'detail' => string, 'confidence' => float, 'usage' => array]
+ */
+function classifyDocument($filePath, $fileType) {
+    $fileData = file_get_contents($filePath);
+    if ($fileData === false) throw new Exception('Cannot read file: ' . $filePath);
+    $base64Data = base64_encode($fileData);
+
+    $contentBlocks = [];
+    if ($fileType === 'pdf') {
+        $contentBlocks[] = ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => 'application/pdf', 'data' => $base64Data]];
+    } else {
+        $mediaType = $fileType === 'png' ? 'image/png' : 'image/jpeg';
+        $contentBlocks[] = ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $mediaType, 'data' => $base64Data]];
+    }
+    $contentBlocks[] = ['type' => 'text', 'text' => 'Classify this document. What type of document is this?'];
+
+    $tool = [
+        'name' => 'classify_document',
+        'description' => 'Classify the document type.',
+        'input_schema' => [
+            'type' => 'object',
+            'properties' => [
+                'category' => [
+                    'type' => 'string',
+                    'enum' => ['invoice', 'proforma', 'credit_note', 'order_confirmation', 'act', 'report', 'contract', 'other'],
+                    'description' => 'Document category: "invoice" for standard/commercial invoices (PVM sąskaita faktūra), "proforma" for proforma/advance invoices, "credit_note" for credit notes, "order_confirmation" for order confirmations/purchase orders, "act" for work acceptance acts (darbų priėmimo-perdavimo aktas) or service acts, "report" for reports, "contract" for contracts/agreements, "other" for anything else',
+                ],
+                'detail' => [
+                    'type' => 'string',
+                    'description' => 'Short description of the document, e.g. "work acceptance act", "service contract", "VAT invoice"',
+                ],
+                'confidence' => [
+                    'type' => 'number',
+                    'description' => 'Confidence in classification (0.0-1.0)',
+                ],
+            ],
+            'required' => ['category', 'detail', 'confidence'],
+        ],
+    ];
+
+    $model = 'claude-haiku-3-5-20241022';
+
+    $requestBody = [
+        'model' => $model,
+        'max_tokens' => 256,
+        'system' => 'You are a document classifier. Identify the type of business document shown. Be precise — distinguish between invoices, proforma invoices, credit notes, order confirmations, work acceptance acts, and other document types.',
+        'tools' => [$tool],
+        'tool_choice' => ['type' => 'tool', 'name' => 'classify_document'],
+        'messages' => [['role' => 'user', 'content' => $contentBlocks]],
+    ];
+
+    $apiKey = getAnthropicApiKey();
+    if (empty($apiKey)) throw new Exception('Anthropic API key not configured');
+
+    $ch = curl_init('https://api.anthropic.com/v1/messages');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode($requestBody),
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'x-api-key: ' . $apiKey,
+            'anthropic-version: 2023-06-01',
+            'anthropic-beta: pdfs-2024-09-25',
+        ],
+        CURLOPT_TIMEOUT => 30,
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200) {
+        $errorData = json_decode($response, true);
+        throw new Exception('Classification failed: ' . ($errorData['error']['message'] ?? "HTTP $httpCode"));
+    }
+
+    $data = json_decode($response, true);
+    $usage = buildClaudeUsageMetadata($data, $model);
+
+    foreach ($data['content'] ?? [] as $block) {
+        if ($block['type'] === 'tool_use') {
+            return [
+                'category' => $block['input']['category'] ?? 'other',
+                'detail' => $block['input']['detail'] ?? '',
+                'confidence' => $block['input']['confidence'] ?? 0,
+                'usage' => $usage,
+            ];
+        }
+    }
+
+    return ['category' => 'other', 'detail' => 'Classification failed', 'confidence' => 0, 'usage' => $usage];
+}
+
+/** Check if a document category is an invoice type that should be fully extracted */
+function isInvoiceCategory($category) {
+    return in_array($category, ['invoice', 'proforma', 'credit_note', 'order_confirmation']);
+}

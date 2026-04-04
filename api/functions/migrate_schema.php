@@ -228,5 +228,23 @@ $ensureColumn('companies', 'vecticum_auto_send', 'TINYINT(1) NOT NULL DEFAULT 0'
 $ensureColumn('companies', 'vat_number', 'VARCHAR(100) NULL');
 $ensureColumn('companies', 'buyer_keywords', 'VARCHAR(500) NULL');
 
+// --- Document classification: skip_reason + additional_files + skipped status ---
+$ensureColumn('invoices', 'skip_reason', 'VARCHAR(255) NULL');
+$ensureColumn('invoices', 'additional_files', 'JSON NULL');
+
+$invoiceStatusSkipped = "ALTER TABLE `invoices` MODIFY COLUMN `status` ENUM('uploaded','queued','processing','completed','failed','retrying','skipped') NOT NULL DEFAULT 'uploaded'";
+if ($tableExists('invoices') && $columnExists('invoices', 'status')) {
+    $stmt = $db->prepare("SELECT COLUMN_TYPE FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'invoices' AND column_name = 'status'");
+    $stmt->execute();
+    $colType = $stmt->fetchColumn();
+    if ($colType && strpos($colType, 'skipped') === false) {
+        $runStatement($invoiceStatusSkipped);
+    } else {
+        $record('skipped', $invoiceStatusSkipped);
+    }
+} else {
+    $record('skipped', $invoiceStatusSkipped);
+}
+
 $statusCode = $summary['errors'] > 0 ? 500 : 200;
 sendJSON($summary, $statusCode);
