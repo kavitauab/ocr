@@ -142,7 +142,7 @@ Rules:
         ],
     ];
 
-    $model = getSetting('extraction_model', 'claude-sonnet-4-20250514');
+    $model = getSetting('extraction_model', 'claude-sonnet-4-6');
 
     $requestBody = [
         'model' => $model,
