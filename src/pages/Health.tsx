@@ -5,14 +5,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/ui-utils";
 import {
-  Activity,
-  CheckCircle,
-  AlertTriangle,
-  Clock,
-  Zap,
-  RotateCcw,
-  TrendingUp,
-  Shield,
+  Activity, CheckCircle, AlertTriangle, Clock, Zap, RotateCcw, TrendingUp, Shield,
+  DollarSign, Cpu, Gauge, Bot,
 } from "lucide-react";
 
 function formatSeconds(s: number | null) {
@@ -21,29 +15,54 @@ function formatSeconds(s: number | null) {
   return `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
 }
 
-function formatCost(usd: number) {
+function fmtCost(usd: number) {
   return `$${usd.toFixed(4)}`;
+}
+
+function fmtTokens(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  return String(v);
+}
+
+function fmtPct(v: number | null): string {
+  if (v === null || v === undefined) return "—";
+  return `${(v * 100).toFixed(1)}%`;
+}
+
+function ConfidenceBar({ value, label }: { value: number | null; label: string }) {
+  if (value === null) return null;
+  const pct = Math.round(value * 100);
+  const color = pct >= 95 ? "bg-emerald-500" : pct >= 80 ? "bg-amber-500" : "bg-red-500";
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-muted-foreground w-28 shrink-0">{label}</span>
+      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+        <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-xs font-medium tabular-nums w-12 text-right">{pct}%</span>
+    </div>
+  );
 }
 
 export default function Health() {
   const { data, isLoading } = useQuery({
     queryKey: ["health"],
     queryFn: () => api.get("/invoices/health").then((r) => r.data),
-    refetchInterval: 15000, // Auto-refresh every 15s
+    refetchInterval: 15000,
   });
 
   const overview = data?.overview;
   const queue = data?.queue;
+  const confidence = data?.confidence;
+  const models: any[] = data?.models || [];
   const daily: any[] = data?.daily || [];
   const topErrors: any[] = data?.topErrors || [];
   const rateLimits: any[] = data?.rateLimits || [];
-
-  // Find max for chart scaling
   const maxDaily = Math.max(1, ...daily.map((d: any) => d.completed + d.failed));
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-4">
       <div className="flex items-center gap-3">
         <Activity className="h-6 w-6 text-primary" />
         <h1 className="text-2xl font-bold tracking-tight">System Health</h1>
@@ -54,96 +73,102 @@ export default function Health() {
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
         {isLoading ? (
           Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i}>
-              <CardContent className="p-4">
-                <Skeleton className="h-3 w-20 mb-2" />
-                <Skeleton className="h-7 w-14" />
-              </CardContent>
-            </Card>
+            <Card key={i}><CardContent className="p-4"><Skeleton className="h-3 w-20 mb-2" /><Skeleton className="h-7 w-14" /></CardContent></Card>
           ))
         ) : (
           <>
-            <Card className="border-l-4 border-l-emerald-500">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Success Rate
-                    </p>
-                    <p className="text-2xl font-bold tabular-nums mt-0.5 leading-none">
-                      {overview?.successRate ?? 0}%
-                    </p>
+            {[
+              { label: "Success Rate", value: `${overview?.successRate ?? 0}%`, icon: CheckCircle, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-l-emerald-500" },
+              { label: "Avg Processing", value: formatSeconds(overview?.avgProcessingSeconds), icon: Clock, color: "text-blue-600", bg: "bg-blue-50", border: "border-l-blue-500" },
+              { label: "Total Cost", value: fmtCost(overview?.totalCostUsd ?? 0), icon: DollarSign, color: "text-purple-600", bg: "bg-purple-50", border: "border-l-purple-500" },
+              { label: "Total Tokens", value: fmtTokens(overview?.totalTokens ?? 0), icon: Cpu, color: "text-amber-600", bg: "bg-amber-50", border: "border-l-amber-500" },
+            ].map(({ label, value, icon: Icon, color, bg, border }) => (
+              <Card key={label} className={`border-l-4 ${border}`}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+                      <p className="text-2xl font-bold tabular-nums mt-0.5 leading-none">{value}</p>
+                    </div>
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${bg}`}><Icon className={`h-4 w-4 ${color}`} /></div>
                   </div>
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50">
-                    <CheckCircle className="h-4 w-4 text-emerald-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-blue-500">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Avg Processing
-                    </p>
-                    <p className="text-2xl font-bold tabular-nums mt-0.5 leading-none">
-                      {formatSeconds(overview?.avgProcessingSeconds)}
-                    </p>
-                  </div>
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50">
-                    <Clock className="h-4 w-4 text-blue-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-amber-500">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Queue Depth
-                    </p>
-                    <p className="text-2xl font-bold tabular-nums mt-0.5 leading-none">
-                      {queue?.depth ?? 0}
-                    </p>
-                    {(queue?.retrying ?? 0) > 0 && (
-                      <p className="text-[10px] text-amber-600 mt-0.5">{queue.retrying} retrying</p>
-                    )}
-                  </div>
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50">
-                    <Zap className="h-4 w-4 text-amber-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-red-500">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Failed Jobs
-                    </p>
-                    <p className="text-2xl font-bold tabular-nums mt-0.5 leading-none">
-                      {overview?.failedJobs ?? 0}
-                    </p>
-                  </div>
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-50">
-                    <AlertTriangle className="h-4 w-4 text-red-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            ))}
           </>
         )}
       </div>
 
-      {/* Queue + Job Status row */}
+      {/* Confidence + Models row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Live Queue Status */}
+        {/* Confidence Scores */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-muted-foreground" />
+              Average Confidence Scores
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-24 w-full" />
+            ) : confidence?.totalWithConfidence === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No confidence data yet</p>
+            ) : (
+              <div className="space-y-2.5">
+                <ConfidenceBar value={confidence?.avgInvoiceNumber} label="Invoice Number" />
+                <ConfidenceBar value={confidence?.avgVendorName} label="Vendor Name" />
+                <ConfidenceBar value={confidence?.avgTotalAmount} label="Total Amount" />
+                <ConfidenceBar value={confidence?.avgCurrency} label="Currency" />
+                <p className="text-[10px] text-muted-foreground pt-1">Based on {confidence?.totalWithConfidence} processed invoices</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Model Usage */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Bot className="h-4 w-4 text-muted-foreground" />
+              Model Usage
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-24 w-full" />
+            ) : models.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No model data yet</p>
+            ) : (
+              <div className="space-y-2">
+                {models.map((m: any) => {
+                  const total = models.reduce((s: number, x: any) => s + x.count, 0);
+                  const pct = total > 0 ? Math.round((m.count / total) * 100) : 0;
+                  return (
+                    <div key={m.model} className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium">{m.model}</span>
+                          <span className="text-xs text-muted-foreground">{m.count} invoices ({pct}%)</span>
+                        </div>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                      {m.escalatedCount > 0 && (
+                        <span className="text-[10px] text-amber-600 whitespace-nowrap">{m.escalatedCount} escalated</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Queue + Rate Limits row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -152,9 +177,7 @@ export default function Health() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-20 w-full" />
-            ) : (
+            {isLoading ? <Skeleton className="h-20 w-full" /> : (
               <div className="space-y-3">
                 <div className="grid grid-cols-3 gap-3">
                   {[
@@ -168,24 +191,17 @@ export default function Health() {
                     </div>
                   ))}
                 </div>
-                {queue?.oldestQueuedAt && (
-                  <p className="text-xs text-muted-foreground">
-                    Oldest queued: {formatDateTime(queue.oldestQueuedAt)}
-                  </p>
-                )}
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>Total completed: <strong className="text-foreground">{overview?.completedJobs ?? 0}</strong></span>
-                  <span>•</span>
-                  <span>Total failed: <strong className="text-foreground">{overview?.failedJobs ?? 0}</strong></span>
-                  <span>•</span>
-                  <span>Total jobs: <strong className="text-foreground">{overview?.totalJobs ?? 0}</strong></span>
+                {queue?.oldestQueuedAt && <p className="text-xs text-muted-foreground">Oldest queued: {formatDateTime(queue.oldestQueuedAt)}</p>}
+                <div className="flex gap-3 text-xs text-muted-foreground">
+                  <span>Completed: <strong className="text-foreground">{overview?.completedJobs ?? 0}</strong></span>
+                  <span>Failed: <strong className="text-foreground">{overview?.failedJobs ?? 0}</strong></span>
+                  <span>Total: <strong className="text-foreground">{overview?.totalJobs ?? 0}</strong></span>
                 </div>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Rate Limits */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -194,12 +210,8 @@ export default function Health() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-20 w-full" />
-            ) : rateLimits.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                No rate limits configured. Set limits in Billing settings.
-              </p>
+            {isLoading ? <Skeleton className="h-20 w-full" /> : rateLimits.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No rate limits configured</p>
             ) : (
               <div className="space-y-2">
                 {rateLimits.map((rl: any) => (
@@ -207,20 +219,10 @@ export default function Health() {
                     <p className="text-sm font-medium">{rl.companyName}</p>
                     <div className="flex gap-4 mt-1">
                       {rl.hourlyLimit !== null && (
-                        <div className="text-xs">
-                          <span className="text-muted-foreground">Hourly: </span>
-                          <span className={`font-medium ${rl.hourlyUsed >= rl.hourlyLimit ? "text-red-600" : "text-foreground"}`}>
-                            {rl.hourlyUsed}/{rl.hourlyLimit}
-                          </span>
-                        </div>
+                        <span className="text-xs"><span className="text-muted-foreground">Hourly: </span><span className={rl.hourlyUsed >= rl.hourlyLimit ? "text-red-600 font-medium" : ""}>{rl.hourlyUsed}/{rl.hourlyLimit}</span></span>
                       )}
                       {rl.dailyLimit !== null && (
-                        <div className="text-xs">
-                          <span className="text-muted-foreground">Daily: </span>
-                          <span className={`font-medium ${rl.dailyUsed >= rl.dailyLimit ? "text-red-600" : "text-foreground"}`}>
-                            {rl.dailyUsed}/{rl.dailyLimit}
-                          </span>
-                        </div>
+                        <span className="text-xs"><span className="text-muted-foreground">Daily: </span><span className={rl.dailyUsed >= rl.dailyLimit ? "text-red-600 font-medium" : ""}>{rl.dailyUsed}/{rl.dailyLimit}</span></span>
                       )}
                     </div>
                   </div>
@@ -231,7 +233,7 @@ export default function Health() {
         </Card>
       </div>
 
-      {/* Daily Trend Chart */}
+      {/* Daily Trend */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -240,69 +242,41 @@ export default function Health() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-40 w-full" />
-          ) : daily.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">
-              No data yet. Process some invoices to see trends.
-            </p>
+          {isLoading ? <Skeleton className="h-40 w-full" /> : daily.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">No data yet</p>
           ) : (
             <div className="space-y-3">
-              {/* CSS bar chart */}
               <div className="flex items-end gap-[2px] h-32">
                 {[...daily].reverse().map((d: any) => {
                   const total = d.completed + d.failed;
                   const height = total > 0 ? Math.max(4, (total / maxDaily) * 100) : 0;
                   const failedHeight = d.failed > 0 ? Math.max(2, (d.failed / maxDaily) * 100) : 0;
-                  const completedHeight = height - failedHeight;
-
                   return (
-                    <div
-                      key={d.date}
-                      className="flex-1 flex flex-col justify-end group relative"
-                      title={`${d.date}: ${d.completed} completed, ${d.failed} failed, avg ${formatSeconds(d.avgSeconds)}, cost ${formatCost(d.totalCostUsd)}`}
-                    >
-                      {completedHeight > 0 && (
-                        <div
-                          className="bg-emerald-400 rounded-t-sm transition-all hover:bg-emerald-500"
-                          style={{ height: `${completedHeight}%` }}
-                        />
-                      )}
-                      {failedHeight > 0 && (
-                        <div
-                          className="bg-red-400 transition-all hover:bg-red-500"
-                          style={{ height: `${failedHeight}%` }}
-                        />
-                      )}
+                    <div key={d.date} className="flex-1 flex flex-col justify-end group relative"
+                      title={`${d.date}: ${d.completed} completed, ${d.failed} failed, avg ${formatSeconds(d.avgSeconds)}, cost ${fmtCost(d.totalCostUsd)}`}>
+                      {(height - failedHeight) > 0 && <div className="bg-emerald-400 rounded-t-sm hover:bg-emerald-500" style={{ height: `${height - failedHeight}%` }} />}
+                      {failedHeight > 0 && <div className="bg-red-400 hover:bg-red-500" style={{ height: `${failedHeight}%` }} />}
                     </div>
                   );
                 })}
               </div>
-              {/* X-axis labels */}
-              <div className="flex justify-between text-[10px] text-muted-foreground px-0.5">
+              <div className="flex justify-between text-[10px] text-muted-foreground">
                 <span>{daily[daily.length - 1]?.date}</span>
                 <span>{daily[0]?.date}</span>
               </div>
-              {/* Legend */}
               <div className="flex gap-4 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-3 h-3 rounded-sm bg-emerald-400" /> Completed
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-3 h-3 rounded-sm bg-red-400" /> Failed
-                </span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm bg-emerald-400" /> Completed</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm bg-red-400" /> Failed</span>
               </div>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Detailed daily table */}
+      {/* Daily table */}
       {daily.length > 0 && (
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Daily Breakdown</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Daily Breakdown</CardTitle></CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
@@ -319,15 +293,9 @@ export default function Health() {
                   <TableRow key={d.date}>
                     <TableCell className="font-medium">{d.date}</TableCell>
                     <TableCell className="text-center tabular-nums text-emerald-600 font-medium">{d.completed}</TableCell>
-                    <TableCell className="text-center tabular-nums">
-                      {d.failed > 0 ? (
-                        <span className="text-red-600 font-medium">{d.failed}</span>
-                      ) : (
-                        <span className="text-muted-foreground">0</span>
-                      )}
-                    </TableCell>
+                    <TableCell className="text-center tabular-nums">{d.failed > 0 ? <span className="text-red-600 font-medium">{d.failed}</span> : <span className="text-muted-foreground">0</span>}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatSeconds(d.avgSeconds)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCost(d.totalCostUsd)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmtCost(d.totalCostUsd)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -341,15 +309,14 @@ export default function Health() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-red-500" />
-              Top Errors (Last 30 Days)
+              <AlertTriangle className="h-4 w-4 text-red-500" />Top Errors (Last 30 Days)
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/30">
-                  <TableHead className="font-semibold">Error Message</TableHead>
+                  <TableHead className="font-semibold">Error</TableHead>
                   <TableHead className="text-center font-semibold w-20">Count</TableHead>
                   <TableHead className="text-right font-semibold w-40">Last Seen</TableHead>
                 </TableRow>
@@ -357,9 +324,7 @@ export default function Health() {
               <TableBody>
                 {topErrors.map((err: any, i: number) => (
                   <TableRow key={i}>
-                    <TableCell className="font-mono text-xs text-red-700 max-w-md truncate">
-                      {err.message}
-                    </TableCell>
+                    <TableCell className="font-mono text-xs text-red-700 max-w-md truncate">{err.message}</TableCell>
                     <TableCell className="text-center tabular-nums font-medium">{err.count}</TableCell>
                     <TableCell className="text-right text-sm text-muted-foreground">{formatDateTime(err.lastSeen)}</TableCell>
                   </TableRow>

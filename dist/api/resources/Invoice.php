@@ -1004,6 +1004,34 @@ class Invoice extends BaseResource {
             // Rate limit columns may not exist yet
         }
 
+        // Total cost from usage_logs (accurate)
+        $costRow = $this->db->query("SELECT SUM(ocr_cost_usd) as total_cost, SUM(ocr_total_tokens) as total_tokens, SUM(ocr_input_tokens) as input_tokens, SUM(ocr_output_tokens) as output_tokens FROM usage_logs")->fetch();
+
+        // Confidence stats from completed invoices
+        $confStats = $this->db->query("
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN confidence_scores IS NOT NULL THEN 1 ELSE 0 END) as with_confidence,
+                AVG(JSON_EXTRACT(confidence_scores, '$.invoiceNumber')) as avg_invoice_number,
+                AVG(JSON_EXTRACT(confidence_scores, '$.vendorName')) as avg_vendor_name,
+                AVG(JSON_EXTRACT(confidence_scores, '$.totalAmount')) as avg_total_amount,
+                AVG(JSON_EXTRACT(confidence_scores, '$.currency')) as avg_currency
+            FROM invoices
+            WHERE status = 'completed' AND confidence_scores IS NOT NULL
+        ")->fetch();
+
+        // Model usage breakdown
+        $modelStats = $this->db->query("
+            SELECT
+                COALESCE(ocr_model, 'unknown') as model,
+                COUNT(*) as count,
+                SUM(CASE WHEN ocr_escalated = 1 THEN 1 ELSE 0 END) as escalated_count
+            FROM invoices
+            WHERE status = 'completed' AND ocr_model IS NOT NULL
+            GROUP BY ocr_model
+            ORDER BY count DESC
+        ")->fetchAll();
+
         sendJSON([
             'overview' => [
                 'totalJobs' => (int)$overview['total_jobs'],
@@ -1014,7 +1042,23 @@ class Invoice extends BaseResource {
                 'retryingJobs' => (int)$overview['retrying_jobs'],
                 'successRate' => $successRate,
                 'avgProcessingSeconds' => $overview['avg_processing_seconds'] !== null ? round((float)$overview['avg_processing_seconds'], 1) : null,
+                'totalCostUsd' => round((float)($costRow['total_cost'] ?? 0), 4),
+                'totalTokens' => (int)($costRow['total_tokens'] ?? 0),
+                'inputTokens' => (int)($costRow['input_tokens'] ?? 0),
+                'outputTokens' => (int)($costRow['output_tokens'] ?? 0),
             ],
+            'confidence' => [
+                'avgInvoiceNumber' => $confStats['avg_invoice_number'] !== null ? round((float)$confStats['avg_invoice_number'], 3) : null,
+                'avgVendorName' => $confStats['avg_vendor_name'] !== null ? round((float)$confStats['avg_vendor_name'], 3) : null,
+                'avgTotalAmount' => $confStats['avg_total_amount'] !== null ? round((float)$confStats['avg_total_amount'], 3) : null,
+                'avgCurrency' => $confStats['avg_currency'] !== null ? round((float)$confStats['avg_currency'], 3) : null,
+                'totalWithConfidence' => (int)$confStats['with_confidence'],
+            ],
+            'models' => array_map(fn($m) => [
+                'model' => $m['model'],
+                'count' => (int)$m['count'],
+                'escalatedCount' => (int)$m['escalated_count'],
+            ], $modelStats),
             'queue' => [
                 'depth' => (int)$queue['depth'],
                 'oldestQueuedAt' => $queue['oldest_queued_at'],
