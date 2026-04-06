@@ -274,7 +274,7 @@ export default function Layout() {
       {/* Desktop sidebar */}
       <aside
         className={`hidden lg:flex lg:flex-col fixed inset-y-0 left-0 z-30 bg-card border-r border-border/60 sidebar-transition ${
-          collapsed ? "w-[4.5rem]" : "w-64"
+          collapsed ? "w-[4.5rem]" : "w-52"
         }`}
       >
         {navContent(collapsed)}
@@ -385,10 +385,10 @@ export default function Layout() {
       {/* Main content */}
       <main
         className={`flex-1 min-h-screen sidebar-transition pt-14 lg:pt-0 ${
-          collapsed ? "lg:ml-[4.5rem]" : "lg:ml-64"
+          collapsed ? "lg:ml-[4.5rem]" : "lg:ml-52"
         }`}
       >
-        <div className="p-4 md:p-6 lg:p-8 animate-fade-in">
+        <div className="p-4 md:p-5 lg:p-6 animate-fade-in">
           <Outlet />
         </div>
       </main>
