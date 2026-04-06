@@ -47,6 +47,28 @@ export default function Layout() {
     setMobileOpen(false);
   }, [location.pathname]);
 
+  // Set browser tab title based on route
+  useEffect(() => {
+    const titles: Record<string, string> = {
+      "/dashboard": "Dashboard",
+      "/invoices": "Invoices",
+      "/upload": "Upload",
+      "/emails": "Emails",
+      "/profile": "Profile",
+      "/settings/companies": "Companies",
+      "/settings/billing": "Billing",
+      "/settings/users": "Users",
+      "/settings/system": "System",
+      "/settings/health": "Health",
+    };
+    const path = location.pathname;
+    const match = titles[path]
+      || (path.startsWith("/invoices/") ? "Invoice Detail" : null)
+      || (path.startsWith("/settings/companies/") ? "Company Settings" : null)
+      || (path.startsWith("/settings/billing/") ? "Billing" : null);
+    document.title = match ? `${match} — Gentrula` : "Gentrula";
+  }, [location.pathname]);
+
   const toggleCollapse = useCallback(() => {
     setCollapsed((prev) => {
       const next = !prev;
