@@ -482,12 +482,12 @@ export default function InvoiceDetail() {
                 {invoice.senderEmail && (
                   <div className="flex justify-between"><span className="text-muted-foreground">Sender</span><span className="text-foreground">{invoice.senderEmail}</span></div>
                 )}
-                {invoice.ocrModel && (
+                {invoice.status === "completed" && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">OCR Model</span>
                     <span className="text-foreground">
-                      {invoice.ocrModel}
-                      {invoice.ocrEscalated ? <span className="ml-1 text-amber-600 text-[10px]">(escalated)</span> : <span className="ml-1 text-emerald-600 text-[10px]">(direct)</span>}
+                      {invoice.ocrModel || <span className="text-muted-foreground italic">not tracked</span>}
+                      {invoice.ocrModel && (invoice.ocrEscalated ? <span className="ml-1 text-amber-600 text-[10px]">(escalated)</span> : <span className="ml-1 text-emerald-600 text-[10px]">(direct)</span>)}
                     </span>
                   </div>
                 )}
