@@ -18,7 +18,7 @@ $pathParts = array_values(array_filter(explode('/', $path)));
 if (($pathParts[0] ?? '') === 'health') {
     try {
         $db = getDBConnection();
-        $info = ['status' => 'ok', 'php' => PHP_VERSION, 'upload_max' => ini_get('upload_max_filesize'), 'post_max' => ini_get('post_max_size'), 'max_exec' => ini_get('max_execution_time')];
+        $info = ['status' => 'ok', 'version' => '2026-04-07a', 'php' => PHP_VERSION, 'upload_max' => ini_get('upload_max_filesize'), 'post_max' => ini_get('post_max_size'), 'max_exec' => ini_get('max_execution_time')];
         // Check uploads dir
         $uploadDir = UPLOAD_DIR;
         $info['upload_dir'] = $uploadDir;
