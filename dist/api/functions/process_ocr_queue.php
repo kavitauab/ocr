@@ -99,6 +99,7 @@ foreach ($jobs as $job) {
         if ($companyRow && $companyRow['extraction_fields']) {
             $enabledFields = json_decode($companyRow['extraction_fields'], true);
         }
+        error_log("[OCR Queue] Invoice $invoiceId: company $companyId extraction_fields raw=" . json_encode($companyRow['extraction_fields'] ?? 'NULL') . " parsed=" . json_encode($enabledFields));
 
         $filePath = getFilePath($job['stored_filename']);
         if (!file_exists($filePath)) {

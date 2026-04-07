@@ -262,6 +262,8 @@ Rules:
             return [
                 'data' => $block['input'],
                 'usage' => $usageMetadata,
+                'model_used' => $model,
+                'escalated' => false,
             ];
         }
     }
