@@ -3,7 +3,7 @@
 // All available extraction fields
 function getAllExtractionFields() {
     return [
-        'documentType' => ['type' => 'string', 'enum' => ['invoice', 'proforma', 'credit_note'], 'description' => 'Type of document: "invoice" for commercial/standard invoices, "proforma" for proforma/advance invoices (išankstinė sąskaita faktūra), "credit_note" for credit notes (kreditinė sąskaita faktūra)'],
+        'documentType' => ['type' => 'string', 'enum' => ['invoice', 'proforma', 'credit_note'], 'description' => 'Type of document: "invoice" for commercial/standard invoices (PVM sąskaita faktūra), "proforma" for proforma/advance invoices (išankstinė sąskaita faktūra) AND payment notifications (mokėjimo pranešimas), "credit_note" for credit notes (kreditinė sąskaita faktūra)'],
         'invoiceNumber' => ['type' => 'string', 'description' => 'The invoice number/ID. If the document shows a series and number separately (e.g. "Serija TE2023 Nr. 285"), combine them with a dash (e.g. "TE2023-285"). Remove prefixes like "Nr.", "No.", "Serija" etc. If the invoice number is already a single value (e.g. "SJ-152138"), keep it as-is.'],
         'invoiceDate' => ['type' => 'string', 'description' => 'Invoice issue date in YYYY-MM-DD format'],
         'dueDate' => ['type' => ['string', 'null'], 'description' => 'Payment due date in YYYY-MM-DD format, or null if not stated'],
@@ -294,7 +294,7 @@ function classifyDocument($filePath, $fileType) {
                 'category' => [
                     'type' => 'string',
                     'enum' => ['invoice', 'proforma', 'credit_note', 'order_confirmation', 'act', 'report', 'contract', 'other'],
-                    'description' => 'Document category: "invoice" for standard/commercial invoices (PVM sąskaita faktūra), "proforma" for proforma/advance invoices, "credit_note" for credit notes, "order_confirmation" for order confirmations/purchase orders, "act" for work acceptance acts (darbų priėmimo-perdavimo aktas) or service acts, "report" for reports, "contract" for contracts/agreements, "other" for anything else',
+                    'description' => 'Document category: "invoice" for standard/commercial invoices (PVM sąskaita faktūra), "proforma" for proforma/advance invoices AND payment notifications (mokėjimo pranešimas), "credit_note" for credit notes, "order_confirmation" for order confirmations/purchase orders, "act" for work acceptance acts (darbų priėmimo-perdavimo aktas) or service acts, "report" for reports, "contract" for contracts/agreements, "other" for anything else',
                 ],
                 'detail' => [
                     'type' => 'string',
