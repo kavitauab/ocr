@@ -56,15 +56,14 @@ function extractInvoiceData($filePath, $fileType, $enabledFields = null, $includ
         $extracted = $cheapResult['data'] ?? $cheapResult;
         $cheapUsage = $cheapResult['usage'] ?? null;
 
-        // Check confidence scores
+        // Check confidence scores across ALL extracted fields
         $confidences = $extracted['confidence'] ?? [];
-        $criticalFields = ['invoiceNumber', 'vendorName', 'totalAmount', 'currency'];
         $minConfidence = 1.0;
-        foreach ($criticalFields as $field) {
-            if (isset($confidences[$field])) {
-                $minConfidence = min($minConfidence, floatval($confidences[$field]));
-            }
+        foreach ($confidences as $field => $score) {
+            $minConfidence = min($minConfidence, floatval($score));
         }
+        // If no confidence scores at all, force escalation
+        if (empty($confidences)) $minConfidence = 0.0;
 
         if ($minConfidence >= $confidenceThreshold) {
             // Cheap model is confident enough
