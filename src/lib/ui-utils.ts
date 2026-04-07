@@ -27,7 +27,9 @@ export function getStatusClasses(status: string): string {
  */
 export function formatRelativeTime(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
-  const normalized = dateStr.includes("T") || dateStr.includes("Z") ? dateStr : dateStr.replace(" ", "T") + "Z";
+  // Server stores timestamps in local time (Europe/Vilnius) without timezone suffix.
+  // Do NOT append Z — that would treat them as UTC and shift by 2-3 hours.
+  const normalized = dateStr.includes("T") ? dateStr : dateStr.replace(" ", "T");
   const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return "";
 
@@ -52,8 +54,8 @@ export function formatRelativeTime(dateStr: string | null | undefined): string {
  */
 export function formatDateTime(value: string | null | undefined): string {
   if (!value) return "\u2014";
-  // DB stores UTC without timezone suffix — append Z so JS converts to local
-  const normalized = value.includes("T") || value.includes("Z") ? value : value.replace(" ", "T") + "Z";
+  // Server stores timestamps in local time (Europe/Vilnius) — do NOT append Z
+  const normalized = value.includes("T") ? value : value.replace(" ", "T");
   const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return "\u2014";
   return date.toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "medium" });

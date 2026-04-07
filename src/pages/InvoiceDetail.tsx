@@ -49,7 +49,11 @@ function getReturnedAt(invoice: any): string | null {
 }
 function parseDateTime(value: string | null | undefined): Date | null {
   if (!value) return null;
-  const parsed = new Date(value);
+  // Server stores timestamps in Europe/Vilnius without timezone suffix.
+  // JS Date() may treat "YYYY-MM-DD HH:MM:SS" as UTC — force local by
+  // replacing space with T and NOT appending Z.
+  const normalized = String(value).replace(" ", "T");
+  const parsed = new Date(normalized);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 function fmtDateTime(value: string | null | undefined): string {
