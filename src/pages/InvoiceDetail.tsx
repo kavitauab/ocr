@@ -30,19 +30,10 @@ import {
 function ConfidenceDot({ score }: { score?: number }) {
   if (score == null) return null;
   const pct = (score * 100).toFixed(0);
-  if (score >= 0.8) return (
-    <span title={`${pct}% confidence`} className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50">
-      <CheckCircle className="h-3 w-3 text-emerald-500" />
-    </span>
-  );
-  if (score >= 0.5) return (
-    <span title={`${pct}% confidence`} className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-50">
-      <AlertTriangle className="h-3 w-3 text-amber-500" />
-    </span>
-  );
+  const color = score >= 0.8 ? "text-emerald-600" : score >= 0.5 ? "text-amber-600" : "text-red-600";
   return (
-    <span title={`${pct}% confidence`} className="flex h-5 w-5 items-center justify-center rounded-full bg-red-50">
-      <AlertCircle className="h-3 w-3 text-red-500" />
+    <span title={`${pct}% confidence`} className={`text-[10px] font-medium tabular-nums ${color}`}>
+      {pct}%
     </span>
   );
 }
@@ -64,7 +55,7 @@ function parseDateTime(value: string | null | undefined): Date | null {
 function fmtDateTime(value: string | null | undefined): string {
   const p = parseDateTime(value);
   if (!p) return "\u2014";
-  return p.toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
+  return p.toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "medium" });
 }
 function formatDuration(ms: number | null): string {
   if (ms === null || !Number.isFinite(ms) || ms < 0) return "\u2014";
