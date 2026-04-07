@@ -140,6 +140,21 @@ foreach ($jobs as $job) {
         $modelUsed = $extractionResult['model_used'] ?? ($ocrUsage['model'] ?? 'unknown');
         $escalated = $extractionResult['escalated'] ?? false;
 
+        // Strip fields not in enabledFields (enforce company settings server-side)
+        if ($enabledFields !== null && is_array($enabledFields) && !empty($enabledFields)) {
+            $allFieldKeys = array_keys(getAllExtractionFields());
+            foreach ($allFieldKeys as $fk) {
+                if (!in_array($fk, $enabledFields) && isset($extracted[$fk])) {
+                    unset($extracted[$fk]);
+                    // Also remove from confidence scores
+                    if (isset($extracted['confidence'][$fk])) {
+                        unset($extracted['confidence'][$fk]);
+                    }
+                }
+            }
+            error_log("[OCR Queue] Stripped disabled fields. Enabled: " . implode(',', $enabledFields) . " Remaining keys: " . implode(',', array_keys($extracted)));
+        }
+
         // Update invoice with extracted data
         $invoiceUpdateParams = [
             'documentType' => $extracted['documentType'] ?? null,
