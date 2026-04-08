@@ -187,6 +187,9 @@ foreach ($jobs as $job) {
             'id' => $invoiceId,
         ];
 
+        // Debug: write model info to processing_error temporarily
+        $debugInfo = "v=" . (defined('API_VERSION') ? API_VERSION : '?') . " model=$modelUsed esc=" . ($escalated ? 'Y' : 'N') . " fields=" . ($enabledFields !== null ? implode(',', $enabledFields) : 'ALL');
+
         $stmt = $db->prepare("UPDATE invoices SET status = 'completed',
             document_type = :documentType,
             invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
@@ -196,7 +199,8 @@ foreach ($jobs as $job) {
             subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
             bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
             ocr_model = :ocrModel, ocr_escalated = :ocrEscalated,
-            processing_error = NULL, ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id");
+            processing_error = :debugInfo, ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id");
+        $invoiceUpdateParams['debugInfo'] = $debugInfo;
         $stmt->execute($invoiceUpdateParams);
 
         // Complete the OCR job
