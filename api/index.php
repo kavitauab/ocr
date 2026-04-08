@@ -33,6 +33,12 @@ if (($pathParts[0] ?? '') === 'health') {
         // Recent emails
         $recentEmails = $db->query("SELECT id, subject, company_id FROM email_inbox ORDER BY received_date DESC LIMIT 5")->fetchAll();
         $info['recent_emails'] = $recentEmails;
+        // Check if ocr_model column exists
+        $cols = $db->query("SHOW COLUMNS FROM invoices LIKE 'ocr_model'")->fetchAll();
+        $info['ocr_model_column_exists'] = count($cols) > 0;
+        // Check raw value for last invoice
+        $rawCheck = $db->query("SELECT id, ocr_model, ocr_escalated, processing_error FROM invoices ORDER BY updated_at DESC LIMIT 1")->fetch();
+        $info['last_invoice_raw'] = $rawCheck;
         // Check last processed invoice model
         $lastInv = $db->query("SELECT id, ocr_model, ocr_escalated, updated_at FROM invoices WHERE status='completed' ORDER BY updated_at DESC LIMIT 1")->fetch();
         $info['last_invoice'] = $lastInv ? ['id' => $lastInv['id'], 'ocr_model' => $lastInv['ocr_model'], 'escalated' => $lastInv['ocr_escalated'], 'updated' => $lastInv['updated_at']] : null;
