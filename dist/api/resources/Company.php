@@ -73,14 +73,31 @@ class Company extends BaseResource {
             'extractionFields' => 'extraction_fields',
         ];
 
+        // Boolean DB columns that need integer conversion
+        $booleanColumns = ['ms_fetch_enabled', 'vecticum_enabled', 'vecticum_auto_send'];
+        // Integer DB columns
+        $integerColumns = ['ms_fetch_interval_minutes'];
+
         $updates = ['updated_at' => date('Y-m-d H:i:s')];
         foreach ($data as $key => $value) {
             $dbKey = $camelMap[$key] ?? $key;
             if (in_array($dbKey, $allowed)) {
                 if ($value === '••••••••') continue;
                 // JSON-encode arrays for JSON columns
-                if ($dbKey === 'extraction_fields' && is_array($value)) {
-                    $value = json_encode($value);
+                if ($dbKey === 'extraction_fields') {
+                    if (is_array($value)) {
+                        $value = json_encode($value);
+                    } elseif ($value === null || $value === '') {
+                        $value = null; // NULL means "all fields"
+                    }
+                }
+                // Convert booleans to integers for tinyint columns
+                if (in_array($dbKey, $booleanColumns)) {
+                    $value = ($value === true || $value === 'true' || $value === '1' || $value === 1) ? 1 : 0;
+                }
+                // Convert to int for integer columns
+                if (in_array($dbKey, $integerColumns) && $value !== null) {
+                    $value = (int)$value;
                 }
                 $updates[$dbKey] = $value;
             }
@@ -95,7 +112,12 @@ class Company extends BaseResource {
         }
         $params['_id'] = $id;
 
-        $this->db->prepare("UPDATE companies SET " . implode(', ', $sets) . " WHERE id = :_id")->execute($params);
+        try {
+            $this->db->prepare("UPDATE companies SET " . implode(', ', $sets) . " WHERE id = :_id")->execute($params);
+        } catch (\PDOException $e) {
+            error_log("[Company Update] Failed: " . $e->getMessage() . " | Params: " . json_encode(array_keys($updates)));
+            sendJSON(['error' => 'Failed to save: ' . $e->getMessage()], 400);
+        }
         logAction(['userId' => $user['id'], 'companyId' => $id, 'action' => 'update', 'resourceType' => 'company', 'resourceId' => $id]);
 
         $stmt = $this->db->prepare("SELECT * FROM companies WHERE id = :id");

@@ -65,9 +65,9 @@ define('APP_ENV', $_ENV['APP_ENV'] ?? 'development');
 define('API_VERSION', '2026-04-08a');
 date_default_timezone_set('Europe/Vilnius');
 
-// Clear OPcache on deploy to ensure fresh PHP files
-if (function_exists('opcache_reset')) {
-    opcache_reset();
+// Disable OPcache for CLI (cron) to always get fresh files
+if (php_sapi_name() === 'cli' && function_exists('opcache_reset')) {
+    ini_set('opcache.enable', '0');
 }
 
 // Error handling
