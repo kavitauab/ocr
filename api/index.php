@@ -30,6 +30,9 @@ if (($pathParts[0] ?? '') === 'health') {
         // Check cron version file
         $cronVerFile = __DIR__ . '/_cron_version.txt';
         $info['cron_version'] = file_exists($cronVerFile) ? trim(file_get_contents($cronVerFile)) : 'no cron run yet';
+        // Recent emails
+        $recentEmails = $db->query("SELECT id, subject, company_id FROM email_inbox ORDER BY received_date DESC LIMIT 5")->fetchAll();
+        $info['recent_emails'] = $recentEmails;
         // Check last processed invoice model
         $lastInv = $db->query("SELECT id, ocr_model, ocr_escalated, updated_at FROM invoices WHERE status='completed' ORDER BY updated_at DESC LIMIT 1")->fetch();
         $info['last_invoice'] = $lastInv ? ['id' => $lastInv['id'], 'ocr_model' => $lastInv['ocr_model'], 'escalated' => $lastInv['ocr_escalated'], 'updated' => $lastInv['updated_at']] : null;
