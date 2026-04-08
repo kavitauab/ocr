@@ -366,6 +366,8 @@ export default function InvoiceDetail() {
                     {section.fields.map(([key, label]) => {
                       const value = (invoice as any)[key];
                       const conf = confidence[key];
+                      // Hide fields with no value and no confidence (disabled in company settings)
+                      if (!editing && !value && conf == null) return null;
                       return (
                         <div key={key} className="flex items-center gap-2">
                           <div className="flex items-center gap-1 w-24 shrink-0">
