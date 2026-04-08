@@ -231,6 +231,7 @@ $ensureColumn('companies', 'buyer_keywords', 'VARCHAR(500) NULL');
 // --- OCR model tracking on invoices ---
 $ensureColumn('invoices', 'ocr_model', 'VARCHAR(100) NULL');
 $ensureColumn('invoices', 'ocr_escalated', 'TINYINT(1) NOT NULL DEFAULT 0');
+$ensureColumn('invoices', 'ocr_escalation_reason', 'VARCHAR(500) NULL');
 
 // --- Document classification: skip_reason + additional_files + skipped status ---
 $ensureColumn('invoices', 'skip_reason', 'VARCHAR(255) NULL');

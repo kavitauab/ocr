@@ -145,6 +145,7 @@ foreach ($jobs as $job) {
         }
         $modelUsed = $extractionResult['model_used'] ?? ($ocrUsage['model'] ?? 'unknown');
         $escalated = $extractionResult['escalated'] ?? false;
+        $escalationReason = $extractionResult['escalation_reason'] ?? null;
 
         // Strip fields not in enabledFields (enforce company settings server-side)
         if ($enabledFields !== null && is_array($enabledFields) && !empty($enabledFields)) {
@@ -184,6 +185,7 @@ foreach ($jobs as $job) {
             'raw' => json_encode($extracted),
             'ocrModel' => $modelUsed ?: 'unknown',
             'ocrEscalated' => $escalated ? 1 : 0,
+            'ocrEscalationReason' => $escalationReason,
             'id' => $invoiceId,
         ];
 
@@ -195,7 +197,7 @@ foreach ($jobs as $job) {
             total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
             subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
             bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
-            ocr_model = :ocrModel, ocr_escalated = :ocrEscalated,
+            ocr_model = :ocrModel, ocr_escalated = :ocrEscalated, ocr_escalation_reason = :ocrEscalationReason,
             processing_error = NULL, ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id");
         $stmt->execute($invoiceUpdateParams);
 

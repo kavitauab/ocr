@@ -59,28 +59,24 @@ function extractInvoiceData($filePath, $fileType, $enabledFields = null, $includ
         // Check confidence scores across ALL extracted fields
         $confidences = $extracted['confidence'] ?? [];
         $minConfidence = 1.0;
-        $lowestField = null;
+        $failedFields = [];
         foreach ($confidences as $field => $score) {
             $s = floatval($score);
-            if ($s < $minConfidence) {
-                $minConfidence = $s;
-                $lowestField = $field;
+            if ($s < $minConfidence) $minConfidence = $s;
+            if ($s < $confidenceThreshold) {
+                $failedFields[$field] = $s;
             }
         }
-        // If no confidence scores at all, force escalation
-        if (empty($confidences)) { $minConfidence = 0.0; $lowestField = '(no scores)'; }
-
-        error_log("[OCR Smart] Cheap model ($cheapModel) min confidence: $minConfidence (field: $lowestField), threshold: $confidenceThreshold");
+        if (empty($confidences)) { $minConfidence = 0.0; $failedFields['(no scores)'] = 0; }
 
         if ($minConfidence >= $confidenceThreshold) {
-            // Cheap model is confident enough
-            error_log("[OCR Smart] Accepted cheap model result");
             if (!$includeUsage) return $extracted;
-            return ['data' => $extracted, 'usage' => $cheapUsage, 'model_used' => $cheapModel, 'escalated' => false];
+            return ['data' => $extracted, 'usage' => $cheapUsage, 'model_used' => $cheapModel, 'escalated' => false, 'escalation_reason' => null];
         }
 
         // Low confidence — escalate to primary model
-        error_log("[OCR Smart] Escalating to $primaryModel (lowest: $lowestField=$minConfidence < $confidenceThreshold)");
+        $escalationReason = array_map(fn($f, $s) => "$f:" . round($s * 100) . "%", array_keys($failedFields), array_values($failedFields));
+        error_log("[OCR Smart] Escalating to $primaryModel — failed fields: " . implode(', ', $escalationReason));
         $primaryResult = _callExtractionApi($filePath, $fileType, $enabledFields, $primaryModel);
         $primaryExtracted = $primaryResult['data'] ?? $primaryResult;
         $primaryUsage = $primaryResult['usage'] ?? null;
@@ -95,7 +91,7 @@ function extractInvoiceData($filePath, $fileType, $enabledFields = null, $includ
         }
 
         if (!$includeUsage) return $primaryExtracted;
-        return ['data' => $primaryExtracted, 'usage' => $primaryUsage, 'model_used' => $primaryModel, 'escalated' => true];
+        return ['data' => $primaryExtracted, 'usage' => $primaryUsage, 'model_used' => $primaryModel, 'escalated' => true, 'escalation_reason' => implode(', ', $escalationReason)];
     }
 
     // No smart extraction — use primary model directly
