@@ -47,15 +47,16 @@ try {
     return;
 }
 
+// Write diagnostic file so we can verify cron code version via web
+$_apiVer = defined('API_VERSION') ? API_VERSION : 'UNDEFINED';
+@file_put_contents(__DIR__ . '/../_cron_version.txt', $_apiVer . ' | ' . date('Y-m-d H:i:s') . ' | ' . __FILE__ . ' | jobs=' . count($jobs));
+
 if (empty($jobs)) {
     sendJSON(['message' => 'No jobs in queue', 'processed' => 0]);
     return;
 }
 
-$_apiVer = defined('API_VERSION') ? API_VERSION : 'UNDEFINED';
 error_log("[OCR Queue] Starting batch, API_VERSION=$_apiVer, jobs=" . count($jobs));
-// Write diagnostic file so we can verify cron code version via web
-@file_put_contents(__DIR__ . '/../_cron_version.txt', $_apiVer . ' | ' . date('Y-m-d H:i:s') . ' | ' . __FILE__);
 
 foreach ($jobs as $job) {
     $jobId = $job['id'];
