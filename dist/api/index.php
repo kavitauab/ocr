@@ -25,6 +25,17 @@ if (($pathParts[0] ?? '') === 'health') {
         $info['upload_dir_exists'] = is_dir($uploadDir);
         $info['upload_dir_writable'] = is_writable($uploadDir);
         $info['api_key_set'] = !empty(getAnthropicApiKey());
+        $info['opcache_cli'] = ini_get('opcache.enable_cli');
+        $info['opcache_enabled'] = function_exists('opcache_get_status') ? (opcache_get_status(false)['opcache_enabled'] ?? 'N/A') : 'no ext';
+        // Check cron version file
+        $cronVerFile = __DIR__ . '/_cron_version.txt';
+        $info['cron_version'] = file_exists($cronVerFile) ? trim(file_get_contents($cronVerFile)) : 'no cron run yet';
+        // Check last processed invoice model
+        $lastInv = $db->query("SELECT id, ocr_model, ocr_escalated, updated_at FROM invoices WHERE status='completed' ORDER BY updated_at DESC LIMIT 1")->fetch();
+        $info['last_invoice'] = $lastInv ? ['id' => $lastInv['id'], 'ocr_model' => $lastInv['ocr_model'], 'escalated' => $lastInv['ocr_escalated'], 'updated' => $lastInv['updated_at']] : null;
+        // Check extraction_fields for first company
+        $compFields = $db->query("SELECT id, name, extraction_fields FROM companies LIMIT 3")->fetchAll();
+        $info['companies_fields'] = array_map(fn($c) => ['id' => $c['id'], 'name' => $c['name'], 'extraction_fields' => $c['extraction_fields']], $compFields);
         sendJSON($info);
     } catch (\Throwable $e) {
         sendJSON(['status' => 'error', 'message' => $e->getMessage()], 500);
