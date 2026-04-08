@@ -62,7 +62,13 @@ define('CORS_ORIGIN', $_ENV['CORS_ORIGIN'] ?? $defaultCorsOrigin);
 
 // App
 define('APP_ENV', $_ENV['APP_ENV'] ?? 'development');
+define('API_VERSION', '2026-04-08a');
 date_default_timezone_set('Europe/Vilnius');
+
+// Clear OPcache on deploy to ensure fresh PHP files
+if (function_exists('opcache_reset')) {
+    opcache_reset();
+}
 
 // Error handling
 if (APP_ENV === 'development') {

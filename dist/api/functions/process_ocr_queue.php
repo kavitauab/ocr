@@ -52,6 +52,8 @@ if (empty($jobs)) {
     return;
 }
 
+error_log("[OCR Queue] Starting batch processing, API_VERSION=" . (defined('API_VERSION') ? API_VERSION : 'UNDEFINED') . ", jobs=" . count($jobs));
+
 foreach ($jobs as $job) {
     $jobId = $job['id'];
     $invoiceId = $job['invoice_id'];
