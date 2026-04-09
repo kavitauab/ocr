@@ -189,17 +189,39 @@ foreach ($jobs as $job) {
             'id' => $invoiceId,
         ];
 
-        $stmt = $db->prepare("UPDATE invoices SET status = 'completed',
-            document_type = :documentType,
-            invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
-            vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
-            buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
-            total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
-            subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
-            bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
-            ocr_model = :ocrModel, ocr_escalated = :ocrEscalated, ocr_escalation_reason = :ocrEscalationReason,
-            processing_error = NULL, ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id");
-        $stmt->execute($invoiceUpdateParams);
+        error_log("[OCR Queue] Saving invoice $invoiceId: model=$modelUsed escalated=" . ($escalated ? 'Y' : 'N') . " reason=" . ($escalationReason ?? 'none') . " fields=" . ($enabledFields !== null ? count($enabledFields) : 'ALL') . " params=" . json_encode(array_keys($invoiceUpdateParams)));
+
+        try {
+            $stmt = $db->prepare("UPDATE invoices SET status = 'completed',
+                document_type = :documentType,
+                invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
+                vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
+                buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
+                total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
+                subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
+                bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
+                ocr_model = :ocrModel, ocr_escalated = :ocrEscalated, ocr_escalation_reason = :ocrEscalationReason,
+                processing_error = NULL, ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id");
+            $stmt->execute($invoiceUpdateParams);
+            error_log("[OCR Queue] Main UPDATE succeeded for $invoiceId, rowCount=" . $stmt->rowCount());
+        } catch (\Throwable $updateErr) {
+            error_log("[OCR Queue] Main UPDATE FAILED for $invoiceId: " . $updateErr->getMessage());
+            // Fallback: try without the new column in case it doesn't exist yet
+            $db->prepare("UPDATE invoices SET status = 'completed',
+                document_type = :documentType,
+                invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
+                vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
+                buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
+                total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
+                subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
+                bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
+                ocr_model = :ocrModel, ocr_escalated = :ocrEscalated,
+                processing_error = NULL, ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id2")
+                ->execute([
+                    ...$invoiceUpdateParams,
+                    'id2' => $invoiceId,
+                ]);
+        }
 
         // Complete the OCR job
         $db->prepare("UPDATE ocr_jobs SET
