@@ -56,25 +56,28 @@ function extractInvoiceData($filePath, $fileType, $enabledFields = null, $includ
         $extracted = $cheapResult['data'] ?? $cheapResult;
         $cheapUsage = $cheapResult['usage'] ?? null;
 
-        // Check confidence scores across ALL extracted fields
+        // Check confidence scores — only escalate for fields that HAVE a value
+        // but the model is uncertain about. Missing fields (null value + low confidence)
+        // are correct extractions, not reasons to escalate.
         $confidences = $extracted['confidence'] ?? [];
-        $minConfidence = 1.0;
         $failedFields = [];
         foreach ($confidences as $field => $score) {
             $s = floatval($score);
-            if ($s < $minConfidence) $minConfidence = $s;
             if ($s < $confidenceThreshold) {
-                $failedFields[$field] = $s;
+                // Only count as failed if the field has an actual value
+                $value = $extracted[$field] ?? null;
+                if ($value !== null && $value !== '') {
+                    $failedFields[$field] = $s;
+                }
             }
         }
-        if (empty($confidences)) { $minConfidence = 0.0; $failedFields['(no scores)'] = 0; }
 
-        if ($minConfidence >= $confidenceThreshold) {
+        if (empty($failedFields)) {
             if (!$includeUsage) return $extracted;
             return ['data' => $extracted, 'usage' => $cheapUsage, 'model_used' => $cheapModel, 'escalated' => false, 'escalation_reason' => null];
         }
 
-        // Low confidence — escalate to primary model
+        // Low confidence on actual values — escalate to primary model
         $escalationReason = array_map(fn($f, $s) => "$f:" . round($s * 100) . "%", array_keys($failedFields), array_values($failedFields));
         error_log("[OCR Smart] Escalating to $primaryModel — failed fields: " . implode(', ', $escalationReason));
         $primaryResult = _callExtractionApi($filePath, $fileType, $enabledFields, $primaryModel);
