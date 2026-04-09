@@ -26,10 +26,11 @@ if ($task === 'all') {
     // Run both tasks in sequence via subprocesses
     $php = PHP_BINARY;
     if (!$php || !file_exists($php)) {
-        // Fallback: find php binary
         $php = trim(shell_exec('which php 2>/dev/null') ?: '/usr/bin/php');
     }
     $dir = __DIR__;
+    // Log which PHP binary and directory we're using
+    error_log("[CRON ALL] php=$php dir=$dir version=" . (defined('API_VERSION') ? API_VERSION : 'UNDEF'));
     echo "=== fetch-emails ===\n";
     passthru("$php " . escapeshellarg("$dir/cron.php") . " fetch-emails 2>&1");
     echo "\n=== process-ocr ===\n";

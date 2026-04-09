@@ -141,9 +141,30 @@ function processCompanyEmails($companyId) {
                         $db->prepare("UPDATE invoices SET ocr_sent_at = NOW(), updated_at = NOW() WHERE id = :id")->execute(['id' => $invoiceId]);
                     } catch (Throwable $e) {}
 
-                    $extractionResult = extractInvoiceData($item['filePath'], $saved['fileType'], null, true);
+                    // Load company extraction field preferences
+                    $enabledFields = null;
+                    if ($company['extraction_fields']) {
+                        $ef = is_string($company['extraction_fields']) ? json_decode($company['extraction_fields'], true) : $company['extraction_fields'];
+                        if (is_array($ef) && !empty($ef)) $enabledFields = $ef;
+                    }
+
+                    $extractionResult = extractInvoiceData($item['filePath'], $saved['fileType'], $enabledFields, true);
                     $extracted = $extractionResult['data'] ?? $extractionResult;
                     if (isset($extractionResult['usage'])) $ocrUsage = $extractionResult['usage'];
+                    $modelUsed = $extractionResult['model_used'] ?? ($ocrUsage['model'] ?? 'unknown');
+                    $escalated = $extractionResult['escalated'] ?? false;
+                    $escalationReason = $extractionResult['escalation_reason'] ?? null;
+
+                    // Strip fields not in enabledFields (enforce company settings)
+                    if ($enabledFields !== null) {
+                        $allFieldKeys = array_keys(getAllExtractionFields());
+                        foreach ($allFieldKeys as $fk) {
+                            if (!in_array($fk, $enabledFields) && isset($extracted[$fk])) {
+                                unset($extracted[$fk]);
+                                if (isset($extracted['confidence'][$fk])) unset($extracted['confidence'][$fk]);
+                            }
+                        }
+                    }
 
                     // Map order_confirmation to proforma
                     $docType = $extracted['documentType'] ?? $item['classification']['category'];
@@ -169,6 +190,9 @@ function processCompanyEmails($companyId) {
                         'bankDetails' => $extracted['bankDetails'] ?? null,
                         'confidence' => json_encode($extracted['confidence'] ?? []),
                         'raw' => json_encode($extracted),
+                        'ocrModel' => $modelUsed ?: 'unknown',
+                        'ocrEscalated' => $escalated ? 1 : 0,
+                        'ocrEscalationReason' => $escalationReason,
                         'id' => $invoiceId,
                     ];
 
@@ -180,6 +204,7 @@ function processCompanyEmails($companyId) {
                         total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
                         subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
                         bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
+                        ocr_model = :ocrModel, ocr_escalated = :ocrEscalated, ocr_escalation_reason = :ocrEscalationReason,
                         ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id")
                         ->execute($invoiceUpdateParams);
 
