@@ -252,10 +252,10 @@ if ($action === 'test-facet') {
     $facetSummary = function ($recordData) {
         if (!is_array($recordData)) return ['error' => 'not an object'];
         $relevant = [];
-        foreach (['facet', 'facets', 'thumbnail', 'thumbnails', 'preview', 'previews', 'card', 'cardImage', 'faset', 'fasetas', 'image', 'images'] as $k) {
+        // Dump actual values for fields likely to hold the facet/preview
+        foreach (['_facet', 'facet', 'facets', 'thumbnail', 'preview', 'cardImage', 'image', 'images', 'files'] as $k) {
             if (array_key_exists($k, $recordData)) {
-                $v = $recordData[$k];
-                $relevant[$k] = is_array($v) ? '(array, ' . count($v) . ' items)' : $v;
+                $relevant[$k] = $recordData[$k];
             }
         }
         $relevant['_allKeys'] = array_keys($recordData);
