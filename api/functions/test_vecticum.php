@@ -164,6 +164,173 @@ if ($action === 'reprocess-email') {
     sendJSON(['action' => 'reprocess-email', 'classified' => count($classified), 'invoices' => count($invoiceDocs), 'other' => count($otherDocs), 'results' => $results]);
 }
 
+if ($action === 'test-facet') {
+    // Test whether a POST+file-upload+PATCH cycle triggers facet generation in Vecticum.
+    // Required: invoiceId (an existing completed invoice to use as source)
+    // Optional: strategy (basic|patch-after|patch-before|patch-twice)
+    $invoiceId = $_GET['invoiceId'] ?? '';
+    $strategy = $_GET['strategy'] ?? 'patch-after';
+    if (!$invoiceId) sendJSON(['error' => 'Need invoiceId'], 400);
+
+    $stmt = $db->prepare("SELECT * FROM invoices WHERE id = :id");
+    $stmt->execute(['id' => $invoiceId]);
+    $invoice = $stmt->fetch();
+    if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
+
+    require_once __DIR__ . '/../lib/file_storage.php';
+    $filePath = getFilePath($invoice['stored_filename']);
+    if (!file_exists($filePath)) sendJSON(['error' => 'File not found: ' . $invoice['stored_filename']], 404);
+
+    $token = getVecticumToken($company);
+    $steps = [];
+
+    // Use a test-prefixed invoice number so we don't collide with real data
+    $testInvNo = 'TEST-FACET-' . substr(md5(uniqid('', true)), 0, 8);
+
+    // Build metadata body (same logic as uploadToVecticum but simpler)
+    $total = floatval($invoice['total_amount'] ?? 0);
+    $tax = floatval($invoice['tax_amount'] ?? 0);
+    $subtotal = floatval($invoice['subtotal_amount'] ?? 0);
+    $body = [
+        'invoiceNo' => $testInvNo,
+        'invoiceDate' => $invoice['invoice_date'],
+        'paymentDate' => $invoice['due_date'],
+        'invoiceAmount' => $subtotal ?: $total,
+        'vatAmount' => $tax,
+        'totalAmount' => $subtotal ?: $total,
+        'totalInclVat' => number_format($total ?: ($subtotal + $tax), 2, '.', ''),
+    ];
+    if (!empty($invoice['vendor_vat_id'])) $body['counterpartyCode'] = $invoice['vendor_vat_id'];
+
+    $author = getVecticumDefaultAuthor($company, $token);
+    if ($author) $body['author'] = $author;
+
+    $partner = findVecticumPartner($company, $invoice['vendor_vat_id'] ?? '', $invoice['vendor_name'] ?? '', $token);
+    if ($partner) $body['counterparty'] = $partner;
+
+    $currency = strtoupper(trim($invoice['currency'] ?? 'EUR'));
+    $currencyRef = findVecticumCurrency($company, $currency, $token);
+    if ($currencyRef) $body['currency'] = $currencyRef;
+
+    $body = array_filter($body, fn($v) => $v !== null);
+
+    // Helper to GET the full record (to inspect facet fields)
+    $getRecord = function ($recordId) use ($company, $token) {
+        $ch = curl_init($company['vecticum_api_base_url'] . '/' . $company['vecticum_company_id'] . '/' . $recordId);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => ['Accept: application/json', "Authorization: Bearer $token"],
+            CURLOPT_TIMEOUT => 15,
+        ]);
+        $r = curl_exec($ch);
+        $c = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        return ['httpCode' => $c, 'data' => json_decode($r, true)];
+    };
+
+    // Helper to PATCH the record with same body (re-save trick)
+    $patchRecord = function ($recordId, $patchBody) use ($company, $token) {
+        $ch = curl_init($company['vecticum_api_base_url'] . '/' . $company['vecticum_company_id'] . '/' . $recordId);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => 'PATCH',
+            CURLOPT_POSTFIELDS => json_encode($patchBody),
+            CURLOPT_HTTPHEADER => [
+                'Accept: application/json',
+                'Content-Type: application/json',
+                "Authorization: Bearer $token",
+            ],
+            CURLOPT_TIMEOUT => 30,
+        ]);
+        $r = curl_exec($ch);
+        $c = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        return ['httpCode' => $c, 'response' => $r];
+    };
+
+    // Helper to extract facet-related fields from a record
+    $facetSummary = function ($recordData) {
+        if (!is_array($recordData)) return ['error' => 'not an object'];
+        $relevant = [];
+        foreach (['facet', 'facets', 'thumbnail', 'thumbnails', 'preview', 'previews', 'card', 'cardImage', 'faset', 'fasetas', 'image', 'images'] as $k) {
+            if (array_key_exists($k, $recordData)) {
+                $v = $recordData[$k];
+                $relevant[$k] = is_array($v) ? '(array, ' . count($v) . ' items)' : $v;
+            }
+        }
+        $relevant['_allKeys'] = array_keys($recordData);
+        return $relevant;
+    };
+
+    try {
+        // STEP 1: Optional PATCH-before (makes no sense without a record, skip)
+        // STEP 1: POST metadata to create the record
+        $ch = curl_init($company['vecticum_api_base_url'] . '/' . $company['vecticum_company_id']);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($body),
+            CURLOPT_HTTPHEADER => [
+                'Accept: application/json',
+                'Content-Type: application/json',
+                "Authorization: Bearer $token",
+            ],
+            CURLOPT_TIMEOUT => 30,
+        ]);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $createData = json_decode($response, true);
+        $steps[] = ['step' => '1-POST-create', 'httpCode' => $httpCode, 'data' => $createData];
+
+        if ($httpCode < 200 || $httpCode >= 300 || empty($createData['id'])) {
+            sendJSON(['action' => 'test-facet', 'testInvNo' => $testInvNo, 'error' => 'Create failed', 'steps' => $steps]);
+        }
+        $recordId = $createData['id'];
+
+        // STEP 2: GET record immediately after create (baseline — no file, no facet)
+        $r2 = $getRecord($recordId);
+        $steps[] = ['step' => '2-GET-after-create', 'httpCode' => $r2['httpCode'], 'facet' => $facetSummary($r2['data'])];
+
+        // STEP 3: Upload the file
+        $fileResult = uploadFileToVecticum($company, $recordId, $filePath, $invoice['original_filename'] ?? 'invoice.pdf', $token);
+        $steps[] = ['step' => '3-POST-file', 'result' => $fileResult];
+
+        // STEP 4: GET record after file upload
+        $r4 = $getRecord($recordId);
+        $steps[] = ['step' => '4-GET-after-file', 'httpCode' => $r4['httpCode'], 'facet' => $facetSummary($r4['data'])];
+
+        // STEP 5: PATCH (re-save) with same body to try triggering facet generation
+        if (in_array($strategy, ['patch-after', 'patch-twice'])) {
+            $p5 = $patchRecord($recordId, $body);
+            $steps[] = ['step' => '5-PATCH-resave', 'httpCode' => $p5['httpCode']];
+
+            // STEP 6: GET record after PATCH
+            $r6 = $getRecord($recordId);
+            $steps[] = ['step' => '6-GET-after-patch', 'httpCode' => $r6['httpCode'], 'facet' => $facetSummary($r6['data'])];
+        }
+
+        // STEP 7: second PATCH for the patch-twice strategy
+        if ($strategy === 'patch-twice') {
+            $p7 = $patchRecord($recordId, $body);
+            $steps[] = ['step' => '7-PATCH-resave-2', 'httpCode' => $p7['httpCode']];
+            $r8 = $getRecord($recordId);
+            $steps[] = ['step' => '8-GET-after-patch-2', 'httpCode' => $r8['httpCode'], 'facet' => $facetSummary($r8['data'])];
+        }
+
+        sendJSON([
+            'action' => 'test-facet',
+            'strategy' => $strategy,
+            'testInvNo' => $testInvNo,
+            'recordId' => $recordId,
+            'steps' => $steps,
+            'hint' => 'Check _allKeys in each step for facet-related field names. Compare the GET results before/after PATCH to see if any facet field got populated.',
+        ]);
+    } catch (\Throwable $e) {
+        sendJSON(['action' => 'test-facet', 'error' => $e->getMessage(), 'steps' => $steps], 500);
+    }
+}
+
 if ($action === 'debug-email-attachments') {
     $emailId = $_GET['emailId'] ?? '';
     if (!$emailId) sendJSON(['error' => 'Need emailId'], 400);
