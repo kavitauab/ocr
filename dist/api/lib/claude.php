@@ -56,15 +56,19 @@ function extractInvoiceData($filePath, $fileType, $enabledFields = null, $includ
         $extracted = $cheapResult['data'] ?? $cheapResult;
         $cheapUsage = $cheapResult['usage'] ?? null;
 
-        // Check confidence scores — only escalate for fields that HAVE a value
-        // but the model is uncertain about. Missing fields (null value + low confidence)
-        // are correct extractions, not reasons to escalate.
+        // Check confidence scores — only escalate for CRITICAL fields with low
+        // confidence. Non-critical fields (addresses, VAT IDs, dates, etc.) may
+        // have low confidence because they're missing from the document OR
+        // because Haiku hallucinated — escalating would waste money.
+        // Only the fields below are worth paying Opus/Sonnet to verify.
+        $criticalFields = ['invoiceNumber', 'vendorName', 'totalAmount', 'currency'];
         $confidences = $extracted['confidence'] ?? [];
         $failedFields = [];
-        foreach ($confidences as $field => $score) {
-            $s = floatval($score);
+        foreach ($criticalFields as $field) {
+            if (!isset($confidences[$field])) continue;
+            $s = floatval($confidences[$field]);
             if ($s < $confidenceThreshold) {
-                // Only count as failed if the field has an actual value
+                // Only escalate if the field has a value (not missing)
                 $value = $extracted[$field] ?? null;
                 if ($value !== null && $value !== '') {
                     $failedFields[$field] = $s;
