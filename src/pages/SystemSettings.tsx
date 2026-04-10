@@ -17,7 +17,36 @@ export default function SystemSettings() {
     classification_model: "",
     smart_extraction: "1",
     extraction_confidence_threshold: "0.9",
+    critical_fields: "invoiceNumber,vendorName,totalAmount,currency",
   });
+
+  const allCriticalFieldOptions: [string, string][] = [
+    ["documentType", "Document Type"],
+    ["invoiceNumber", "Invoice Number"],
+    ["invoiceDate", "Invoice Date"],
+    ["dueDate", "Due Date"],
+    ["vendorName", "Vendor Name"],
+    ["vendorAddress", "Vendor Address"],
+    ["vendorVatId", "Vendor VAT ID"],
+    ["buyerName", "Buyer Name"],
+    ["buyerAddress", "Buyer Address"],
+    ["buyerVatId", "Buyer VAT ID"],
+    ["subtotalAmount", "Subtotal"],
+    ["taxAmount", "Tax Amount"],
+    ["totalAmount", "Total Amount"],
+    ["currency", "Currency"],
+    ["poNumber", "PO Number"],
+    ["paymentTerms", "Payment Terms"],
+    ["bankDetails", "Bank Details"],
+  ];
+
+  const criticalFieldsArr = (form.critical_fields || "").split(",").map(s => s.trim()).filter(Boolean);
+  const toggleCriticalField = (key: string) => {
+    const next = criticalFieldsArr.includes(key)
+      ? criticalFieldsArr.filter(k => k !== key)
+      : [...criticalFieldsArr, key];
+    setForm({ ...form, critical_fields: next.join(",") });
+  };
 
   const { data } = useQuery({
     queryKey: ["settings"],
@@ -132,7 +161,23 @@ export default function SystemSettings() {
               onChange={(e) => setForm({ ...form, extraction_confidence_threshold: e.target.value })}
               className="w-32"
             />
-            <p className="text-xs text-muted-foreground">Minimum confidence score on critical fields (invoice#, vendor, total, currency) to accept cheap model result. Below this → escalate to primary model. (0.0-1.0)</p>
+            <p className="text-xs text-muted-foreground">Minimum confidence score on critical fields to accept cheap model result. Below this → escalate to primary model. (0.0-1.0)</p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Critical Fields for Escalation</label>
+            <p className="text-xs text-muted-foreground">Only these fields trigger escalation to the primary model when confidence is below the threshold. Non-critical fields are accepted as-is from the fast model to save costs.</p>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              {allCriticalFieldOptions.map(([key, label]) => (
+                <label key={key} className="flex items-center gap-2 text-sm py-1 text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={criticalFieldsArr.includes(key)}
+                    onChange={() => toggleCriticalField(key)}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Classification Model</label>

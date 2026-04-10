@@ -56,12 +56,13 @@ function extractInvoiceData($filePath, $fileType, $enabledFields = null, $includ
         $extracted = $cheapResult['data'] ?? $cheapResult;
         $cheapUsage = $cheapResult['usage'] ?? null;
 
-        // Check confidence scores — only escalate for CRITICAL fields with low
-        // confidence. Non-critical fields (addresses, VAT IDs, dates, etc.) may
-        // have low confidence because they're missing from the document OR
-        // because Haiku hallucinated — escalating would waste money.
-        // Only the fields below are worth paying Opus/Sonnet to verify.
-        $criticalFields = ['invoiceNumber', 'vendorName', 'totalAmount', 'currency'];
+        // Critical fields for escalation — configurable via system settings.
+        // Only these fields trigger escalation to the better model when uncertain.
+        $criticalFieldsSetting = getSetting('critical_fields', 'invoiceNumber,vendorName,totalAmount,currency');
+        $criticalFields = array_filter(array_map('trim', explode(',', $criticalFieldsSetting)));
+        if (empty($criticalFields)) {
+            $criticalFields = ['invoiceNumber', 'vendorName', 'totalAmount', 'currency'];
+        }
         $confidences = $extracted['confidence'] ?? [];
         $failedFields = [];
         foreach ($criticalFields as $field) {
