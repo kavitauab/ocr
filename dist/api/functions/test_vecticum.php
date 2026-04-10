@@ -262,8 +262,28 @@ if ($action === 'test-facet') {
         return $relevant;
     };
 
+    // Helper to try arbitrary endpoints and record the result
+    $tryRequest = function ($method, $url, $body = null) use ($token) {
+        $ch = curl_init($url);
+        $opts = [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => $method,
+            CURLOPT_HTTPHEADER => [
+                'Accept: application/json',
+                'Content-Type: application/json',
+                "Authorization: Bearer $token",
+            ],
+            CURLOPT_TIMEOUT => 15,
+        ];
+        if ($body !== null) $opts[CURLOPT_POSTFIELDS] = json_encode($body);
+        curl_setopt_array($ch, $opts);
+        $r = curl_exec($ch);
+        $c = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        return ['method' => $method, 'url' => $url, 'httpCode' => $c, 'response' => substr($r ?? '', 0, 300)];
+    };
+
     try {
-        // STEP 1: Optional PATCH-before (makes no sense without a record, skip)
         // STEP 1: POST metadata to create the record
         $ch = curl_init($company['vecticum_api_base_url'] . '/' . $company['vecticum_company_id']);
         curl_setopt_array($ch, [
@@ -316,6 +336,61 @@ if ($action === 'test-facet') {
             $steps[] = ['step' => '7-PATCH-resave-2', 'httpCode' => $p7['httpCode']];
             $r8 = $getRecord($recordId);
             $steps[] = ['step' => '8-GET-after-patch-2', 'httpCode' => $r8['httpCode'], 'facet' => $facetSummary($r8['data'])];
+        }
+
+        // PROBE PHASE — only run when strategy=probe
+        if ($strategy === 'probe') {
+            $base = $company['vecticum_api_base_url'];
+            $cid = $company['vecticum_company_id'];
+            $probes = [];
+
+            // Try PATCH with _facet field set to various "trigger" values
+            $probes[] = $tryRequest('PATCH', "$base/$cid/$recordId", array_merge($body, ['_facet' => null]));
+            $probes[] = $tryRequest('PATCH', "$base/$cid/$recordId", array_merge($body, ['_facet' => ' ']));
+
+            // Try various sub-endpoints on the record
+            $probes[] = $tryRequest('POST', "$base/$cid/$recordId/save", null);
+            $probes[] = $tryRequest('POST', "$base/$cid/$recordId/finalize", null);
+            $probes[] = $tryRequest('POST', "$base/$cid/$recordId/refresh", null);
+            $probes[] = $tryRequest('POST', "$base/$cid/$recordId/regenerate", null);
+            $probes[] = $tryRequest('POST', "$base/$cid/$recordId/regenerateFacet", null);
+            $probes[] = $tryRequest('POST', "$base/$cid/$recordId/recompute", null);
+            $probes[] = $tryRequest('POST', "$base/$cid/$recordId/commit", null);
+            $probes[] = $tryRequest('POST', "$base/$cid/$recordId/publish", null);
+            $probes[] = $tryRequest('POST', "$base/$cid/$recordId/_facet", null);
+            $probes[] = $tryRequest('POST', "$base/$cid/$recordId/facet", null);
+
+            // Try HEAD/GET on the same URLs (some APIs trigger on GET)
+            $probes[] = $tryRequest('GET', "$base/$cid/$recordId/facet", null);
+            $probes[] = $tryRequest('GET', "$base/$cid/$recordId/regenerate", null);
+
+            // Try PATCH with explicit flags that might trigger processing
+            $probes[] = $tryRequest('PATCH', "$base/$cid/$recordId", array_merge($body, ['regenerateFacet' => true]));
+            $probes[] = $tryRequest('PATCH', "$base/$cid/$recordId", array_merge($body, ['triggerFacet' => true]));
+            $probes[] = $tryRequest('PATCH', "$base/$cid/$recordId", array_merge($body, ['_regenerate' => true]));
+            $probes[] = $tryRequest('PATCH', "$base/$cid/$recordId", array_merge($body, ['_save' => true]));
+
+            // PUT variants (memory says PUT wipes metadata — risky but worth checking status)
+            // (skipping actual PUT to avoid wiping the test record)
+
+            // After all probes, GET the record one more time
+            $rFinal = $getRecord($recordId);
+            $steps[] = ['step' => 'PROBE-final-GET', 'httpCode' => $rFinal['httpCode'], 'facet' => $facetSummary($rFinal['data'])];
+
+            // Return only successful (2xx) probes and the final state
+            $hits = array_values(array_filter($probes, fn($p) => $p['httpCode'] >= 200 && $p['httpCode'] < 300));
+            $misses = array_values(array_filter($probes, fn($p) => $p['httpCode'] >= 400));
+
+            sendJSON([
+                'action' => 'test-facet',
+                'strategy' => 'probe',
+                'testInvNo' => $testInvNo,
+                'recordId' => $recordId,
+                'initialSteps' => $steps,
+                'probeHits' => $hits,
+                'probeMisses' => $misses,
+                'finalFacet' => $facetSummary($rFinal['data'] ?? []),
+            ]);
         }
 
         sendJSON([
