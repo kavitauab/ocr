@@ -289,15 +289,6 @@ function uploadToVecticum($company, $metadata) {
             $body['counterparty'] = $partner;
         }
 
-        // Build _facet string: "{vendorName}, No: {invoiceNo},  Date: {invoiceDate}"
-        $facetParts = [];
-        if (!empty($metadata['vendorName'])) $facetParts[] = $metadata['vendorName'];
-        if (!empty($metadata['invoiceNumber'])) $facetParts[] = 'No: ' . $metadata['invoiceNumber'];
-        if (!empty($metadata['invoiceDate'])) $facetParts[] = ' Date: ' . $metadata['invoiceDate'];
-        if (!empty($facetParts)) {
-            $body['_facet'] = implode(', ', $facetParts);
-        }
-
         // Remove null values
         $body = array_filter($body, fn($v) => $v !== null);
 
