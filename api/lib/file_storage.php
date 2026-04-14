@@ -70,9 +70,9 @@ function compressImage($imageData, $ext) {
         $img = $resized;
     }
 
-    // Encode as JPEG with 85% quality
+    // Encode as JPEG with 100% quality (most savings come from resize, not quality loss)
     ob_start();
-    $ok = imagejpeg($img, null, 85);
+    $ok = imagejpeg($img, null, 100);
     $result = ob_get_clean();
     imagedestroy($img);
 
