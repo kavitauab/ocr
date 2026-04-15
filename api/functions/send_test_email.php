@@ -25,36 +25,47 @@ $db = getDBConnection();
 if ($companyId !== '') {
     $stmt = $db->prepare("SELECT * FROM companies WHERE id = :id LIMIT 1");
     $stmt->execute(['id' => $companyId]);
-    $company = $stmt->fetch();
+    $companies = $stmt->fetchAll();
 } else {
-    $stmt = $db->query("SELECT * FROM companies WHERE ms_sender_email IS NOT NULL AND ms_sender_email <> '' AND ms_fetch_enabled = 1 ORDER BY updated_at DESC, created_at DESC LIMIT 1");
-    $company = $stmt->fetch();
+    $stmt = $db->query("SELECT * FROM companies WHERE ms_sender_email IS NOT NULL AND ms_sender_email <> '' AND ms_fetch_enabled = 1 ORDER BY updated_at DESC, created_at DESC");
+    $companies = $stmt->fetchAll();
 }
 
-if (!$company) {
+if (empty($companies)) {
     sendJSON(['error' => 'No company with Microsoft 365 sender email configured'], 404);
 }
 
 $subject = 'Graph test email from OCR';
-$body = "This is a test email sent through Microsoft Graph from the OCR system.\n\nTime: " . date('Y-m-d H:i:s') . "\nCompany: " . ($company['name'] ?? 'Unknown');
+$errors = [];
 
-try {
-    sendMail($company, $to, $subject, $body);
-    sendJSON([
-        'success' => true,
-        'message' => 'Test email sent',
-        'to' => $to,
-        'companyId' => $company['id'] ?? null,
-        'companyName' => $company['name'] ?? null,
-        'senderEmail' => $company['ms_sender_email'] ?? null,
-        'subject' => $subject,
-    ]);
-} catch (\Throwable $e) {
-    sendJSON([
-        'error' => $e->getMessage(),
-        'to' => $to,
-        'companyId' => $company['id'] ?? null,
-        'companyName' => $company['name'] ?? null,
-        'senderEmail' => $company['ms_sender_email'] ?? null,
-    ], 500);
+foreach ($companies as $company) {
+    $body = "This is a test email sent through Microsoft Graph from the OCR system.\n\nTime: " . date('Y-m-d H:i:s') . "\nCompany: " . ($company['name'] ?? 'Unknown');
+
+    try {
+        sendMail($company, $to, $subject, $body);
+        sendJSON([
+            'success' => true,
+            'message' => 'Test email sent',
+            'to' => $to,
+            'companyId' => $company['id'] ?? null,
+            'companyName' => $company['name'] ?? null,
+            'senderEmail' => $company['ms_sender_email'] ?? null,
+            'subject' => $subject,
+            'attempted' => count($errors) + 1,
+            'previousErrors' => $errors,
+        ]);
+    } catch (\Throwable $e) {
+        $errors[] = [
+            'companyId' => $company['id'] ?? null,
+            'companyName' => $company['name'] ?? null,
+            'senderEmail' => $company['ms_sender_email'] ?? null,
+            'error' => $e->getMessage(),
+        ];
+    }
 }
+
+sendJSON([
+    'error' => 'Failed to send email from all configured company mailboxes',
+    'to' => $to,
+    'errors' => $errors,
+], 500);
