@@ -113,6 +113,10 @@ if (($pathParts[0] ?? '') === 'cron') {
         require_once __DIR__ . '/functions/test_vecticum.php';
         exit;
     }
+    if (($pathParts[1] ?? '') === 'send-test-email') {
+        require_once __DIR__ . '/functions/send_test_email.php';
+        exit;
+    }
     sendJSON(['error' => 'Not found'], 404);
 }
 
