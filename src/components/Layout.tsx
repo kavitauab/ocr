@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useCompany } from "@/lib/company";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Sheet } from "@/components/ui/sheet";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Avatar } from "@/components/ui/avatar";
@@ -19,13 +19,9 @@ import {
   Wrench,
   CreditCard,
   Menu,
-  PanelLeftClose,
-  PanelLeft,
   X,
   Activity,
 } from "lucide-react";
-
-const COLLAPSED_KEY = "sidebar-collapsed";
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -35,7 +31,6 @@ export default function Layout() {
 
   const isSettingsPath = location.pathname.startsWith("/settings");
   const [settingsOpen, setSettingsOpen] = useState(isSettingsPath);
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSED_KEY) === "true");
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
@@ -68,14 +63,6 @@ export default function Layout() {
       || (path.startsWith("/settings/billing/") ? "Billing" : null);
     document.title = match ? `${match} — Gentrula` : "Gentrula";
   }, [location.pathname]);
-
-  const toggleCollapse = useCallback(() => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      localStorage.setItem(COLLAPSED_KEY, String(next));
-      return next;
-    });
-  }, []);
 
   const handleLogout = () => {
     logout();
@@ -295,20 +282,9 @@ export default function Layout() {
     <div className="flex min-h-screen bg-background">
       {/* Desktop sidebar */}
       <aside
-        className={`hidden lg:flex lg:flex-col fixed inset-y-0 left-0 z-30 bg-card border-r border-border/60 sidebar-transition ${
-          collapsed ? "w-[4.5rem]" : "w-52"
-        }`}
+        className="hidden lg:flex lg:flex-col fixed inset-y-0 left-0 z-30 w-52 bg-card border-r border-border/60 sidebar-transition"
       >
-        {navContent(collapsed)}
-
-        {/* Collapse toggle */}
-        <button
-          onClick={toggleCollapse}
-          className="absolute -right-3 top-7 flex h-6 w-6 items-center justify-center rounded-full border bg-card text-muted-foreground shadow-sm hover:text-foreground hover:shadow transition-all"
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? <PanelLeft className="h-3 w-3" /> : <PanelLeftClose className="h-3 w-3" />}
-        </button>
+        {navContent(false)}
       </aside>
 
       {/* Mobile header */}
@@ -405,11 +381,7 @@ export default function Layout() {
       </Sheet>
 
       {/* Main content */}
-      <main
-        className={`flex-1 min-h-screen sidebar-transition pt-14 lg:pt-0 ${
-          collapsed ? "lg:ml-[4.5rem]" : "lg:ml-52"
-        }`}
-      >
+      <main className="flex-1 min-h-screen sidebar-transition pt-14 lg:pt-0 lg:ml-52">
         <div className="p-4 md:p-5 lg:p-6 animate-fade-in">
           <Outlet />
         </div>

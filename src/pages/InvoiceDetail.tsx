@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { useState } from "react";
 import api from "@/api/client";
 import { useCompany } from "@/lib/company";
@@ -121,18 +121,61 @@ Regards,
 ${invoice?.companyName || "Accounting"}`;
 }
 
-function PreviewPanel({ invoice, fileUrl }: { invoice: any; fileUrl: string }) {
+function PreviewPanel({
+  invoice,
+  fileUrl,
+  backTo,
+  previousHref,
+  nextHref,
+}: {
+  invoice: any;
+  fileUrl: string;
+  backTo: string;
+  previousHref?: string | null;
+  nextHref?: string | null;
+}) {
   const additionalFiles = invoice.additionalFiles || [];
   const [selectedAdditionalIdx, setSelectedAdditionalIdx] = useState(0);
   const token = localStorage.getItem("token");
+  const navigate = useNavigate();
+
+  const navigationControls = (
+    <div className="flex items-center gap-1.5">
+      <Button variant="outline" size="sm" className="h-7 gap-1 px-2.5 text-xs" onClick={() => navigate(backTo)}>
+        <ArrowLeft className="h-3 w-3" />
+        Back
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 px-2.5 text-xs"
+        onClick={() => previousHref && navigate(previousHref)}
+        disabled={!previousHref}
+      >
+        Previous
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 px-2.5 text-xs"
+        onClick={() => nextHref && navigate(nextHref)}
+        disabled={!nextHref}
+      >
+        Next
+      </Button>
+    </div>
+  );
 
   if (additionalFiles.length === 0) {
     // No additional files — simple preview without tabs
     return (
       <>
         <CardHeader className="pb-1 px-4 pt-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-xs font-semibold">Preview</CardTitle>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-xs font-semibold">Preview</CardTitle>
+              {navigationControls}
+            </div>
             <a href={fileUrl} target="_blank" rel="noreferrer" className="text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
               <ExternalLink className="h-3 w-3" />Open
             </a>
@@ -155,11 +198,14 @@ function PreviewPanel({ invoice, fileUrl }: { invoice: any; fileUrl: string }) {
   return (
     <Tabs defaultValue="invoice">
       <CardHeader className="pb-1 px-4 pt-2">
-        <div className="flex items-center justify-between">
-          <TabsList>
-            <TabsTrigger value="invoice">Invoice</TabsTrigger>
-            <TabsTrigger value="additional">Additional Files ({additionalFiles.length})</TabsTrigger>
-          </TabsList>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <TabsList>
+              <TabsTrigger value="invoice">Invoice</TabsTrigger>
+              <TabsTrigger value="additional">Additional Files ({additionalFiles.length})</TabsTrigger>
+            </TabsList>
+            {navigationControls}
+          </div>
           <a href={fileUrl} target="_blank" rel="noreferrer" className="text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
             <ExternalLink className="h-3 w-3" />Open
           </a>
@@ -212,6 +258,7 @@ const fieldSections: { title: string; fields: [string, string][] }[] = [
 export default function InvoiceDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { hasCompanyRole } = useCompany();
   const [editing, setEditing] = useState(false);
@@ -229,6 +276,33 @@ export default function InvoiceDetail() {
   });
 
   const invoice = data?.invoice;
+  const listParams = new URLSearchParams(location.search);
+  const backTo = `/invoices${location.search || ""}`;
+  const navigationParams: Record<string, string> = { page: listParams.get("page") || "1", limit: "20" };
+  const companyId = listParams.get("companyId") || invoice?.companyId;
+  const search = listParams.get("search") || "";
+  const status = listParams.get("status") || "";
+  const lifecycle = listParams.get("lifecycle") || "";
+  const sentFrom = listParams.get("sentFrom") || "";
+  const sentTo = listParams.get("sentTo") || "";
+  const returnedFrom = listParams.get("returnedFrom") || "";
+  const returnedTo = listParams.get("returnedTo") || "";
+  const orderBy = listParams.get("orderBy") || "";
+  if (companyId) navigationParams.companyId = companyId;
+  if (search) navigationParams.search = search;
+  if (status) navigationParams.status = status;
+  if (lifecycle && lifecycle !== "all") navigationParams.lifecycle = lifecycle;
+  if (sentFrom) navigationParams.sentFrom = sentFrom;
+  if (sentTo) navigationParams.sentTo = sentTo;
+  if (returnedFrom) navigationParams.returnedFrom = returnedFrom;
+  if (returnedTo) navigationParams.returnedTo = returnedTo;
+  if (orderBy) navigationParams.orderBy = orderBy;
+
+  const { data: navigationData } = useQuery({
+    queryKey: ["invoice-navigation", id, location.search, invoice?.companyId],
+    queryFn: () => api.get("/invoices", { params: navigationParams }).then((r) => r.data),
+    enabled: !!id && !!invoice,
+  });
 
   const updateMutation = useMutation({
     mutationFn: (updates: Record<string, any>) => api.patch(`/invoices/${id}`, updates).then((r) => r.data),
@@ -262,7 +336,7 @@ export default function InvoiceDetail() {
     <div className="flex flex-col items-center justify-center py-20">
       <div className="rounded-full bg-muted p-4 mb-3"><FileText className="h-8 w-8 text-muted-foreground" /></div>
       <p className="text-sm font-medium">Invoice not found</p>
-      <Link to="/invoices"><Button variant="outline" size="sm" className="mt-3">Back to Invoices</Button></Link>
+      <Link to={backTo}><Button variant="outline" size="sm" className="mt-3">Back to Invoices</Button></Link>
     </div>
   );
 
@@ -342,6 +416,12 @@ export default function InvoiceDetail() {
   const processingDurationMs = getProcessingDurationMs(invoice);
   const processingDuration = processingDurationMs !== null ? formatDuration(processingDurationMs) : sentToOcrDate && !returnedDate ? "In progress" : "\u2014";
   const canReplyToSender = !!invoice.senderEmail && !!(invoice.vecticumError || invoice.processingError);
+  const navigationInvoices = Array.isArray(navigationData?.invoices) ? navigationData.invoices : [];
+  const currentInvoiceIndex = navigationInvoices.findIndex((item: any) => item.id === invoice.id);
+  const previousInvoice = currentInvoiceIndex > 0 ? navigationInvoices[currentInvoiceIndex - 1] : null;
+  const nextInvoice = currentInvoiceIndex >= 0 && currentInvoiceIndex < navigationInvoices.length - 1 ? navigationInvoices[currentInvoiceIndex + 1] : null;
+  const previousHref = previousInvoice ? `/invoices/${previousInvoice.id}${location.search}` : null;
+  const nextHref = nextInvoice ? `/invoices/${nextInvoice.id}${location.search}` : null;
 
   const timelineSteps = [
     { label: "Uploaded", time: uploadedAt, color: "bg-slate-500", active: !!uploadedAt },
@@ -355,7 +435,7 @@ export default function InvoiceDetail() {
       {/* Header: back + title + badges + action buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div className="flex items-center gap-2">
-          <button onClick={() => navigate("/invoices")} className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted transition-colors shrink-0">
+          <button onClick={() => navigate(backTo)} className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted transition-colors shrink-0">
             <ArrowLeft className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
           <h1 className="text-lg font-bold tracking-tight text-foreground">
@@ -623,7 +703,13 @@ export default function InvoiceDetail() {
         {/* Right: Preview */}
         <div className="lg:col-span-7">
           <Card className="overflow-hidden sticky top-2">
-            <PreviewPanel invoice={invoice} fileUrl={fileUrl} />
+            <PreviewPanel
+              invoice={invoice}
+              fileUrl={fileUrl}
+              backTo={backTo}
+              previousHref={previousHref}
+              nextHref={nextHref}
+            />
           </Card>
         </div>
       </div>

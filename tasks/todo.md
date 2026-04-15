@@ -111,6 +111,26 @@
 
 ---
 
+# Iteration 7 - Detail Navigation Cleanup
+
+## Plan
+- [x] Remove desktop sidebar minimization so navigation stays fixed and predictable.
+- [x] Preserve invoice list filters in invoice detail URLs.
+- [x] Add `Back`, `Previous`, and `Next` navigation controls in the invoice preview card.
+- [ ] Verify with frontend build and production deploy.
+
+## Verification Checklist
+- [ ] `npm run build` passes.
+- [ ] Invoice detail `Back` returns to the filtered invoice list.
+- [ ] Invoice detail `Previous` and `Next` move across the current invoice page/query.
+
+## Review
+- Desktop layout no longer exposes sidebar collapse and uses a fixed sidebar width.
+- Invoice list rows now preserve the current search/filter query when opening a detail page.
+- Invoice detail preview now includes in-card `Back`, `Previous`, and `Next` controls derived from the active invoice list query.
+
+---
+
 # Iteration 2 - Billing Management Module
 
 ## Plan
