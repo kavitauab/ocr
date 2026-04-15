@@ -53,6 +53,10 @@ if ($action === 'debug-auth') {
         'client_secret_len' => strlen($company['vecticum_client_secret'] ?? ''),
         'has_company_id' => !empty($company['vecticum_company_id']),
         'company_id_value' => $company['vecticum_company_id'] ?? null,
+        'partner_endpoint' => $company['vecticum_partner_endpoint'] ?? null,
+        'class_id' => $company['vecticum_class_id'] ?? null,
+        'author_id' => $company['vecticum_author_id'] ?? null,
+        'author_name' => $company['vecticum_author_name'] ?? null,
         'cached_token_present' => !empty($company['vecticum_access_token']),
         'cached_token_expires' => $company['vecticum_token_expires'] ?? null,
     ];
