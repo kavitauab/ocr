@@ -134,6 +134,25 @@
 
 ---
 
+# Iteration 8 - Composite Duplicate Validation
+
+## Plan
+- [x] Inspect existing invoice duplicate handling in OCR ingestion and Vecticum upload paths.
+- [x] Add composite duplicate validation using `invoiceDate + invoiceNumber + counterparty` before Vecticum upload.
+- [ ] Verify with PHP syntax checks and production deploy.
+
+## Verification Checklist
+- [x] `php -l api/lib/vecticum.php` passes.
+- [ ] Vecticum send blocks duplicates only when invoice date, invoice number, and counterparty all match.
+- [ ] Production deploy completes successfully.
+
+## Review
+- Confirmed the old system did not enforce invoice-level composite uniqueness; invoice ingestion only deduped email `message_id`, and Vecticum upload had no preflight duplicate check.
+- Added a Vecticum-side duplicate preflight that normalizes and compares `invoiceNo`, `invoiceDate`, and counterparty identity before creating a new record.
+- Counterparty matching prefers partner id / VAT code and falls back to normalized name matching when structured identifiers are missing.
+
+---
+
 # Iteration 2 - Billing Management Module
 
 ## Plan

@@ -224,6 +224,135 @@ function getVecticumDefaultAuthor($company, $token = null) {
     return null;
 }
 
+function normalizeVecticumDate($value) {
+    $value = trim((string)$value);
+    if ($value === '') return '';
+    if (preg_match('/^\d{4}-\d{2}-\d{2}/', $value, $m)) {
+        return $m[0];
+    }
+    $ts = strtotime($value);
+    return $ts ? date('Y-m-d', $ts) : '';
+}
+
+function normalizeVecticumInvoiceNo($value) {
+    $value = strtoupper(trim((string)$value));
+    $value = preg_replace('/\s+/', '', $value);
+    return preg_replace('/[^A-Z0-9\/\-_\.]/', '', $value);
+}
+
+function normalizeVecticumCounterpartyText($value) {
+    $value = _stripDiacritics(strtolower(trim((string)$value)));
+    $value = preg_replace('/\b(uab|ab|mb|vsi|ii|bv|gmbh|ltd|llc|s\.?a\.?|srl)\b/i', '', $value);
+    $value = preg_replace('/[^a-z0-9]/', '', $value);
+    return $value;
+}
+
+function normalizeVecticumCounterpartyCode($value) {
+    return preg_replace('/[^A-Z0-9]/', '', strtoupper(trim((string)$value)));
+}
+
+function buildVecticumCounterpartyCandidates($record) {
+    $candidates = [];
+    $counterparty = is_array($record['counterparty'] ?? null) ? $record['counterparty'] : [];
+
+    $add = function ($value, $type = 'code') use (&$candidates) {
+        $normalized = $type === 'text' ? normalizeVecticumCounterpartyText($value) : normalizeVecticumCounterpartyCode($value);
+        if ($normalized !== '') $candidates[$type . ':' . $normalized] = true;
+    };
+
+    if (!empty($counterparty['id'])) {
+        $candidates['id:' . trim((string)$counterparty['id'])] = true;
+    }
+
+    foreach ([
+        $record['counterpartyCode'] ?? null,
+        $record['counterpartyVatCode'] ?? null,
+        $record['counterpartyCompanyCode'] ?? null,
+        $counterparty['vatNumber'] ?? null,
+        $counterparty['companyCode'] ?? null,
+        $counterparty['code'] ?? null,
+    ] as $value) {
+        $add($value, 'code');
+    }
+
+    foreach ([
+        $record['counterpartyName'] ?? null,
+        $counterparty['name'] ?? null,
+    ] as $value) {
+        $add($value, 'text');
+    }
+
+    return array_keys($candidates);
+}
+
+function findExistingVecticumInvoice($company, $metadata, $partner = null, $token = null) {
+    if (!$token) $token = getVecticumToken($company);
+
+    $expectedInvoiceNo = normalizeVecticumInvoiceNo($metadata['invoiceNumber'] ?? '');
+    $expectedInvoiceDate = normalizeVecticumDate($metadata['invoiceDate'] ?? '');
+    if ($expectedInvoiceNo === '' || $expectedInvoiceDate === '') {
+        return null;
+    }
+
+    $expectedCounterparty = [];
+    if (!empty($partner['id'])) {
+        $expectedCounterparty['id:' . trim((string)$partner['id'])] = true;
+    }
+    if (!empty($metadata['vendorVatId'])) {
+        $code = normalizeVecticumCounterpartyCode($metadata['vendorVatId']);
+        if ($code !== '') $expectedCounterparty['code:' . $code] = true;
+    }
+    if (!empty($partner['name'])) {
+        $name = normalizeVecticumCounterpartyText($partner['name']);
+        if ($name !== '') $expectedCounterparty['text:' . $name] = true;
+    }
+    if (!empty($metadata['vendorName'])) {
+        $name = normalizeVecticumCounterpartyText($metadata['vendorName']);
+        if ($name !== '') $expectedCounterparty['text:' . $name] = true;
+    }
+
+    if (empty($expectedCounterparty)) {
+        return null;
+    }
+
+    $url = $company['vecticum_api_base_url'] . '/' . $company['vecticum_company_id'];
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['Accept: application/json', "Authorization: Bearer $token"],
+        CURLOPT_TIMEOUT => 20,
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200 || !$response) {
+        return null;
+    }
+
+    $records = json_decode($response, true);
+    if (!is_array($records)) {
+        return null;
+    }
+
+    foreach ($records as $record) {
+        if (!is_array($record)) continue;
+        if (normalizeVecticumInvoiceNo($record['invoiceNo'] ?? '') !== $expectedInvoiceNo) continue;
+        if (normalizeVecticumDate($record['invoiceDate'] ?? '') !== $expectedInvoiceDate) continue;
+
+        $recordCounterparties = buildVecticumCounterpartyCandidates($record);
+        if (!$recordCounterparties) continue;
+
+        foreach ($recordCounterparties as $candidate) {
+            if (isset($expectedCounterparty[$candidate])) {
+                return $record;
+            }
+        }
+    }
+
+    return null;
+}
+
 function getEcbExchangeRate($currencyCode, $invoiceDate) {
     $currency = strtoupper(trim((string)$currencyCode));
     if ($currency === '' || $currency === 'EUR') {
@@ -336,6 +465,12 @@ function uploadToVecticum($company, $metadata) {
         $partner = findVecticumPartner($company, $metadata['vendorVatId'] ?? '', $metadata['vendorName'] ?? '', $token);
         if ($partner) {
             $body['counterparty'] = $partner;
+        }
+
+        $existingRecord = findExistingVecticumInvoice($company, $metadata, $partner, $token);
+        if ($existingRecord) {
+            $existingRef = $existingRecord['invoiceNo'] ?? ($existingRecord['id'] ?? 'existing record');
+            return ['success' => false, 'error' => "Invoice already exists in Vecticum for the same invoice date, invoice number, and counterparty ({$existingRef})"];
         }
 
         // Remove null values
