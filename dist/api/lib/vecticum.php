@@ -87,7 +87,7 @@ function normalizeVecticumCompanyName($value) {
     $parts = array_values(array_filter($parts, function ($part) {
         return !in_array($part, ['uab', 'ab', 'mb', 'vsi', 'ii', 'bv', 'gmbh', 'ltd', 'llc', 'sa', 'srl'], true);
     }));
-    return implode(' ', $parts);
+    return strtolower(implode(' ', $parts));
 }
 
 function findVecticumPartner($company, $vatId, $companyName, $token = null) {
