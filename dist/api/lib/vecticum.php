@@ -224,6 +224,50 @@ function getVecticumDefaultAuthor($company, $token = null) {
     return null;
 }
 
+function getEcbExchangeRate($currencyCode, $invoiceDate) {
+    $currency = strtoupper(trim((string)$currencyCode));
+    if ($currency === '' || $currency === 'EUR') {
+        return null;
+    }
+
+    $date = trim((string)$invoiceDate);
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+        return null;
+    }
+
+    $url = 'https://data-api.ecb.europa.eu/service/data/EXR/D.' . rawurlencode($currency) . '.EUR.SP00.A'
+        . '?startPeriod=' . rawurlencode($date)
+        . '&endPeriod=' . rawurlencode($date)
+        . '&format=csvdata';
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_HTTPHEADER => ['Accept: text/csv'],
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200 || !$response) {
+        return null;
+    }
+
+    $lines = preg_split("/\r\n|\n|\r/", trim($response));
+    if (!$lines || count($lines) < 2 || empty($lines[1])) {
+        return null;
+    }
+
+    $columns = str_getcsv($lines[1]);
+    if (!isset($columns[7]) || !is_numeric($columns[7])) {
+        return null;
+    }
+
+    return number_format((float)$columns[7], 4, '.', '');
+}
+
 function uploadToVecticum($company, $metadata) {
     if (empty($company['vecticum_company_id'])) {
         return ['success' => false, 'error' => 'Vecticum endpoint ID not configured'];
@@ -269,6 +313,10 @@ function uploadToVecticum($company, $metadata) {
         $currencyRef = findVecticumCurrency($company, $currency, $token);
         if ($currencyRef) {
             $body['currency'] = $currencyRef;
+        }
+        $exchangeRate = getEcbExchangeRate($currency, $metadata['invoiceDate'] ?? null);
+        if ($exchangeRate !== null) {
+            $body['exchangeRate'] = $exchangeRate;
         }
 
         // Match author by sender email, fall back to inbox defaultAuthor

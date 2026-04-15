@@ -89,6 +89,28 @@
 
 ---
 
+# Iteration 6 - Vecticum Exchange Rate
+
+## Plan
+- [x] Add ECB exchange-rate lookup helper for non-EUR currencies using invoice date.
+- [x] Include `exchangeRate` in the Vecticum payload when currency is not EUR and a rate is available.
+- [ ] Verify with PHP syntax checks, frontend build, and deploy.
+
+## Verification Checklist
+- [x] `php -l` passes for changed backend files.
+- [x] `npm run build` passes.
+- [ ] Non-EUR Vecticum payload can include `exchangeRate` without affecting EUR invoices.
+
+## Review
+- Added ECB CSV exchange-rate lookup in `api/lib/vecticum.php` using invoice date and the currency code already extracted from OCR.
+- Vecticum upload now includes `exchangeRate` automatically for non-EUR invoices when ECB returns a rate; EUR invoices continue unchanged.
+- Current implementation formats the rate to 4 decimals, matching the expression you provided.
+- Verification run so far:
+  - `php -l api/lib/vecticum.php`
+  - `npm run build`
+
+---
+
 # Iteration 2 - Billing Management Module
 
 ## Plan
