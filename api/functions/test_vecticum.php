@@ -41,6 +41,60 @@ $stmt->execute(['id' => $companyId]);
 $company = $stmt->fetch();
 if (!$company) sendJSON(['error' => 'Company not found'], 404);
 
+if ($action === 'debug-auth') {
+    // Show full debug info for vecticum auth attempt
+    $info = [
+        'company_name' => $company['name'],
+        'has_base_url' => !empty($company['vecticum_api_base_url']),
+        'base_url' => $company['vecticum_api_base_url'] ?? null,
+        'has_client_id' => !empty($company['vecticum_client_id']),
+        'client_id_len' => strlen($company['vecticum_client_id'] ?? ''),
+        'has_client_secret' => !empty($company['vecticum_client_secret']),
+        'client_secret_len' => strlen($company['vecticum_client_secret'] ?? ''),
+        'has_company_id' => !empty($company['vecticum_company_id']),
+        'company_id_value' => $company['vecticum_company_id'] ?? null,
+        'cached_token_present' => !empty($company['vecticum_access_token']),
+        'cached_token_expires' => $company['vecticum_token_expires'] ?? null,
+    ];
+
+    if (empty($company['vecticum_client_id']) || empty($company['vecticum_client_secret'])) {
+        $info['result'] = 'MISSING CREDENTIALS';
+        sendJSON(['action' => 'debug-auth', 'info' => $info]);
+    }
+
+    // Try fresh OAuth call directly
+    $authBody = json_encode(['client_id' => $company['vecticum_client_id'], 'client_secret' => $company['vecticum_client_secret']]);
+    $ch = curl_init($company['vecticum_api_base_url'] . '/oauth/token');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            'Accept: application/json',
+            'Content-Type: application/json',
+            'Authorization: ' . $authBody,
+        ],
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_VERBOSE => true,
+    ]);
+    $stderr = fopen('php://temp', 'w+');
+    curl_setopt($ch, CURLOPT_STDERR, $stderr);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr = curl_error($ch);
+    curl_close($ch);
+    rewind($stderr);
+    $verboseLog = stream_get_contents($stderr);
+    fclose($stderr);
+
+    $info['oauth_http_code'] = $httpCode;
+    $info['oauth_curl_error'] = $curlErr;
+    $info['oauth_response'] = substr($response ?? '', 0, 500);
+    $info['oauth_response_decoded'] = json_decode($response, true);
+    $info['oauth_verbose'] = substr($verboseLog, 0, 1500);
+
+    sendJSON(['action' => 'debug-auth', 'info' => $info]);
+}
+
 if ($action === 'clear-all-invoices') {
     // Delete all invoices, ocr_jobs, email_inbox, reset usage_logs
     $counts = [];
