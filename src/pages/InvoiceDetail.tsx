@@ -124,47 +124,13 @@ ${invoice?.companyName || "Accounting"}`;
 function PreviewPanel({
   invoice,
   fileUrl,
-  backTo,
-  previousHref,
-  nextHref,
 }: {
   invoice: any;
   fileUrl: string;
-  backTo: string;
-  previousHref?: string | null;
-  nextHref?: string | null;
 }) {
   const additionalFiles = invoice.additionalFiles || [];
   const [selectedAdditionalIdx, setSelectedAdditionalIdx] = useState(0);
   const token = localStorage.getItem("token");
-  const navigate = useNavigate();
-
-  const navigationControls = (
-    <div className="flex items-center gap-1.5">
-      <Button variant="outline" size="sm" className="h-7 gap-1 px-2.5 text-xs" onClick={() => navigate(backTo)}>
-        <ArrowLeft className="h-3 w-3" />
-        Back
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-7 px-2.5 text-xs"
-        onClick={() => previousHref && navigate(previousHref)}
-        disabled={!previousHref}
-      >
-        Previous
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-7 px-2.5 text-xs"
-        onClick={() => nextHref && navigate(nextHref)}
-        disabled={!nextHref}
-      >
-        Next
-      </Button>
-    </div>
-  );
 
   if (additionalFiles.length === 0) {
     // No additional files — simple preview without tabs
@@ -172,10 +138,7 @@ function PreviewPanel({
       <>
         <CardHeader className="pb-1 px-4 pt-2">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-xs font-semibold">Preview</CardTitle>
-              {navigationControls}
-            </div>
+            <CardTitle className="text-xs font-semibold">Preview</CardTitle>
             <a href={fileUrl} target="_blank" rel="noreferrer" className="text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
               <ExternalLink className="h-3 w-3" />Open
             </a>
@@ -204,7 +167,6 @@ function PreviewPanel({
               <TabsTrigger value="invoice">Invoice</TabsTrigger>
               <TabsTrigger value="additional">Additional Files ({additionalFiles.length})</TabsTrigger>
             </TabsList>
-            {navigationControls}
           </div>
           <a href={fileUrl} target="_blank" rel="noreferrer" className="text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
             <ExternalLink className="h-3 w-3" />Open
@@ -455,6 +417,24 @@ export default function InvoiceDetail() {
         </div>
 
         <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2.5 text-xs"
+            onClick={() => previousHref && navigate(previousHref)}
+            disabled={!previousHref}
+          >
+            Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2.5 text-xs"
+            onClick={() => nextHref && navigate(nextHref)}
+            disabled={!nextHref}
+          >
+            Next
+          </Button>
           <Button variant="outline" size="sm" className="gap-1 h-7 text-xs px-2.5" onClick={() => { window.open(`/api/invoices/${id}/metadata?access_token=${encodeURIComponent(token || "")}`, "_blank"); }}>
             <Download className="h-3 w-3" />JSON
           </Button>
@@ -706,9 +686,6 @@ export default function InvoiceDetail() {
             <PreviewPanel
               invoice={invoice}
               fileUrl={fileUrl}
-              backTo={backTo}
-              previousHref={previousHref}
-              nextHref={nextHref}
             />
           </Card>
         </div>
