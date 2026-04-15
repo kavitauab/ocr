@@ -43,12 +43,15 @@ function getVecticumToken($company) {
 function testVecticumConnection($company) {
     try {
         $token = getVecticumToken($company);
+        // Don't fetch the full invoice list — it can be huge/slow and cause timeouts.
+        // A successful auth + a quick HEAD on the class endpoint is enough.
         if (!empty($company['vecticum_company_id'])) {
-            $ch = curl_init($company['vecticum_api_base_url'] . '/' . $company['vecticum_company_id']);
+            // Use Currency endpoint (always small) to verify the token has access
+            $ch = curl_init($company['vecticum_api_base_url'] . '/KU5VRy3VdyQP75UpHqpb');
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_HTTPHEADER => ['Accept: application/json', "Authorization: Bearer $token"],
-                CURLOPT_TIMEOUT => 15,
+                CURLOPT_TIMEOUT => 10,
             ]);
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -56,12 +59,10 @@ function testVecticumConnection($company) {
 
             if ($httpCode !== 200) {
                 $errData = json_decode($response, true);
-                $errMsg = $errData['message'] ?? $response;
-                return ['success' => false, 'error' => "Endpoint returned $httpCode: $errMsg"];
+                $errMsg = $errData['message'] ?? "HTTP $httpCode";
+                return ['success' => false, 'error' => "Authenticated but API access failed: $errMsg"];
             }
-            $data = json_decode($response, true);
-            $count = is_array($data) ? count($data) : 0;
-            return ['success' => true, 'message' => "Connected. Found $count records."];
+            return ['success' => true, 'message' => 'Connected and authenticated successfully'];
         }
         return ['success' => true, 'message' => 'Authentication successful'];
     } catch (Exception $e) {
