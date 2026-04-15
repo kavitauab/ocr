@@ -603,6 +603,27 @@ if ($action === 'send-real') {
     ]);
 }
 
+if ($action === 'bind-record') {
+    $invoiceId = $_GET['invoiceId'] ?? '';
+    $recordId = $_GET['recordId'] ?? '';
+    if (!$invoiceId || !$recordId) sendJSON(['error' => 'invoiceId and recordId required'], 400);
+
+    $stmt = $db->prepare("SELECT id, company_id, vecticum_id FROM invoices WHERE id = :id AND company_id = :cid");
+    $stmt->execute(['id' => $invoiceId, 'cid' => $companyId]);
+    $invoice = $stmt->fetch();
+    if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
+
+    $db->prepare("UPDATE invoices SET vecticum_id = :recordId, vecticum_sent_at = NOW(), vecticum_error = NULL, updated_at = NOW() WHERE id = :id")
+        ->execute(['recordId' => $recordId, 'id' => $invoiceId]);
+
+    sendJSON([
+        'action' => 'bind-record',
+        'success' => true,
+        'invoiceId' => $invoiceId,
+        'recordId' => $recordId,
+    ]);
+}
+
 if ($action === 'probe-endpoints') {
     $token = getVecticumToken($company);
     $baseUrl = $company['vecticum_api_base_url'];

@@ -150,9 +150,13 @@
 - Confirmed the old system did not enforce invoice-level composite uniqueness; invoice ingestion only deduped email `message_id`, and Vecticum upload had no preflight duplicate check.
 - Added a Vecticum-side duplicate preflight that normalizes and compares `invoiceNo`, `invoiceDate`, and counterparty identity before creating a new record.
 - Counterparty matching prefers partner id / VAT code and falls back to normalized name matching when structured identifiers are missing.
+- Vecticum itself still enforces a stricter uniqueness rule for some recurring supplier invoices; added a controlled retry path that resubmits without `invoiceNo` only when Vecticum rejects on uniqueness and there is no true 3-key duplicate.
+- Invoice detail edit mode now shows an explicit edit-state banner and toast so it no longer looks like a dead button.
 - Verification run:
   - `php -l api/lib/vecticum.php`
   - `./deploy.sh "Add composite duplicate validation for Vecticum uploads"`
+  - `./deploy.sh "Retry Vecticum uniqueness failures without invoice number and clarify edit mode"`
+  - production diagnostic send for invoice `b369ef8e8a853332577c` returned `success: true`, `externalId: ns23i0gBTYBR0nmedVbN`, `fallbackWithoutInvoiceNo: true`
 
 ---
 
