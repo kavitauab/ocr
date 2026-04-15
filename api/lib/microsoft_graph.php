@@ -1,8 +1,8 @@
 <?php
 
-function getM365Token($company) {
+function getM365Token($company, $forceRefresh = false) {
     // Check cached token
-    if (!empty($company['ms_access_token']) && !empty($company['ms_token_expires'])) {
+    if (!$forceRefresh && !empty($company['ms_access_token']) && !empty($company['ms_token_expires'])) {
         $expires = strtotime($company['ms_token_expires']);
         if ($expires > time() + 300) {
             return $company['ms_access_token'];
@@ -113,8 +113,8 @@ function markAsRead($company, $messageId) {
     curl_close($ch);
 }
 
-function sendMail($company, $toEmail, $subject, $body, $contentType = 'Text') {
-    $token = getM365Token($company);
+function sendMail($company, $toEmail, $subject, $body, $contentType = 'Text', $forceRefresh = false) {
+    $token = getM365Token($company, $forceRefresh);
     $fromEmail = trim((string)($company['ms_sender_email'] ?? ''));
     $toEmail = trim((string)$toEmail);
 
@@ -163,8 +163,8 @@ function sendMail($company, $toEmail, $subject, $body, $contentType = 'Text') {
     return ['success' => true];
 }
 
-function replyToMessage($company, $messageId, $body) {
-    $token = getM365Token($company);
+function replyToMessage($company, $messageId, $body, $forceRefresh = false) {
+    $token = getM365Token($company, $forceRefresh);
     $fromEmail = trim((string)($company['ms_sender_email'] ?? ''));
     $messageId = trim((string)$messageId);
 

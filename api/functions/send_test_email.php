@@ -18,6 +18,7 @@ $to = trim((string)($_GET['to'] ?? ''));
 if ($to === '') {
     sendJSON(['error' => 'Recipient email is required'], 400);
 }
+$forceRefresh = ($_GET['forceRefresh'] ?? '1') !== '0';
 
 $companyId = trim((string)($_GET['companyId'] ?? ''));
 $db = getDBConnection();
@@ -42,7 +43,7 @@ foreach ($companies as $company) {
     $body = "This is a test email sent through Microsoft Graph from the OCR system.\n\nTime: " . date('Y-m-d H:i:s') . "\nCompany: " . ($company['name'] ?? 'Unknown');
 
     try {
-        sendMail($company, $to, $subject, $body);
+        sendMail($company, $to, $subject, $body, 'Text', $forceRefresh);
         sendJSON([
             'success' => true,
             'message' => 'Test email sent',
@@ -51,6 +52,7 @@ foreach ($companies as $company) {
             'companyName' => $company['name'] ?? null,
             'senderEmail' => $company['ms_sender_email'] ?? null,
             'subject' => $subject,
+            'forceRefresh' => $forceRefresh,
             'attempted' => count($errors) + 1,
             'previousErrors' => $errors,
         ]);
