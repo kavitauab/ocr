@@ -404,8 +404,14 @@ function getEcbExchangeRate($currencyCode, $invoiceDate) {
         return null;
     }
 
+    $startTs = strtotime($date . ' -7 days');
+    if ($startTs === false) {
+        return null;
+    }
+    $startDate = date('Y-m-d', $startTs);
+
     $url = 'https://data-api.ecb.europa.eu/service/data/EXR/D.' . rawurlencode($currency) . '.EUR.SP00.A'
-        . '?startPeriod=' . rawurlencode($date)
+        . '?startPeriod=' . rawurlencode($startDate)
         . '&endPeriod=' . rawurlencode($date)
         . '&format=csvdata';
 
@@ -425,16 +431,23 @@ function getEcbExchangeRate($currencyCode, $invoiceDate) {
     }
 
     $lines = preg_split("/\r\n|\n|\r/", trim($response));
-    if (!$lines || count($lines) < 2 || empty($lines[1])) {
+    if (!$lines || count($lines) < 2) {
         return null;
     }
 
-    $columns = str_getcsv($lines[1]);
-    if (!isset($columns[7]) || !is_numeric($columns[7])) {
+    $lastRate = null;
+    foreach (array_slice($lines, 1) as $line) {
+        if (trim($line) === '') continue;
+        $columns = str_getcsv($line, ',', '"', '\\');
+        if (!isset($columns[7]) || !is_numeric($columns[7])) continue;
+        $lastRate = (float)$columns[7];
+    }
+
+    if ($lastRate === null) {
         return null;
     }
 
-    return number_format((float)$columns[7], 4, '.', '');
+    return number_format($lastRate, 4, '.', '');
 }
 
 function uploadToVecticum($company, $metadata) {
