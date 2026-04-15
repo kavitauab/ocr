@@ -5,6 +5,7 @@ require_once __DIR__ . '/../lib/usage.php';
 require_once __DIR__ . '/../lib/audit.php';
 require_once __DIR__ . '/../lib/vecticum.php';
 require_once __DIR__ . '/../lib/microsoft_graph.php';
+require_once __DIR__ . '/../lib/issue_reply.php';
 
 class Invoice extends BaseResource {
     protected $tableName = 'invoices';
@@ -70,76 +71,6 @@ class Invoice extends BaseResource {
             return "'" . $value;
         }
         return $value;
-    }
-
-    private function getInvoiceWithEmailContext($id) {
-        $stmt = $this->db->prepare("SELECT
-            i.*,
-            c.name as company_name,
-            c.vat_number as company_vat_number,
-            c.buyer_keywords as company_buyer_keywords,
-            c.ms_sender_email,
-            e.message_id as email_message_id,
-            e.from_email as sender_email,
-            e.from_name as sender_name,
-            e.subject as email_subject
-            FROM invoices i
-            LEFT JOIN companies c ON c.id = i.company_id
-            LEFT JOIN email_inbox e ON e.id = i.email_inbox_id
-            WHERE i.id = :id");
-        $stmt->execute(['id' => $id]);
-        return $stmt->fetch();
-    }
-
-    private function buildIssueReplyDraft($invoice, $customMessage = null) {
-        $issueText = trim((string)$customMessage);
-        if ($issueText === '') {
-            $vecticumError = trim((string)($invoice['vecticum_error'] ?? ''));
-            $processingError = trim((string)($invoice['processing_error'] ?? ''));
-
-            if ($vecticumError !== '') {
-                if (preg_match('/already exists|already exist|duplicate/i', $vecticumError)) {
-                    $issueText = 'The upload to Vecticum failed because this document appears to already exist in our accounting system.';
-                } else {
-                    $issueText = 'The upload to Vecticum failed: ' . $vecticumError;
-                }
-            } elseif ($processingError !== '') {
-                $issueText = 'The document could not be processed automatically: ' . $processingError;
-            } else {
-                $issueText = 'We could not complete automatic processing for this document and need a corrected version or clarification.';
-            }
-        }
-
-        $reference = trim((string)($invoice['invoice_number'] ?? '')) ?: trim((string)($invoice['original_filename'] ?? '')) ?: trim((string)($invoice['id'] ?? ''));
-        $subjectBase = trim((string)($invoice['email_subject'] ?? '')) ?: ('Invoice ' . $reference);
-        $defaultSubject = trim((string)getSetting('issue_reply_subject', 'Re: {emailSubject}'));
-        $defaultBody = (string)getSetting(
-            'issue_reply_body',
-            "Hello {senderName},\n\nWe could not complete processing for \"{reference}\".\n\n{issue}\n\nPlease review the document and resend a corrected version if needed.\n\nRegards,\n{companyName}"
-        );
-
-        $replacements = [
-            '{senderName}' => trim((string)($invoice['sender_name'] ?? '')) ?: 'there',
-            '{senderEmail}' => trim((string)($invoice['sender_email'] ?? '')),
-            '{reference}' => $reference,
-            '{invoiceNumber}' => trim((string)($invoice['invoice_number'] ?? '')),
-            '{fileName}' => trim((string)($invoice['original_filename'] ?? '')),
-            '{emailSubject}' => $subjectBase,
-            '{companyName}' => trim((string)($invoice['company_name'] ?? '')) ?: 'Accounting',
-            '{issue}' => $issueText,
-            '{vecticumError}' => trim((string)($invoice['vecticum_error'] ?? '')),
-            '{processingError}' => trim((string)($invoice['processing_error'] ?? '')),
-        ];
-
-        $subject = strtr($defaultSubject, $replacements);
-        $body = strtr($defaultBody, $replacements);
-
-        return [
-            'toEmail' => trim((string)($invoice['sender_email'] ?? '')),
-            'messageId' => trim((string)($invoice['email_message_id'] ?? '')),
-            'subject' => $subject,
-            'body' => $body,
-        ];
     }
 
     public function list() {
@@ -314,7 +245,7 @@ class Invoice extends BaseResource {
         }
 
         $user = getAuthUser();
-        $invoice = $this->getInvoiceWithEmailContext($id);
+        $invoice = getInvoiceIssueReplyContext($this->db, $id);
         if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
 
         if ($invoice['company_id']) requireCompanyAccess($user, $invoice['company_id']);
@@ -943,7 +874,7 @@ class Invoice extends BaseResource {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') sendJSON(['error' => 'Method not allowed'], 405);
 
         $user = getAuthUser();
-        $invoice = $this->getInvoiceWithEmailContext($id);
+        $invoice = getInvoiceIssueReplyContext($this->db, $id);
         if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
         if (!$invoice['company_id']) sendJSON(['error' => 'Invoice has no company'], 400);
 
@@ -955,28 +886,16 @@ class Invoice extends BaseResource {
         }
 
         $payload = $this->getRequestBody();
-        $draft = $this->buildIssueReplyDraft($invoice, $payload['message'] ?? null);
-
-        $stmt = $this->db->prepare("SELECT * FROM companies WHERE id = :id");
-        $stmt->execute(['id' => $invoice['company_id']]);
-        $company = $stmt->fetch();
-        if (!$company) sendJSON(['error' => 'Company not found'], 404);
-
-        try {
-            if ($draft['messageId'] !== '') {
-                replyToMessage($company, $draft['messageId'], $draft['body']);
-            } else {
-                sendMail($company, $draft['toEmail'], $draft['subject'], $draft['body']);
-            }
+        $result = sendIssueReplyForInvoice($this->db, $id, trim((string)($payload['reason'] ?? 'manual')) ?: 'manual', $payload['message'] ?? null, true);
+        if ($result['success']) {
             sendJSON([
                 'success' => true,
                 'message' => 'Issue email sent to sender',
-                'recipient' => $draft['toEmail'],
-                'subject' => $draft['subject'],
+                'recipient' => $result['recipient'] ?? $senderEmail,
+                'subject' => $result['subject'] ?? null,
             ]);
-        } catch (\Throwable $e) {
-            sendJSON(['error' => $e->getMessage()], 500);
         }
+        sendJSON(['error' => $result['error'] ?? 'Failed to send issue email'], 500);
     }
 
     /**

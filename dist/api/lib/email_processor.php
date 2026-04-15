@@ -4,6 +4,7 @@ require_once __DIR__ . '/microsoft_graph.php';
 require_once __DIR__ . '/file_storage.php';
 require_once __DIR__ . '/claude.php';
 require_once __DIR__ . '/usage.php';
+require_once __DIR__ . '/issue_reply.php';
 
 $ALLOWED_ATTACHMENT_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
 
@@ -265,10 +266,16 @@ function processCompanyEmails($companyId) {
                                 } else {
                                     $db->prepare("UPDATE invoices SET vecticum_error = :err, updated_at = NOW() WHERE id = :id")
                                         ->execute(['err' => $vecResult['error'] ?? 'Unknown error', 'id' => $invoiceId]);
+                                    sendIssueReplyForInvoice($db, $invoiceId, 'vecticum_failed');
                                 }
+                            } elseif (!$buyerOk) {
+                                sendIssueReplyForInvoice($db, $invoiceId, 'buyer_mismatch');
                             }
                         } catch (\Throwable $vecErr) {
                             error_log("Email auto-send to Vecticum failed for $invoiceId: " . $vecErr->getMessage());
+                            $db->prepare("UPDATE invoices SET vecticum_error = :err, updated_at = NOW() WHERE id = :id")
+                                ->execute(['err' => $vecErr->getMessage(), 'id' => $invoiceId]);
+                            sendIssueReplyForInvoice($db, $invoiceId, 'vecticum_failed');
                         }
                     }
 

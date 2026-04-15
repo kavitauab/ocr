@@ -58,6 +58,37 @@
 
 ---
 
+# Iteration 5 - Automatic Sender Notifications
+
+## Plan
+- [x] Add invoice-level tracking for automatic issue replies to avoid duplicate emails.
+- [x] Implement a shared backend helper for sending issue replies from OCR/email workflows.
+- [x] Auto-send issue emails for email-origin invoices on buyer mismatch and Vecticum auto-send failures.
+- [x] Add visible system toggles and invoice detail visibility for automatic issue replies.
+- [ ] Verify with syntax checks, frontend build, deploy, and migration run through the production API.
+
+## Verification Checklist
+- [x] `php -l` passes for changed backend files.
+- [x] `npm run build` passes.
+- [ ] Migration adds issue-reply tracking fields successfully through `/api/cron/migrate-schema`.
+- [ ] Buyer mismatch path can mark and send a sender notification once.
+- [ ] Vecticum auto-send failure path can mark and send a sender notification once.
+
+## Review
+- Added shared backend issue-reply helper in `api/lib/issue_reply.php` so manual replies and automatic workflow notifications use the same draft/build/send logic.
+- Automatic sender notifications now trigger for email-origin invoices on buyer mismatch and Vecticum auto-send failures in both OCR queue processing and direct email ingestion flows.
+- Added invoice tracking fields for issue-reply status/error/reason plus new system toggles to enable or disable automatic replies by failure type.
+- Invoice detail now shows issue-reply status in metadata for operational visibility.
+- Verification run so far:
+  - `php -l api/lib/issue_reply.php`
+  - `php -l api/resources/Invoice.php`
+  - `php -l api/lib/email_processor.php`
+  - `php -l api/functions/process_ocr_queue.php`
+  - `php -l api/functions/migrate_schema.php`
+  - `npm run build`
+
+---
+
 # Iteration 2 - Billing Management Module
 
 ## Plan

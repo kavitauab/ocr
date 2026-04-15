@@ -14,6 +14,7 @@ require_once __DIR__ . '/../lib/file_storage.php';
 require_once __DIR__ . '/../lib/claude.php';
 require_once __DIR__ . '/../lib/usage.php';
 require_once __DIR__ . '/../lib/rate_limit.php';
+require_once __DIR__ . '/../lib/issue_reply.php';
 
 $db = getDBConnection();
 
@@ -329,14 +330,19 @@ foreach ($jobs as $job) {
                         $vecErr = $vecResult['error'] ?? 'unknown';
                         $db->prepare("UPDATE invoices SET vecticum_error = :err, updated_at = NOW() WHERE id = :id")
                             ->execute(['err' => $vecErr, 'id' => $invoiceId]);
+                        $jobResult['issueReply'] = sendIssueReplyForInvoice($db, $invoiceId, 'vecticum_failed');
                         $jobResult['vecticumAutoSend'] = 'failed: ' . $vecErr;
                     }
                 } elseif (!$buyerOk) {
+                    $jobResult['issueReply'] = sendIssueReplyForInvoice($db, $invoiceId, 'buyer_mismatch');
                     $jobResult['vecticumAutoSend'] = 'skipped: buyer mismatch';
                 }
             }
         } catch (\Throwable $vecErr) {
             error_log("Queue: Auto-send to Vecticum failed for $invoiceId: " . $vecErr->getMessage());
+            $db->prepare("UPDATE invoices SET vecticum_error = :err, updated_at = NOW() WHERE id = :id")
+                ->execute(['err' => $vecErr->getMessage(), 'id' => $invoiceId]);
+            $jobResult['issueReply'] = sendIssueReplyForInvoice($db, $invoiceId, 'vecticum_failed');
             $jobResult['vecticumAutoSend'] = 'error: ' . $vecErr->getMessage();
         }
 

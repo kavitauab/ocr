@@ -20,6 +20,8 @@ export default function SystemSettings() {
     critical_fields: "invoiceNumber,vendorName,totalAmount,currency",
     issue_reply_subject: "Re: {emailSubject}",
     issue_reply_body: "Hello {senderName},\n\nWe could not complete processing for \"{reference}\".\n\n{issue}\n\nPlease review the document and resend a corrected version if needed.\n\nRegards,\n{companyName}",
+    auto_issue_reply_on_vecticum_failure: "1",
+    auto_issue_reply_on_buyer_mismatch: "1",
   });
 
   const allCriticalFieldOptions: [string, string][] = [
@@ -118,6 +120,22 @@ export default function SystemSettings() {
           <CardTitle>Issue Reply Email</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <input
+              type="checkbox"
+              checked={form.auto_issue_reply_on_vecticum_failure !== "0"}
+              onChange={(e) => setForm({ ...form, auto_issue_reply_on_vecticum_failure: e.target.checked ? "1" : "0" })}
+            />
+            Auto-send reply when Vecticum upload fails
+          </label>
+          <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <input
+              type="checkbox"
+              checked={form.auto_issue_reply_on_buyer_mismatch !== "0"}
+              onChange={(e) => setForm({ ...form, auto_issue_reply_on_buyer_mismatch: e.target.checked ? "1" : "0" })}
+            />
+            Auto-send reply when invoice is for the wrong company
+          </label>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Default Subject</label>
             <Input

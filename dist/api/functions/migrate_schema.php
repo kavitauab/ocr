@@ -221,6 +221,11 @@ $ensureColumn('companies', 'vecticum_class_id', 'VARCHAR(255) NULL');
 // --- Vecticum error tracking on invoices ---
 $ensureColumn('invoices', 'vecticum_error', 'TEXT NULL');
 
+// --- Automatic issue reply tracking on invoices ---
+$ensureColumn('invoices', 'issue_reply_sent_at', 'DATETIME NULL');
+$ensureColumn('invoices', 'issue_reply_reason', 'VARCHAR(100) NULL');
+$ensureColumn('invoices', 'issue_reply_error', 'TEXT NULL');
+
 // --- Vecticum auto-send on companies ---
 $ensureColumn('companies', 'vecticum_auto_send', 'TINYINT(1) NOT NULL DEFAULT 0');
 

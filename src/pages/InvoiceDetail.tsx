@@ -583,6 +583,21 @@ export default function InvoiceDetail() {
                 {invoice.senderEmail && (
                   <div className="flex justify-between"><span className="text-muted-foreground">Sender</span><span className="text-foreground">{invoice.senderEmail}</span></div>
                 )}
+                {invoice.issueReplySentAt && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Issue Reply</span>
+                    <span className="text-foreground text-right">
+                      Sent
+                      {invoice.issueReplyReason ? <span className="ml-1 text-[10px] text-muted-foreground">({invoice.issueReplyReason})</span> : null}
+                    </span>
+                  </div>
+                )}
+                {!invoice.issueReplySentAt && invoice.issueReplyError && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Issue Reply</span>
+                    <span className="text-red-600 text-right max-w-[200px]">{invoice.issueReplyError}</span>
+                  </div>
+                )}
                 {invoice.status === "completed" && (
                   <>
                     <div className="flex justify-between">
