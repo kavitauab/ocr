@@ -353,6 +353,41 @@ function findExistingVecticumInvoice($company, $metadata, $partner = null, $toke
     return null;
 }
 
+function isVecticumUniquenessError($message) {
+    return (bool)preg_match('/uniqueness validation failed|document already exists|already exists|duplicate/i', (string)$message);
+}
+
+function createVecticumRecord($company, $body, $token) {
+    $ch = curl_init($company['vecticum_api_base_url'] . '/' . $company['vecticum_company_id']);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode($body),
+        CURLOPT_HTTPHEADER => [
+            'Accept: application/json',
+            'Content-Type: application/json',
+            "Authorization: Bearer $token",
+        ],
+        CURLOPT_TIMEOUT => 30,
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $data = json_decode($response, true);
+    if ($httpCode < 200 || $httpCode >= 300) {
+        return [
+            'success' => false,
+            'httpCode' => $httpCode,
+            'error' => $data['message'] ?? "Vecticum API error: HTTP $httpCode",
+            'raw' => $data,
+        ];
+    }
+
+    return ['success' => true, 'data' => $data];
+}
+
 function getEcbExchangeRate($currencyCode, $invoiceDate) {
     $currency = strtoupper(trim((string)$currencyCode));
     if ($currency === '' || $currency === 'EUR') {
@@ -476,30 +511,46 @@ function uploadToVecticum($company, $metadata) {
         // Remove null values
         $body = array_filter($body, fn($v) => $v !== null);
 
-        $ch = curl_init($company['vecticum_api_base_url'] . '/' . $company['vecticum_company_id']);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => json_encode($body),
-            CURLOPT_HTTPHEADER => [
-                'Accept: application/json',
-                'Content-Type: application/json',
-                "Authorization: Bearer $token",
-            ],
-            CURLOPT_TIMEOUT => 30,
-        ]);
+        $createResult = createVecticumRecord($company, $body, $token);
+        if (!$createResult['success']) {
+            $errorMsg = $createResult['error'] ?? 'Vecticum API error';
+            $canRetryWithoutInvoiceNo = !empty($body['invoiceNo']) && isVecticumUniquenessError($errorMsg);
+            if ($canRetryWithoutInvoiceNo && !$existingRecord) {
+                $retryBody = $body;
+                unset($retryBody['invoiceNo']);
+                if (empty($retryBody['description']) && !empty($metadata['invoiceNumber'])) {
+                    $retryBody['description'] = 'Original invoice number: ' . $metadata['invoiceNumber'];
+                }
 
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+                $retryResult = createVecticumRecord($company, $retryBody, $token);
+                if ($retryResult['success']) {
+                    $data = $retryResult['data'] ?? [];
+                    $externalId = $data['id'] ?? null;
 
-        if ($httpCode < 200 || $httpCode >= 300) {
-            $errData = json_decode($response, true);
-            $errorMsg = $errData['message'] ?? "Vecticum API error: HTTP $httpCode";
+                    if ($externalId && !empty($metadata['_filePath']) && file_exists($metadata['_filePath'])) {
+                        $fileResult = uploadFileToVecticum($company, $externalId, $metadata['_filePath'], $metadata['_fileName'] ?? 'invoice.pdf', $token);
+                        return [
+                            'success' => true,
+                            'externalId' => $externalId,
+                            'fileUpload' => $fileResult,
+                            'fallbackWithoutInvoiceNo' => true,
+                        ];
+                    }
+
+                    return [
+                        'success' => true,
+                        'externalId' => $externalId,
+                        'fallbackWithoutInvoiceNo' => true,
+                    ];
+                }
+
+                $errorMsg = ($retryResult['error'] ?? 'Vecticum API error') . ' (retry without invoice number also failed)';
+            }
+
             return ['success' => false, 'error' => $errorMsg];
         }
 
-        $data = json_decode($response, true);
+        $data = $createResult['data'] ?? [];
         $externalId = $data['id'] ?? null;
 
         // Upload file if available

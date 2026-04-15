@@ -323,6 +323,7 @@ export default function InvoiceDetail() {
       bankDetails: invoice.bankDetails || "",
     });
     setEditing(true);
+    toast.info("Edit mode enabled");
   };
 
   const openReplyDialog = () => {
@@ -482,6 +483,11 @@ export default function InvoiceDetail() {
         <div className="lg:col-span-5 space-y-3">
           <Card className="overflow-hidden">
             <CardContent className="p-0">
+              {editing && (
+                <div className="mx-4 mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                  <p className="text-xs font-medium text-amber-800">Edit mode is active. Update the fields below, then click Save or Save + Vecticum.</p>
+                </div>
+              )}
               {/* Edit button row inside the card */}
               <div className="flex items-center justify-end px-4 pt-2.5 pb-0">
                 {!editing ? (
