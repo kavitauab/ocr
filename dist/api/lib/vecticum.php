@@ -79,6 +79,17 @@ function _stripDiacritics($str) {
     return strtr($str, $map);
 }
 
+function normalizeVecticumCompanyName($value) {
+    $value = _stripDiacritics(strtolower(trim((string)$value)));
+    $value = str_replace(['"', "'", '`'], ' ', $value);
+    $value = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $value);
+    $parts = preg_split('/\s+/', trim($value)) ?: [];
+    $parts = array_values(array_filter($parts, function ($part) {
+        return !in_array($part, ['uab', 'ab', 'mb', 'vsi', 'ii', 'bv', 'gmbh', 'ltd', 'llc', 'sa', 'srl'], true);
+    }));
+    return implode(' ', $parts);
+}
+
 function findVecticumPartner($company, $vatId, $companyName, $token = null) {
     if (!$token) $token = getVecticumToken($company);
     if (empty($company['vecticum_partner_endpoint'])) return null;
@@ -118,15 +129,10 @@ function findVecticumPartner($company, $vatId, $companyName, $token = null) {
 
     // Fallback: match by company name (fuzzy)
     if ($companyName) {
-        $normalizedName = _stripDiacritics(strtolower(trim($companyName)));
-        // Remove common suffixes for comparison
-        $cleanName = preg_replace('/\b(uab|ab|mb|vsi|ii|bv|gmbh|ltd|llc|s\.?a\.?|srl)\b/i', '', $normalizedName);
-        $cleanName = trim(preg_replace('/[,."\'"\s]+$/', '', trim($cleanName)));
+        $cleanName = normalizeVecticumCompanyName($companyName);
 
         foreach ($partners as $p) {
-            $pName = _stripDiacritics(strtolower(trim($p['name'] ?? '')));
-            $pClean = preg_replace('/\b(uab|ab|mb|vsi|ii|bv|gmbh|ltd|llc|s\.?a\.?|srl)\b/i', '', $pName);
-            $pClean = trim(preg_replace('/[,."\'"\s]+$/', '', trim($pClean)));
+            $pClean = normalizeVecticumCompanyName($p['name'] ?? '');
 
             if ($pClean && $cleanName && ($pClean === $cleanName || strpos($pClean, $cleanName) !== false || strpos($cleanName, $pClean) !== false)) {
                 return ['id' => $p['id'], 'name' => $p['name'] ?? ''];
@@ -241,8 +247,7 @@ function normalizeVecticumInvoiceNo($value) {
 }
 
 function normalizeVecticumCounterpartyText($value) {
-    $value = _stripDiacritics(strtolower(trim((string)$value)));
-    $value = preg_replace('/\b(uab|ab|mb|vsi|ii|bv|gmbh|ltd|llc|s\.?a\.?|srl)\b/i', '', $value);
+    $value = normalizeVecticumCompanyName($value);
     $value = preg_replace('/[^a-z0-9]/', '', $value);
     return $value;
 }
