@@ -113,6 +113,94 @@ function markAsRead($company, $messageId) {
     curl_close($ch);
 }
 
+function sendMail($company, $toEmail, $subject, $body, $contentType = 'Text') {
+    $token = getM365Token($company);
+    $fromEmail = trim((string)($company['ms_sender_email'] ?? ''));
+    $toEmail = trim((string)$toEmail);
+
+    if ($fromEmail === '') {
+        throw new Exception('Company sender email is not configured');
+    }
+    if ($toEmail === '') {
+        throw new Exception('Recipient email is required');
+    }
+
+    $payload = [
+        'message' => [
+            'subject' => $subject,
+            'body' => [
+                'contentType' => $contentType,
+                'content' => $body,
+            ],
+            'toRecipients' => [[
+                'emailAddress' => ['address' => $toEmail],
+            ]],
+        ],
+        'saveToSentItems' => true,
+    ];
+
+    $ch = curl_init("https://graph.microsoft.com/v1.0/users/{$fromEmail}/sendMail");
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode($payload),
+        CURLOPT_HTTPHEADER => [
+            "Authorization: Bearer $token",
+            'Content-Type: application/json',
+        ],
+        CURLOPT_TIMEOUT => 30,
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 202) {
+        $data = json_decode($response, true);
+        throw new Exception('Failed to send email: ' . ($data['error']['message'] ?? "HTTP $httpCode"));
+    }
+
+    return ['success' => true];
+}
+
+function replyToMessage($company, $messageId, $body) {
+    $token = getM365Token($company);
+    $fromEmail = trim((string)($company['ms_sender_email'] ?? ''));
+    $messageId = trim((string)$messageId);
+
+    if ($fromEmail === '') {
+        throw new Exception('Company sender email is not configured');
+    }
+    if ($messageId === '') {
+        throw new Exception('Message ID is required to send a threaded reply');
+    }
+
+    $payload = ['comment' => $body];
+
+    $ch = curl_init("https://graph.microsoft.com/v1.0/users/{$fromEmail}/messages/{$messageId}/reply");
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode($payload),
+        CURLOPT_HTTPHEADER => [
+            "Authorization: Bearer $token",
+            'Content-Type: application/json',
+        ],
+        CURLOPT_TIMEOUT => 30,
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 202) {
+        $data = json_decode($response, true);
+        throw new Exception('Failed to send threaded reply: ' . ($data['error']['message'] ?? "HTTP $httpCode"));
+    }
+
+    return ['success' => true];
+}
+
 function testM365Connection($company) {
     try {
         $token = getM365Token($company);

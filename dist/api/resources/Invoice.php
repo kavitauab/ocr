@@ -4,6 +4,7 @@ require_once __DIR__ . '/../lib/claude.php';
 require_once __DIR__ . '/../lib/usage.php';
 require_once __DIR__ . '/../lib/audit.php';
 require_once __DIR__ . '/../lib/vecticum.php';
+require_once __DIR__ . '/../lib/microsoft_graph.php';
 
 class Invoice extends BaseResource {
     protected $tableName = 'invoices';
@@ -69,6 +70,64 @@ class Invoice extends BaseResource {
             return "'" . $value;
         }
         return $value;
+    }
+
+    private function getInvoiceWithEmailContext($id) {
+        $stmt = $this->db->prepare("SELECT
+            i.*,
+            c.name as company_name,
+            c.vat_number as company_vat_number,
+            c.buyer_keywords as company_buyer_keywords,
+            c.ms_sender_email,
+            e.message_id as email_message_id,
+            e.from_email as sender_email,
+            e.from_name as sender_name,
+            e.subject as email_subject
+            FROM invoices i
+            LEFT JOIN companies c ON c.id = i.company_id
+            LEFT JOIN email_inbox e ON e.id = i.email_inbox_id
+            WHERE i.id = :id");
+        $stmt->execute(['id' => $id]);
+        return $stmt->fetch();
+    }
+
+    private function buildIssueReplyDraft($invoice, $customMessage = null) {
+        $issueText = trim((string)$customMessage);
+        if ($issueText === '') {
+            $vecticumError = trim((string)($invoice['vecticum_error'] ?? ''));
+            $processingError = trim((string)($invoice['processing_error'] ?? ''));
+
+            if ($vecticumError !== '') {
+                if (preg_match('/already exists|already exist|duplicate/i', $vecticumError)) {
+                    $issueText = 'The upload to Vecticum failed because this document appears to already exist in our accounting system.';
+                } else {
+                    $issueText = 'The upload to Vecticum failed: ' . $vecticumError;
+                }
+            } elseif ($processingError !== '') {
+                $issueText = 'The document could not be processed automatically: ' . $processingError;
+            } else {
+                $issueText = 'We could not complete automatic processing for this document and need a corrected version or clarification.';
+            }
+        }
+
+        $greetingName = trim((string)($invoice['sender_name'] ?? ''));
+        $greeting = $greetingName !== '' ? "Hello {$greetingName}," : 'Hello,';
+        $reference = trim((string)($invoice['invoice_number'] ?? '')) ?: trim((string)($invoice['original_filename'] ?? '')) ?: trim((string)($invoice['id'] ?? ''));
+        $subjectBase = trim((string)($invoice['email_subject'] ?? '')) ?: ('Invoice ' . $reference);
+
+        $body = $greeting . "\n\n"
+            . "We could not complete processing for \"" . $reference . "\".\n\n"
+            . $issueText . "\n\n"
+            . "Please review the document and resend a corrected version if needed.\n\n"
+            . "Regards,\n"
+            . (trim((string)($invoice['company_name'] ?? '')) ?: 'Accounting');
+
+        return [
+            'toEmail' => trim((string)($invoice['sender_email'] ?? '')),
+            'messageId' => trim((string)($invoice['email_message_id'] ?? '')),
+            'subject' => 'Re: ' . $subjectBase,
+            'body' => $body,
+        ];
     }
 
     public function list() {
@@ -243,9 +302,7 @@ class Invoice extends BaseResource {
         }
 
         $user = getAuthUser();
-        $stmt = $this->db->prepare("SELECT i.*, c.name as company_name, c.vat_number as company_vat_number, c.buyer_keywords as company_buyer_keywords, e.from_email as sender_email, e.from_name as sender_name FROM invoices i LEFT JOIN companies c ON c.id = i.company_id LEFT JOIN email_inbox e ON e.id = i.email_inbox_id WHERE i.id = :id");
-        $stmt->execute(['id' => $id]);
-        $invoice = $stmt->fetch();
+        $invoice = $this->getInvoiceWithEmailContext($id);
         if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
 
         if ($invoice['company_id']) requireCompanyAccess($user, $invoice['company_id']);
@@ -469,6 +526,9 @@ class Invoice extends BaseResource {
         foreach ($data as $key => $value) {
             $dbKey = $camelMap[$key] ?? $key;
             if (in_array($dbKey, $allowed)) {
+                if ($dbKey === 'document_type') {
+                    $value = normalizeDocumentType($value, $data) ?? $value;
+                }
                 $updates[$dbKey] = $value;
             }
         }
@@ -865,6 +925,46 @@ class Invoice extends BaseResource {
         $this->db->prepare("UPDATE invoices SET vecticum_error = :err, updated_at = NOW() WHERE id = :id")
             ->execute(['err' => $vecError, 'id' => $id]);
         sendJSON(['error' => $vecError], 500);
+    }
+
+    public function reply_issue($id) {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') sendJSON(['error' => 'Method not allowed'], 405);
+
+        $user = getAuthUser();
+        $invoice = $this->getInvoiceWithEmailContext($id);
+        if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
+        if (!$invoice['company_id']) sendJSON(['error' => 'Invoice has no company'], 400);
+
+        requireCompanyAccess($user, $invoice['company_id'], 'manager');
+
+        $senderEmail = trim((string)($invoice['sender_email'] ?? ''));
+        if ($senderEmail === '') {
+            sendJSON(['error' => 'This invoice has no sender email to reply to'], 400);
+        }
+
+        $payload = $this->getRequestBody();
+        $draft = $this->buildIssueReplyDraft($invoice, $payload['message'] ?? null);
+
+        $stmt = $this->db->prepare("SELECT * FROM companies WHERE id = :id");
+        $stmt->execute(['id' => $invoice['company_id']]);
+        $company = $stmt->fetch();
+        if (!$company) sendJSON(['error' => 'Company not found'], 404);
+
+        try {
+            if ($draft['messageId'] !== '') {
+                replyToMessage($company, $draft['messageId'], $draft['body']);
+            } else {
+                sendMail($company, $draft['toEmail'], $draft['subject'], $draft['body']);
+            }
+            sendJSON([
+                'success' => true,
+                'message' => 'Issue email sent to sender',
+                'recipient' => $draft['toEmail'],
+                'subject' => $draft['subject'],
+            ]);
+        } catch (\Throwable $e) {
+            sendJSON(['error' => $e->getMessage()], 500);
+        }
     }
 
     /**

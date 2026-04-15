@@ -3,7 +3,7 @@
 // All available extraction fields
 function getAllExtractionFields() {
     return [
-        'documentType' => ['type' => 'string', 'enum' => ['invoice', 'proforma', 'credit_note'], 'description' => 'Type of document: "invoice" for commercial/standard invoices (PVM sąskaita faktūra), "proforma" for proforma/advance invoices (išankstinė sąskaita faktūra) AND payment notifications (mokėjimo pranešimas), "credit_note" for credit notes (kreditinė sąskaita faktūra)'],
+        'documentType' => ['type' => 'string', 'enum' => ['invoice', 'proforma', 'credit_note'], 'description' => 'Type of document: "invoice" for standard/commercial invoices, tax invoices, and paid invoice receipts/confirmations that represent the actual invoice; "proforma" only for genuine proforma/advance/prepayment/deposit invoices; "credit_note" for credit notes (kreditinė sąskaita faktūra)'],
         'invoiceNumber' => ['type' => 'string', 'description' => 'The invoice number/ID. If the document shows a series and number separately (e.g. "Serija TE2023 Nr. 285"), combine them with a dash (e.g. "TE2023-285"). Remove prefixes like "Nr.", "No.", "Serija" etc. If the invoice number is already a single value (e.g. "SJ-152138"), keep it as-is.'],
         'invoiceDate' => ['type' => 'string', 'description' => 'Invoice issue date in YYYY-MM-DD format'],
         'dueDate' => ['type' => ['string', 'null'], 'description' => 'Payment due date in YYYY-MM-DD format, or null if not stated'],
@@ -41,6 +41,47 @@ function buildClaudeUsageMetadata($responseData, $fallbackModel) {
         'cacheReadInputTokens' => $cacheReadInputTokens,
         'totalTokens' => $inputTokens + $outputTokens + $cacheCreationInputTokens + $cacheReadInputTokens,
     ];
+}
+
+function normalizeDocumentType($documentType, $context = []) {
+    $normalized = strtolower(trim((string)$documentType));
+    if ($normalized === '') {
+        return null;
+    }
+
+    $normalized = str_replace([' ', '-'], '_', $normalized);
+    if ($normalized === 'credit') {
+        $normalized = 'credit_note';
+    }
+    if ($normalized === 'pro_forma') {
+        $normalized = 'proforma';
+    }
+
+    $contextParts = [];
+    foreach (['detail', 'invoiceNumber', 'paymentTerms', 'vendorName', 'buyerName'] as $field) {
+        if (!empty($context[$field])) {
+            $contextParts[] = (string)$context[$field];
+        }
+    }
+    $contextText = strtolower(implode(' ', $contextParts));
+
+    $hasExplicitProforma = preg_match('/\b(pro[\s-]?forma|advance invoice|prepayment|deposit invoice|down payment)\b/', $contextText) === 1;
+    $hasPaidInvoiceHint = preg_match('/\b(paid|payment receipt|payment confirmation|payment #|tax invoice|invoice)\b/', $contextText) === 1;
+
+    if ($normalized === 'proforma') {
+        if ($hasExplicitProforma) {
+            return 'proforma';
+        }
+        if ($hasPaidInvoiceHint && !empty($context['invoiceNumber'])) {
+            return 'invoice';
+        }
+    }
+
+    if ($normalized === 'invoice' && $hasExplicitProforma) {
+        return 'proforma';
+    }
+
+    return $normalized;
 }
 
 function extractInvoiceData($filePath, $fileType, $enabledFields = null, $includeUsage = false) {
@@ -156,7 +197,8 @@ Rules:
    - 0.5-0.7 = uncertain, had to interpret or infer
    - Below 0.5 = very uncertain, could easily be wrong
 7. If the document is not an invoice, still try to extract whatever relevant data you can, but set confidence scores low.
-8. For multi-page documents, examine ALL pages.";
+8. For multi-page documents, examine ALL pages.
+9. Do not label a document as proforma unless it explicitly says proforma, advance invoice, prepayment, or deposit invoice. A paid invoice/payment receipt that represents the actual invoice should still be classified as invoice.";
 
     // Build tool properties based on enabled fields
     $allFields = getAllExtractionFields();
@@ -179,7 +221,7 @@ Rules:
         $required = array_values(array_intersect($defaultRequired, $enabledFields));
         $required[] = 'confidence';
 
-        $systemPrompt .= "\n9. Only extract these specific fields: " . implode(', ', $enabledFields) . ". Ignore all other fields.";
+        $systemPrompt .= "\n10. Only extract these specific fields: " . implode(', ', $enabledFields) . ". Ignore all other fields.";
     } else {
         $properties = $allFields;
         $confidenceProps = [];
@@ -261,7 +303,11 @@ Rules:
     foreach ($data['content'] as $block) {
         if ($block['type'] === 'tool_use') {
             if (!$includeUsage) {
-                return $block['input'];
+                $result = $block['input'];
+                if (isset($result['documentType'])) {
+                    $result['documentType'] = normalizeDocumentType($result['documentType'], $result);
+                }
+                return $result;
             }
 
             return [
@@ -309,7 +355,7 @@ function classifyDocument($filePath, $fileType) {
                 'category' => [
                     'type' => 'string',
                     'enum' => ['invoice', 'proforma', 'credit_note', 'order_confirmation', 'act', 'report', 'contract', 'other'],
-                    'description' => 'Document category: "invoice" for standard/commercial invoices (PVM sąskaita faktūra), "proforma" for proforma/advance invoices AND payment notifications (mokėjimo pranešimas), "credit_note" for credit notes, "order_confirmation" for order confirmations/purchase orders, "act" for work acceptance acts (darbų priėmimo-perdavimo aktas) or service acts, "report" for reports, "contract" for contracts/agreements, "other" for anything else',
+                    'description' => 'Document category: "invoice" for standard/commercial invoices and paid invoice receipts/confirmations that represent the actual invoice, "proforma" only for genuine proforma/advance/prepayment/deposit invoices, "credit_note" for credit notes, "order_confirmation" for order confirmations/purchase orders, "act" for work acceptance acts (darbų priėmimo-perdavimo aktas) or service acts, "report" for reports, "contract" for contracts/agreements, "other" for anything else',
                 ],
                 'detail' => [
                     'type' => 'string',
@@ -329,7 +375,7 @@ function classifyDocument($filePath, $fileType) {
     $requestBody = [
         'model' => $model,
         'max_tokens' => 256,
-        'system' => [['type' => 'text', 'text' => 'You are a document classifier. Identify the type of business document shown. Be precise — distinguish between invoices, proforma invoices, credit notes, order confirmations, work acceptance acts, and other document types.', 'cache_control' => ['type' => 'ephemeral']]],
+        'system' => [['type' => 'text', 'text' => 'You are a document classifier. Identify the type of business document shown. Be precise: only use proforma for explicit proforma/advance/prepayment/deposit invoices. A paid invoice or payment receipt that represents the actual invoice should be classified as invoice, not proforma.', 'cache_control' => ['type' => 'ephemeral']]],
         'tools' => [$tool],
         'tool_choice' => ['type' => 'tool', 'name' => 'classify_document'],
         'messages' => [['role' => 'user', 'content' => $contentBlocks]],
@@ -365,8 +411,11 @@ function classifyDocument($filePath, $fileType) {
 
     foreach ($data['content'] ?? [] as $block) {
         if ($block['type'] === 'tool_use') {
+            $category = normalizeDocumentType($block['input']['category'] ?? 'other', [
+                'detail' => $block['input']['detail'] ?? '',
+            ]);
             return [
-                'category' => $block['input']['category'] ?? 'other',
+                'category' => $category ?? 'other',
                 'detail' => $block['input']['detail'] ?? '',
                 'confidence' => $block['input']['confidence'] ?? 0,
                 'usage' => $usage,

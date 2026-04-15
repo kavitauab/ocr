@@ -167,7 +167,7 @@ function processCompanyEmails($companyId) {
                     }
 
                     // Map order_confirmation to proforma
-                    $docType = $extracted['documentType'] ?? $item['classification']['category'];
+                    $docType = normalizeDocumentType($extracted['documentType'] ?? $item['classification']['category'], $extracted);
                     if ($docType === 'order_confirmation') $docType = 'proforma';
 
                     $invoiceUpdateParams = [

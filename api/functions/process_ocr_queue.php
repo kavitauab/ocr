@@ -164,7 +164,7 @@ foreach ($jobs as $job) {
 
         // Update invoice with extracted data
         $invoiceUpdateParams = [
-            'documentType' => $extracted['documentType'] ?? null,
+            'documentType' => normalizeDocumentType($extracted['documentType'] ?? null, $extracted),
             'invoiceNumber' => $extracted['invoiceNumber'] ?? null,
             'invoiceDate' => $extracted['invoiceDate'] ?? null,
             'dueDate' => $extracted['dueDate'] ?? null,

@@ -24,6 +24,36 @@
   - `php -l api/lib/email_processor.php`
   - `php -l api/lib/usage.php`
   - `php -l api/lib/claude.php`
+- `npm run build`
+
+---
+
+# Iteration 4 - Invoice Correction + Issue Reply Flow
+
+## Plan
+- [x] Tighten OCR document-type classification so paid invoices/payment confirmations are not defaulted to `proforma`.
+- [x] Add backend helpers/endpoints for invoice issue replies through Microsoft Graph and for clean Vecticum resend after edits.
+- [x] Improve invoice detail edit flow so users can save changes and send the saved invoice data to Vecticum in one action.
+- [x] Expose sender issue-reply action in invoice detail when the invoice originated from email and has a real processing/Vecticum issue.
+- [ ] Verify with PHP syntax checks, frontend build, and production deploy.
+
+## Verification Checklist
+- [x] `php -l` passes for changed backend files.
+- [x] `npm run build` passes.
+- [ ] Edited invoice data can be saved and then sent to Vecticum from the invoice detail view.
+- [ ] Reply email endpoint rejects invoices without sender email and succeeds for valid company mail setup.
+- [ ] OCR classification prompts/helpers no longer describe payment notifications as `proforma`.
+
+## Review
+- Backend now normalizes `document_type` more conservatively and removes the prompt guidance that treated payment notifications as `proforma`.
+- Invoice detail now supports `Save` and `Save + Vecticum`, disables Vecticum send while edits are unsaved, and exposes a sender reply dialog for Vecticum/processing issues on emailed invoices.
+- Added Microsoft Graph outbound mail helpers plus `POST /api/invoices/{id}/reply-issue`, with threaded reply attempted first when the original Graph message ID is available.
+- Verification run so far:
+  - `php -l api/lib/claude.php`
+  - `php -l api/lib/microsoft_graph.php`
+  - `php -l api/resources/Invoice.php`
+  - `php -l api/lib/email_processor.php`
+  - `php -l api/functions/process_ocr_queue.php`
   - `npm run build`
 
 ---
