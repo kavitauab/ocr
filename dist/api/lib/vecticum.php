@@ -404,22 +404,19 @@ function getEcbExchangeRate($currencyCode, $invoiceDate) {
         return null;
     }
 
-    $startTs = strtotime($date . ' -7 days');
-    if ($startTs === false) {
-        return null;
-    }
-    $startDate = date('Y-m-d', $startTs);
-
-    $url = 'https://data-api.ecb.europa.eu/service/data/EXR/D.' . rawurlencode($currency) . '.EUR.SP00.A'
-        . '?startPeriod=' . rawurlencode($startDate)
-        . '&endPeriod=' . rawurlencode($date)
-        . '&format=csvdata';
+    $url = 'https://www.lb.lt/WebServices/FxRates/FxRates.asmx/getFxRatesForCurrency?'
+        . http_build_query([
+            'tp' => 'EU',
+            'ccy' => $currency,
+            'dtFrom' => $date,
+            'dtTo' => $date,
+        ]);
 
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT => 15,
-        CURLOPT_HTTPHEADER => ['Accept: text/csv'],
+        CURLOPT_HTTPHEADER => ['Accept: application/xml, text/xml'],
     ]);
 
     $response = curl_exec($ch);
@@ -430,24 +427,31 @@ function getEcbExchangeRate($currencyCode, $invoiceDate) {
         return null;
     }
 
-    $lines = preg_split("/\r\n|\n|\r/", trim($response));
-    if (!$lines || count($lines) < 2) {
+    $xml = @simplexml_load_string($response);
+    if (!$xml) {
         return null;
     }
 
-    $lastRate = null;
-    foreach (array_slice($lines, 1) as $line) {
-        if (trim($line) === '') continue;
-        $columns = str_getcsv($line, ',', '"', '\\');
-        if (!isset($columns[7]) || !is_numeric($columns[7])) continue;
-        $lastRate = (float)$columns[7];
-    }
-
-    if ($lastRate === null) {
+    $namespaces = $xml->getDocNamespaces();
+    $ns = $namespaces[''] ?? null;
+    $rates = $ns ? $xml->children($ns)->FxRate : $xml->FxRate;
+    if (!$rates) {
         return null;
     }
 
-    return number_format($lastRate, 4, '.', '');
+    foreach ($rates as $rateNode) {
+        $ccyAmts = $ns ? $rateNode->children($ns)->CcyAmt : $rateNode->CcyAmt;
+        foreach ($ccyAmts as $ccyAmt) {
+            $fields = $ns ? $ccyAmt->children($ns) : $ccyAmt;
+            $ccy = strtoupper(trim((string)$fields->Ccy));
+            $amt = trim((string)$fields->Amt);
+            if ($ccy === $currency && is_numeric($amt)) {
+                return number_format((float)$amt, 4, '.', '');
+            }
+        }
+    }
+
+    return null;
 }
 
 function uploadToVecticum($company, $metadata) {
