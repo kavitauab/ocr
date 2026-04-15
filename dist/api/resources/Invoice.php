@@ -110,22 +110,34 @@ class Invoice extends BaseResource {
             }
         }
 
-        $greetingName = trim((string)($invoice['sender_name'] ?? ''));
-        $greeting = $greetingName !== '' ? "Hello {$greetingName}," : 'Hello,';
         $reference = trim((string)($invoice['invoice_number'] ?? '')) ?: trim((string)($invoice['original_filename'] ?? '')) ?: trim((string)($invoice['id'] ?? ''));
         $subjectBase = trim((string)($invoice['email_subject'] ?? '')) ?: ('Invoice ' . $reference);
+        $defaultSubject = trim((string)getSetting('issue_reply_subject', 'Re: {emailSubject}'));
+        $defaultBody = (string)getSetting(
+            'issue_reply_body',
+            "Hello {senderName},\n\nWe could not complete processing for \"{reference}\".\n\n{issue}\n\nPlease review the document and resend a corrected version if needed.\n\nRegards,\n{companyName}"
+        );
 
-        $body = $greeting . "\n\n"
-            . "We could not complete processing for \"" . $reference . "\".\n\n"
-            . $issueText . "\n\n"
-            . "Please review the document and resend a corrected version if needed.\n\n"
-            . "Regards,\n"
-            . (trim((string)($invoice['company_name'] ?? '')) ?: 'Accounting');
+        $replacements = [
+            '{senderName}' => trim((string)($invoice['sender_name'] ?? '')) ?: 'there',
+            '{senderEmail}' => trim((string)($invoice['sender_email'] ?? '')),
+            '{reference}' => $reference,
+            '{invoiceNumber}' => trim((string)($invoice['invoice_number'] ?? '')),
+            '{fileName}' => trim((string)($invoice['original_filename'] ?? '')),
+            '{emailSubject}' => $subjectBase,
+            '{companyName}' => trim((string)($invoice['company_name'] ?? '')) ?: 'Accounting',
+            '{issue}' => $issueText,
+            '{vecticumError}' => trim((string)($invoice['vecticum_error'] ?? '')),
+            '{processingError}' => trim((string)($invoice['processing_error'] ?? '')),
+        ];
+
+        $subject = strtr($defaultSubject, $replacements);
+        $body = strtr($defaultBody, $replacements);
 
         return [
             'toEmail' => trim((string)($invoice['sender_email'] ?? '')),
             'messageId' => trim((string)($invoice['email_message_id'] ?? '')),
-            'subject' => 'Re: ' . $subjectBase,
+            'subject' => $subject,
             'body' => $body,
         ];
     }

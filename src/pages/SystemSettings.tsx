@@ -18,6 +18,8 @@ export default function SystemSettings() {
     smart_extraction: "1",
     extraction_confidence_threshold: "0.9",
     critical_fields: "invoiceNumber,vendorName,totalAmount,currency",
+    issue_reply_subject: "Re: {emailSubject}",
+    issue_reply_body: "Hello {senderName},\n\nWe could not complete processing for \"{reference}\".\n\n{issue}\n\nPlease review the document and resend a corrected version if needed.\n\nRegards,\n{companyName}",
   });
 
   const allCriticalFieldOptions: [string, string][] = [
@@ -107,6 +109,34 @@ export default function SystemSettings() {
               placeholder="Secret key for cron endpoints"
             />
             <p className="text-xs text-muted-foreground mt-1">Required for automated email fetch</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Issue Reply Email</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Default Subject</label>
+            <Input
+              value={form.issue_reply_subject || ""}
+              onChange={(e) => setForm({ ...form, issue_reply_subject: e.target.value })}
+              placeholder="Re: {emailSubject}"
+            />
+            <p className="text-xs text-muted-foreground">Used when replying to invoice senders about processing or Vecticum issues.</p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Default Body</label>
+            <textarea
+              value={form.issue_reply_body || ""}
+              onChange={(e) => setForm({ ...form, issue_reply_body: e.target.value })}
+              className="min-h-56 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+            />
+            <p className="text-xs text-muted-foreground">
+              Available placeholders: {"{senderName}"}, {"{senderEmail}"}, {"{reference}"}, {"{invoiceNumber}"}, {"{fileName}"}, {"{emailSubject}"}, {"{companyName}"}, {"{issue}"}, {"{vecticumError}"}, {"{processingError}"}.
+            </p>
           </div>
         </CardContent>
       </Card>

@@ -374,7 +374,11 @@ export default function CompanyEdit() {
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Tenant ID</label><Input value={v("msTenantId")} onChange={(e) => set("msTenantId", e.target.value)} disabled={!canEditIntegrations} /></div>
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client ID</label><Input value={v("msClientId")} onChange={(e) => set("msClientId", e.target.value)} disabled={!canEditIntegrations} /></div>
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client Secret</label><Input type="password" value={v("msClientSecret")} onChange={(e) => set("msClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Sender Email</label><Input value={v("msSenderEmail")} onChange={(e) => set("msSenderEmail", e.target.value)} disabled={!canEditIntegrations} /></div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-foreground">Default Mailbox / Sender Email</label>
+                    <Input value={v("msSenderEmail")} onChange={(e) => set("msSenderEmail", e.target.value)} disabled={!canEditIntegrations} />
+                    <p className="text-xs text-muted-foreground">This mailbox is used both to fetch incoming invoices and to send issue replies back to suppliers/customers.</p>
+                  </div>
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Folder</label><Input value={v("msFetchFolder")} onChange={(e) => set("msFetchFolder", e.target.value)} disabled={!canEditIntegrations} /></div>
                   {canEditIntegrations && <Button variant="outline" size="sm" onClick={testEmail}>Test Connection</Button>}
                 </CardContent>
