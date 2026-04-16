@@ -133,43 +133,14 @@ function normalizeVecticumCompanyName($value) {
     return strtolower(implode(' ', $parts));
 }
 
-function tokenizeVecticumCompanyName($value) {
-    $normalized = normalizeVecticumCompanyName($value);
-    if ($normalized === '') return [];
-
-    return array_values(array_filter(explode(' ', $normalized), function ($token) {
-        return strlen($token) >= 4;
-    }));
-}
-
-function isCompatiblePartnerNameFallback($extractedName, $partnerName) {
+function isExactPartnerNameMatch($extractedName, $partnerName) {
     $left = normalizeVecticumCompanyName($extractedName);
     $right = normalizeVecticumCompanyName($partnerName);
 
     if ($left === '' || $right === '') {
         return false;
     }
-    if ($left === $right) {
-        return true;
-    }
-
-    if (strlen($left) >= 8 && strpos($right, $left) !== false) {
-        return true;
-    }
-    if (strlen($right) >= 8 && strpos($left, $right) !== false) {
-        return true;
-    }
-
-    $leftTokens = tokenizeVecticumCompanyName($left);
-    $rightTokens = tokenizeVecticumCompanyName($right);
-    if (empty($leftTokens) || empty($rightTokens)) {
-        return false;
-    }
-
-    $overlap = array_intersect($leftTokens, $rightTokens);
-    $requiredOverlap = min(count($leftTokens), count($rightTokens)) >= 2 ? 2 : 1;
-
-    return count($overlap) >= $requiredOverlap;
+    return $left === $right;
 }
 
 function findVecticumPartner($company, $vatId, $companyName, $token = null) {
@@ -200,19 +171,19 @@ function findVecticumPartner($company, $vatId, $companyName, $token = null) {
                 return ['id' => $p['id'], 'name' => $p['name'] ?? ''];
             }
         }
-        // Fallback to company code only when the extracted vendor name is compatible with the partner name.
+        // Company-code fallback is only acceptable when the normalized legal name is also an exact match.
         foreach ($partners as $p) {
             $pCode = trim($p['companyCode'] ?? '');
-            if ($pCode && strpos($normalizedVat, $pCode) !== false && isCompatiblePartnerNameFallback($companyName, $p['name'] ?? '')) {
+            if ($pCode && strpos($normalizedVat, $pCode) !== false && isExactPartnerNameMatch($companyName, $p['name'] ?? '')) {
                 return ['id' => $p['id'], 'name' => $p['name'] ?? ''];
             }
         }
     }
 
-    // Fallback: match by company name (fuzzy)
+    // Name-only fallback must be exact after normalization.
     if ($companyName) {
         foreach ($partners as $p) {
-            if (isCompatiblePartnerNameFallback($companyName, $p['name'] ?? '')) {
+            if (isExactPartnerNameMatch($companyName, $p['name'] ?? '')) {
                 return ['id' => $p['id'], 'name' => $p['name'] ?? ''];
             }
         }
