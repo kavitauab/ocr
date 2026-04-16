@@ -605,36 +605,48 @@ class Invoice extends BaseResource {
                 $companySql = "SELECT c.id, c.name, c.code,
                     COALESCE(s.plan, 'free') as plan,
                     COALESCE(s.status, 'active') as billing_status,
-                    COUNT(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd THEN i.id END) as total_invoices,
-                    SUM(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd AND i.status='completed' THEN 1 ELSE 0 END) as completed,
-                    SUM(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd AND i.status='failed' THEN 1 ELSE 0 END) as failed,
-                    MAX(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd THEN i.created_at END) as last_activity,
-                    MAX(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd THEN i.ocr_sent_at END) as last_ocr_sent_at,
-                    MAX(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd THEN i.ocr_returned_at END) as last_ocr_returned_at
+                    COUNT(CASE WHEN i.created_at >= :scopeStart1 AND i.created_at < :scopeEnd1 THEN i.id END) as total_invoices,
+                    SUM(CASE WHEN i.created_at >= :scopeStart2 AND i.created_at < :scopeEnd2 AND i.status='completed' THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN i.created_at >= :scopeStart3 AND i.created_at < :scopeEnd3 AND i.status='failed' THEN 1 ELSE 0 END) as failed,
+                    MAX(CASE WHEN i.created_at >= :scopeStart4 AND i.created_at < :scopeEnd4 THEN i.created_at END) as last_activity,
+                    MAX(CASE WHEN i.created_at >= :scopeStart5 AND i.created_at < :scopeEnd5 THEN i.ocr_sent_at END) as last_ocr_sent_at,
+                    MAX(CASE WHEN i.created_at >= :scopeStart6 AND i.created_at < :scopeEnd6 THEN i.ocr_returned_at END) as last_ocr_returned_at
                     FROM companies c
                     LEFT JOIN subscriptions s ON s.company_id = c.id
                     LEFT JOIN invoices i ON i.company_id = c.id
                     GROUP BY c.id, c.name, c.code, s.plan, s.status
                     ORDER BY last_activity DESC";
                 $stmt = $this->db->prepare($companySql);
-                $stmt->execute(['scopeStart' => $scope['startDateTime'], 'scopeEnd' => $scope['endExclusiveDateTime']]);
+                $stmt->execute([
+                    'scopeStart1' => $scope['startDateTime'], 'scopeEnd1' => $scope['endExclusiveDateTime'],
+                    'scopeStart2' => $scope['startDateTime'], 'scopeEnd2' => $scope['endExclusiveDateTime'],
+                    'scopeStart3' => $scope['startDateTime'], 'scopeEnd3' => $scope['endExclusiveDateTime'],
+                    'scopeStart4' => $scope['startDateTime'], 'scopeEnd4' => $scope['endExclusiveDateTime'],
+                    'scopeStart5' => $scope['startDateTime'], 'scopeEnd5' => $scope['endExclusiveDateTime'],
+                    'scopeStart6' => $scope['startDateTime'], 'scopeEnd6' => $scope['endExclusiveDateTime'],
+                ]);
                 $companyRows = $stmt->fetchAll();
             } catch (\Throwable $e) {
                 // Fallback for DBs without OCR lifecycle columns.
                 $companySql = "SELECT c.id, c.name, c.code,
                     COALESCE(s.plan, 'free') as plan,
                     COALESCE(s.status, 'active') as billing_status,
-                    COUNT(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd THEN i.id END) as total_invoices,
-                    SUM(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd AND i.status='completed' THEN 1 ELSE 0 END) as completed,
-                    SUM(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd AND i.status='failed' THEN 1 ELSE 0 END) as failed,
-                    MAX(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd THEN i.created_at END) as last_activity
+                    COUNT(CASE WHEN i.created_at >= :scopeStart1 AND i.created_at < :scopeEnd1 THEN i.id END) as total_invoices,
+                    SUM(CASE WHEN i.created_at >= :scopeStart2 AND i.created_at < :scopeEnd2 AND i.status='completed' THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN i.created_at >= :scopeStart3 AND i.created_at < :scopeEnd3 AND i.status='failed' THEN 1 ELSE 0 END) as failed,
+                    MAX(CASE WHEN i.created_at >= :scopeStart4 AND i.created_at < :scopeEnd4 THEN i.created_at END) as last_activity
                     FROM companies c
                     LEFT JOIN subscriptions s ON s.company_id = c.id
                     LEFT JOIN invoices i ON i.company_id = c.id
                     GROUP BY c.id, c.name, c.code, s.plan, s.status
                     ORDER BY last_activity DESC";
                 $stmt = $this->db->prepare($companySql);
-                $stmt->execute(['scopeStart' => $scope['startDateTime'], 'scopeEnd' => $scope['endExclusiveDateTime']]);
+                $stmt->execute([
+                    'scopeStart1' => $scope['startDateTime'], 'scopeEnd1' => $scope['endExclusiveDateTime'],
+                    'scopeStart2' => $scope['startDateTime'], 'scopeEnd2' => $scope['endExclusiveDateTime'],
+                    'scopeStart3' => $scope['startDateTime'], 'scopeEnd3' => $scope['endExclusiveDateTime'],
+                    'scopeStart4' => $scope['startDateTime'], 'scopeEnd4' => $scope['endExclusiveDateTime'],
+                ]);
                 $companyRows = $stmt->fetchAll();
                 foreach ($companyRows as &$companyRow) {
                     $companyRow['last_ocr_sent_at'] = null;
