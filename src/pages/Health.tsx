@@ -53,10 +53,10 @@ function ConfidenceBar({ value, label }: { value: number | null; label: string }
 }
 
 export default function Health() {
-  const [period, setPeriod] = useState<"daily" | "weekly" | "monthly" | "custom">("monthly");
-  const defaultMonthly = getPresetDates("monthly");
-  const [customDateFrom, setCustomDateFrom] = useState(defaultMonthly.dateFrom);
-  const [customDateTo, setCustomDateTo] = useState(defaultMonthly.dateTo);
+  const [period, setPeriod] = useState<"daily" | "weekly" | "monthly" | "custom">("daily");
+  const defaultDaily = getPresetDates("daily");
+  const [customDateFrom, setCustomDateFrom] = useState(defaultDaily.dateFrom);
+  const [customDateTo, setCustomDateTo] = useState(defaultDaily.dateTo);
   const queryParams = useMemo(() => {
     if (period === "custom") {
       return { period, dateFrom: customDateFrom, dateTo: customDateTo };
