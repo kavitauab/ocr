@@ -222,62 +222,16 @@ function getVecticumDefaultAuthor($company, $token = null) {
     if (!is_array($inboxes)) return null;
 
     $preferredInboxId = trim((string)($company['vecticum_inbox_setup_id'] ?? ''));
-    $mailboxEmail = strtolower(trim((string)($company['ms_sender_email'] ?? '')));
-    $fallbacks = [];
-
-    $collectEmails = function ($value) use (&$collectEmails) {
-        $emails = [];
-        if (is_array($value)) {
-            foreach ($value as $item) {
-                foreach ($collectEmails($item) as $email) {
-                    $emails[] = $email;
-                }
-            }
-            return array_values(array_unique($emails));
-        }
-        if (is_string($value)) {
-            if (preg_match_all('/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i', $value, $matches)) {
-                foreach ($matches[0] as $match) {
-                    $emails[] = strtolower(trim($match));
-                }
-            }
-        }
-        return array_values(array_unique($emails));
-    };
+    if ($preferredInboxId === '') return null;
 
     foreach ($inboxes as $inbox) {
         if (empty($inbox['defaultAuthor']['id'])) {
             continue;
         }
 
-        $author = ['id' => $inbox['defaultAuthor']['id'], 'name' => $inbox['defaultAuthor']['name'] ?? ''];
-        $fallbacks[] = $author;
-
-        if ($preferredInboxId !== '') {
-            $preferredNeedle = strtolower($preferredInboxId);
-            $candidateValues = [
-                strtolower(trim((string)($inbox['id'] ?? ''))),
-                strtolower(trim((string)($inbox['defaultAuthor']['id'] ?? ''))),
-                strtolower(trim((string)($inbox['email'] ?? ''))),
-                strtolower(trim((string)($inbox['emailPreview'] ?? ''))),
-                strtolower(trim((string)($inbox['emailPrefix'] ?? ''))),
-                strtolower(trim((string)($inbox['name'] ?? ''))),
-            ];
-            if (in_array($preferredNeedle, array_filter($candidateValues), true)) {
-                return $author;
-            }
+        if (trim((string)($inbox['id'] ?? '')) === $preferredInboxId) {
+            return ['id' => $inbox['defaultAuthor']['id'], 'name' => $inbox['defaultAuthor']['name'] ?? ''];
         }
-
-        if ($mailboxEmail !== '') {
-            $inboxEmails = $collectEmails($inbox);
-            if (in_array($mailboxEmail, $inboxEmails, true)) {
-                return $author;
-            }
-        }
-    }
-
-    if (count($fallbacks) === 1) {
-        return $fallbacks[0];
     }
 
     return null;
