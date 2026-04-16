@@ -526,16 +526,31 @@ function uploadToVecticum($company, $metadata) {
             return number_format(round((float)$value, 2), 2, '.', '');
         };
 
-        $grossTotal = floatval($metadata['totalAmount'] ?? 0);
+        // Trust extracted values directly — don't derive subtotal by subtracting VAT.
+        // Reverse-charge VAT invoices have total=subtotal with VAT shown for reference,
+        // so computing subtotal = total - tax gives wrong results.
+        $extractedTotal = floatval($metadata['totalAmount'] ?? 0);
         $tax = floatval($metadata['taxAmount'] ?? 0);
         $subtotal = floatval($metadata['subtotalAmount'] ?? 0);
-        if ($grossTotal <= 0 && ($subtotal > 0 || $tax > 0)) {
-            $grossTotal = $subtotal + $tax;
+
+        // Backfill missing values only when not extracted
+        if ($subtotal <= 0 && $extractedTotal > 0) {
+            // Only case where we derive subtotal: no subtotal extracted.
+            // Assume extractedTotal already includes VAT.
+            $subtotal = max($extractedTotal - $tax, 0);
         }
-        $netAmount = $grossTotal > 0 ? max($grossTotal - $tax, 0) : $subtotal;
-        $invoiceAmount = $formatMoney($netAmount ?: $grossTotal);
+        if ($extractedTotal <= 0 && $subtotal > 0) {
+            $extractedTotal = $subtotal + $tax;
+        }
+
+        // Gross = larger of extracted total or (subtotal + tax).
+        // For reverse-charge: extractedTotal=subtotal, tax>0 → grossTotal = subtotal + tax
+        // For normal invoices: extractedTotal includes tax → grossTotal = extractedTotal
+        $grossTotal = max($extractedTotal, $subtotal + $tax);
+
+        $invoiceAmount = $formatMoney($subtotal);
         $vatAmount = $formatMoney($tax);
-        $totalAmount = $formatMoney($netAmount ?: $grossTotal);
+        $totalAmount = $formatMoney($subtotal);
         $totalInclVat = $formatMoney($grossTotal);
 
         $body = [
