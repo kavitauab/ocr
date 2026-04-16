@@ -462,18 +462,22 @@ function uploadToVecticum($company, $metadata) {
     try {
         $token = getVecticumToken($company);
 
-        $total = floatval($metadata['totalAmount'] ?? 0);
+        $grossTotal = floatval($metadata['totalAmount'] ?? 0);
         $tax = floatval($metadata['taxAmount'] ?? 0);
         $subtotal = floatval($metadata['subtotalAmount'] ?? 0);
-        $totalInclVat = number_format($total && $tax ? $total + $tax : $total, 2, '.', '');
+        if ($grossTotal <= 0 && ($subtotal > 0 || $tax > 0)) {
+            $grossTotal = $subtotal + $tax;
+        }
+        $netAmount = $grossTotal > 0 ? max($grossTotal - $tax, 0) : $subtotal;
+        $totalInclVat = number_format($grossTotal, 2, '.', '');
 
         $body = [
             'invoiceNo' => $metadata['invoiceNumber'] ?? null,
             'invoiceDate' => $metadata['invoiceDate'] ?? null,
             'paymentDate' => $metadata['dueDate'] ?? null,
-            'invoiceAmount' => $subtotal ?: $total,
+            'invoiceAmount' => $netAmount ?: $grossTotal,
             'vatAmount' => $tax,
-            'totalAmount' => $subtotal ?: $total,
+            'totalAmount' => $netAmount ?: $grossTotal,
             'totalInclVat' => $totalInclVat,
         ];
 
