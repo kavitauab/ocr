@@ -6,24 +6,65 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import { getStatusClasses, formatDateTime } from "@/lib/ui-utils";
 import { toast } from "sonner";
-import { useState } from "react";
-import { Mail, FileText, AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Mail, FileText, AlertCircle, ChevronDown, ChevronRight, Search } from "lucide-react";
+
+function getPresetDates(period: "daily" | "weekly" | "monthly") {
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
+  const start = new Date(end);
+  if (period === "weekly") start.setDate(start.getDate() - 6);
+  if (period === "monthly") start.setDate(start.getDate() - 29);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  return { dateFrom: fmt(start), dateTo: fmt(end) };
+}
 
 export default function Emails() {
   const { selectedCompany } = useCompany();
   const [fetching, setFetching] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [period, setPeriod] = useState<"daily" | "weekly" | "monthly" | "custom">("daily");
+  const defaultDaily = getPresetDates("daily");
+  const [customDateFrom, setCustomDateFrom] = useState(defaultDaily.dateFrom);
+  const [customDateTo, setCustomDateTo] = useState(defaultDaily.dateTo);
+  const [search, setSearch] = useState("");
+
+  const queryParams = useMemo(() => {
+    const params: Record<string, string> = {};
+    if (selectedCompany) params.companyId = selectedCompany.id;
+    params.period = period;
+    if (period === "custom") {
+      params.dateFrom = customDateFrom;
+      params.dateTo = customDateTo;
+    }
+    if (search.trim()) {
+      params.search = search.trim();
+    }
+    return params;
+  }, [selectedCompany, period, customDateFrom, customDateTo, search]);
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ["emails", selectedCompany?.id],
-    queryFn: () => {
-      const params: Record<string, string> = {};
-      if (selectedCompany) params.companyId = selectedCompany.id;
-      return api.get("/emails", { params }).then((r) => r.data);
-    },
+    queryKey: ["emails", selectedCompany?.id || "__all__", period, customDateFrom, customDateTo, search],
+    queryFn: () => api.get("/emails", { params: queryParams }).then((r) => r.data),
   });
+
+  const activeRangeLabel = period === "custom"
+    ? `${customDateFrom} to ${customDateTo}`
+    : period === "daily"
+      ? "Today"
+      : period === "weekly"
+        ? "Last 7 days"
+        : "Last 30 days";
+
+  const activatePreset = (next: "daily" | "weekly" | "monthly") => {
+    setPeriod(next);
+    const preset = getPresetDates(next);
+    setCustomDateFrom(preset.dateFrom);
+    setCustomDateTo(preset.dateTo);
+  };
 
   const handleFetch = async () => {
     if (!selectedCompany) return;
@@ -49,6 +90,63 @@ export default function Emails() {
           {fetching ? "Fetching..." : "Fetch Emails"}
         </Button>
       </div>
+
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex items-center rounded-lg border border-border bg-card p-0.5">
+                {(["daily", "weekly", "monthly", "custom"] as const).map((option) => (
+                  <button
+                    key={option}
+                    onClick={() => option === "custom" ? setPeriod("custom") : activatePreset(option)}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                      period === option
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {option === "daily" ? "Daily" : option === "weekly" ? "Weekly" : option === "monthly" ? "Monthly" : "Custom"}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input
+                  type="date"
+                  value={customDateFrom}
+                  onChange={(e) => {
+                    setPeriod("custom");
+                    setCustomDateFrom(e.target.value);
+                  }}
+                  className="h-9 w-full sm:w-[160px]"
+                />
+                <Input
+                  type="date"
+                  value={customDateTo}
+                  onChange={(e) => {
+                    setPeriod("custom");
+                    setCustomDateTo(e.target.value);
+                  }}
+                  className="h-9 w-full sm:w-[160px]"
+                />
+              </div>
+            </div>
+            <div className="relative w-full lg:w-80">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search subject or sender..."
+                className="pl-9"
+              />
+            </div>
+          </div>
+          <div className="mt-3 flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+            <p>Showing emails for {activeRangeLabel}.</p>
+            {!selectedCompany && <p>Select one company to use Fetch Emails.</p>}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="overflow-hidden">
         <CardContent className="p-0">
