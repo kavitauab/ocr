@@ -28,6 +28,7 @@ interface CompanyContextType {
 }
 
 const CompanyContext = createContext<CompanyContextType | null>(null);
+const ALL_COMPANIES_KEY = "__all__";
 
 export function CompanyProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -45,6 +46,10 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       setCompanies(mapped);
 
       const savedId = localStorage.getItem("selectedCompanyId");
+      if (user?.role === "superadmin" && savedId === ALL_COMPANIES_KEY) {
+        setSelectedCompany(null);
+        return;
+      }
       const saved = mapped.find((c: Company) => c.id === savedId);
       setSelectedCompany(saved || mapped[0] || null);
     } catch {
@@ -65,6 +70,11 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const switchCompany = (companyId: string) => {
+    if (isSuperadmin && companyId === ALL_COMPANIES_KEY) {
+      setSelectedCompany(null);
+      localStorage.setItem("selectedCompanyId", ALL_COMPANIES_KEY);
+      return;
+    }
     const company = companies.find((c) => c.id === companyId);
     if (company) {
       setSelectedCompany(company);

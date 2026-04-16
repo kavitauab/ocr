@@ -23,6 +23,8 @@ import {
   Activity,
 } from "lucide-react";
 
+const ALL_COMPANIES_VALUE = "__all__";
+
 export default function Layout() {
   const { user, logout } = useAuth();
   const { companies, selectedCompany, switchCompany, hasCompanyRole, isSuperadmin } = useCompany();
@@ -109,17 +111,18 @@ export default function Layout() {
       {companies.length > 1 && (
         <div className={`border-b border-border/60 ${isCollapsed ? "p-2" : "px-3 py-2.5"}`}>
           {isCollapsed ? (
-            <Tooltip content={selectedCompany?.name || "Select company"} side="right">
+            <Tooltip content={selectedCompany?.name || (isSuperadmin ? "All companies" : "Select company")} side="right">
               <div className="flex h-8 w-8 mx-auto items-center justify-center rounded-md bg-muted text-xs font-semibold text-muted-foreground cursor-default">
-                {(selectedCompany?.name || "?")[0].toUpperCase()}
+                {(selectedCompany?.name || (isSuperadmin ? "All companies" : "?"))[0].toUpperCase()}
               </div>
             </Tooltip>
           ) : (
             <select
-              value={selectedCompany?.id || ""}
+              value={selectedCompany?.id || (isSuperadmin ? ALL_COMPANIES_VALUE : "")}
               onChange={(e) => switchCompany(e.target.value)}
               className="w-full text-sm border border-border rounded-md px-2.5 py-1.5 bg-card text-foreground focus:ring-2 focus:ring-ring/20 focus:border-primary-light transition-colors"
             >
+              {isSuperadmin && <option value={ALL_COMPANIES_VALUE}>All companies</option>}
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
@@ -315,10 +318,11 @@ export default function Layout() {
         {companies.length > 1 && (
           <div className="px-3 py-2.5 border-b border-border/60">
             <select
-              value={selectedCompany?.id || ""}
+              value={selectedCompany?.id || (isSuperadmin ? ALL_COMPANIES_VALUE : "")}
               onChange={(e) => switchCompany(e.target.value)}
               className="w-full text-sm border border-border rounded-md px-2.5 py-1.5 bg-card text-foreground"
             >
+              {isSuperadmin && <option value={ALL_COMPANIES_VALUE}>All companies</option>}
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
