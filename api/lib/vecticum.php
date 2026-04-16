@@ -512,14 +512,11 @@ function uploadToVecticum($company, $metadata) {
             $body['exchangeRate'] = $exchangeRate;
         }
 
-        // Match author by sender email, fall back to inbox defaultAuthor
+        // Match author only by sender email. If no exact person match exists,
+        // leave author unset so Vecticum can apply its own process defaults.
         $author = null;
         if (!empty($metadata['_senderEmail'])) {
             $author = findVecticumAuthor($company, $metadata['_senderEmail'], $token);
-        }
-        if (!$author) {
-            // Fetch defaultAuthor from Vecticum inbox setup
-            $author = getVecticumDefaultAuthor($company, $token);
         }
         if ($author) {
             $body['author'] = $author;
