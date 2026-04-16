@@ -53,7 +53,7 @@ function fetchEmails($company, $sinceHours = 5) {
         '$filter' => "isRead eq false and receivedDateTime ge $since",
         '$orderby' => 'receivedDateTime desc',
         '$top' => '50',
-        '$select' => 'id,subject,from,receivedDateTime,hasAttachments,isRead',
+        '$select' => 'id,subject,from,receivedDateTime,hasAttachments,isRead,body',
     ]);
     $url = "https://graph.microsoft.com/v1.0/users/$email/mailFolders/$folder/messages?$query";
 
@@ -74,6 +74,66 @@ function fetchEmails($company, $sinceHours = 5) {
 
     $data = json_decode($response, true);
     return $data['value'] ?? [];
+}
+
+function normalizeEmailBodyForVecticum($content, $contentType = 'html') {
+    $text = (string)$content;
+    if ($text === '') {
+        return '';
+    }
+
+    if (strtolower((string)$contentType) === 'html') {
+        $text = preg_replace_callback(
+            '/<a\b[^>]*href=["\']?([^"\'>\s]+)[^>]*>(.*?)<\/a>/is',
+            function ($matches) {
+                $label = trim(html_entity_decode(strip_tags($matches[2] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                $href = trim(html_entity_decode($matches[1] ?? '', ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                if ($label === '') return $href;
+                if ($href === '' || strcasecmp($label, $href) === 0) return $label;
+                return $label . '<' . $href . '>';
+            },
+            $text
+        );
+        $text = preg_replace('/<(br|\\/p|\\/div|\\/li|\\/tr|\\/table|\\/h[1-6])\\b[^>]*>/i', "\n", $text);
+        $text = preg_replace('/<(p|div|li|tr|table|h[1-6])\\b[^>]*>/i', "\n", $text);
+        $text = strip_tags($text);
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    }
+
+    $text = str_replace(["\r\n", "\r"], "\n", $text);
+    $text = preg_replace("/\t+/", ' ', $text);
+    $text = preg_replace("/[ \xC2\xA0]+/u", ' ', $text);
+    $text = preg_replace("/\n{3,}/", "\n\n", $text);
+    return trim($text);
+}
+
+function fetchMessageBodyText($company, $messageId) {
+    $token = getM365Token($company);
+    $email = $company['ms_sender_email'];
+    $messageId = trim((string)$messageId);
+    if ($messageId === '') return '';
+
+    $query = http_build_query([
+        '$select' => 'body',
+    ]);
+    $ch = curl_init("https://graph.microsoft.com/v1.0/users/{$email}/messages/{$messageId}?{$query}");
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ["Authorization: Bearer $token"],
+        CURLOPT_TIMEOUT => 30,
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200 || !$response) return '';
+
+    $data = json_decode($response, true);
+    $body = $data['body'] ?? null;
+    if (!is_array($body)) return '';
+
+    return normalizeEmailBodyForVecticum($body['content'] ?? '', $body['contentType'] ?? 'html');
 }
 
 function fetchAttachments($company, $messageId) {

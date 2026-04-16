@@ -895,11 +895,17 @@ class Invoice extends BaseResource {
 
         // Get sender email if invoice came from email
         $senderEmail = null;
+        $emailBodyText = '';
         if (!empty($invoice['email_inbox_id'])) {
-            $stmt = $this->db->prepare("SELECT from_email FROM email_inbox WHERE id = :id");
+            $stmt = $this->db->prepare("SELECT from_email, message_id FROM email_inbox WHERE id = :id");
             $stmt->execute(['id' => $invoice['email_inbox_id']]);
             $emailRow = $stmt->fetch();
-            if ($emailRow) $senderEmail = $emailRow['from_email'];
+            if ($emailRow) {
+                $senderEmail = $emailRow['from_email'];
+                if (!empty($emailRow['message_id'])) {
+                    $emailBodyText = fetchMessageBodyText($company, $emailRow['message_id']);
+                }
+            }
         }
 
         $result = uploadToVecticum($company, [
@@ -916,6 +922,7 @@ class Invoice extends BaseResource {
             '_filePath' => $filePath,
             '_fileName' => $invoice['original_filename'],
             '_senderEmail' => $senderEmail,
+            '_emailBody' => $emailBodyText,
         ]);
 
         if ($result['success']) {

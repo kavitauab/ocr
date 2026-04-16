@@ -41,6 +41,7 @@ function processCompanyEmails($companyId) {
             $emailId = generateId();
             $fromEmail = $message['from']['emailAddress']['address'] ?? null;
             $fromName = $message['from']['emailAddress']['name'] ?? null;
+            $emailBodyText = normalizeEmailBodyForVecticum($message['body']['content'] ?? '', $message['body']['contentType'] ?? 'html');
 
             $stmt = $db->prepare("INSERT INTO email_inbox (id, company_id, message_id, subject, from_email, from_name, received_date, has_attachments, status) VALUES (:id, :companyId, :messageId, :subject, :fromEmail, :fromName, :receivedDate, :hasAttachments, 'processing')");
             $stmt->execute([
@@ -248,6 +249,7 @@ function processCompanyEmails($companyId) {
                                     '_filePath' => $fp,
                                     '_fileName' => $updatedInv['original_filename'],
                                     '_senderEmail' => $fromEmail,
+                                    '_emailBody' => $emailBodyText,
                                 ]);
                                 if ($vecResult['success'] && !empty($vecResult['externalId'])) {
                                     $db->prepare("UPDATE invoices SET vecticum_id = :vid, vecticum_sent_at = NOW(), vecticum_error = NULL, updated_at = NOW() WHERE id = :id")

@@ -490,6 +490,9 @@ function uploadToVecticum($company, $metadata) {
         if (!empty($metadata['_senderEmail'])) {
             $body['from'] = $metadata['_senderEmail'];
         }
+        if (!empty($metadata['_emailBody'])) {
+            $body['body'] = trim((string)$metadata['_emailBody']);
+        }
 
         if (!empty($metadata['vendorVatId'])) {
             $body['counterpartyCode'] = $metadata['vendorVatId'];

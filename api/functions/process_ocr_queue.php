@@ -15,6 +15,7 @@ require_once __DIR__ . '/../lib/claude.php';
 require_once __DIR__ . '/../lib/usage.php';
 require_once __DIR__ . '/../lib/rate_limit.php';
 require_once __DIR__ . '/../lib/issue_reply.php';
+require_once __DIR__ . '/../lib/microsoft_graph.php';
 
 $db = getDBConnection();
 
@@ -285,11 +286,17 @@ foreach ($jobs as $job) {
                     $uploadDir = rtrim(UPLOAD_DIR, '/');
                     $filePath = $uploadDir . '/' . $updatedInvoice['stored_filename'];
                     $senderEmail = null;
+                    $emailBodyText = '';
                     if (!empty($updatedInvoice['email_inbox_id'])) {
-                        $emailStmt = $db->prepare("SELECT from_email FROM email_inbox WHERE id = :id");
+                        $emailStmt = $db->prepare("SELECT from_email, message_id FROM email_inbox WHERE id = :id");
                         $emailStmt->execute(['id' => $updatedInvoice['email_inbox_id']]);
                         $emailRow = $emailStmt->fetch();
-                        if ($emailRow) $senderEmail = $emailRow['from_email'];
+                        if ($emailRow) {
+                            $senderEmail = $emailRow['from_email'];
+                            if (!empty($emailRow['message_id'])) {
+                                $emailBodyText = fetchMessageBodyText($companyData, $emailRow['message_id']);
+                            }
+                        }
                     }
 
                     $vecResult = uploadToVecticum($companyData, [
@@ -306,6 +313,7 @@ foreach ($jobs as $job) {
                         '_filePath' => $filePath,
                         '_fileName' => $updatedInvoice['original_filename'],
                         '_senderEmail' => $senderEmail,
+                        '_emailBody' => $emailBodyText,
                     ]);
 
                     if ($vecResult['success'] && !empty($vecResult['externalId'])) {
