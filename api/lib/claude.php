@@ -618,7 +618,7 @@ function classifyDocument($filePath, $fileType) {
     $requestBody = [
         'model' => $model,
         'max_tokens' => 256,
-        'system' => [['type' => 'text', 'text' => 'You are a document classifier. Identify the type of business document shown. Be precise: only use proforma for explicit proforma/advance/prepayment/deposit invoices. A paid invoice or payment receipt that represents the actual invoice should be classified as invoice, not proforma.', 'cache_control' => ['type' => 'ephemeral']]],
+        'system' => [['type' => 'text', 'text' => 'You are a document classifier. Identify the type of business document shown. Be precise: only use proforma for explicit proforma/advance/prepayment/deposit invoices. A paid invoice or payment receipt that represents the actual invoice should be classified as invoice, not proforma. Statements, extracts, consumption breakdowns, spending breakdowns, reports, account statements, utility usage summaries, and documents labeled "išklotinė", "extract", or "statement" are not invoices unless they also clearly contain actual invoice issuance details such as a supplier invoice number and seller identity.', 'cache_control' => ['type' => 'ephemeral']]],
         'tools' => [$tool],
         'tool_choice' => ['type' => 'tool', 'name' => 'classify_document'],
         'messages' => [['role' => 'user', 'content' => $contentBlocks]],

@@ -123,6 +123,7 @@ foreach ($jobs as $job) {
                     ->execute(['dt' => $classification['category'], 'sr' => $classification['detail'], 'id' => $invoiceId]);
                 $db->prepare("UPDATE ocr_jobs SET status = 'completed', returned_at = NOW() WHERE id = :id")
                     ->execute(['id' => $jobId]);
+                sendIssueReplyForInvoice($db, $invoiceId, 'invalid_document', 'The attached document could not be processed because it was classified as a non-invoice document: ' . ($classification['detail'] ?: $classification['category']) . '. Please resend the actual invoice document.');
                 if (isset($classification['usage'])) {
                     trackApiCall($companyId, $classification['usage']);
                 }
@@ -338,7 +339,8 @@ foreach ($jobs as $job) {
                         $vecErr = $vecResult['error'] ?? 'unknown';
                         $db->prepare("UPDATE invoices SET vecticum_error = :err, updated_at = NOW() WHERE id = :id")
                             ->execute(['err' => $vecErr, 'id' => $invoiceId]);
-                        $jobResult['issueReply'] = sendIssueReplyForInvoice($db, $invoiceId, 'vecticum_failed');
+                        $replyReason = ($vecResult['reason'] ?? '') === 'invalid_document' ? 'invalid_document' : 'vecticum_failed';
+                        $jobResult['issueReply'] = sendIssueReplyForInvoice($db, $invoiceId, $replyReason);
                         $jobResult['vecticumAutoSend'] = 'failed: ' . $vecErr;
                     }
                 } elseif (!$buyerOk) {

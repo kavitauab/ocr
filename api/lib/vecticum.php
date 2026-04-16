@@ -1,5 +1,48 @@
 <?php
 
+function isMissingInvoiceIdentityValue($value) {
+    $normalized = strtolower(trim((string)$value));
+    if ($normalized === '') return true;
+    return in_array($normalized, ['<unknown>', 'unknown', 'n/a', 'na', '-', '—', 'null'], true);
+}
+
+function validateInvoiceForVecticum($metadata) {
+    $documentType = normalizeDocumentType($metadata['documentType'] ?? null, $metadata) ?? '';
+    if ($documentType === '' || !in_array($documentType, ['invoice', 'proforma', 'credit_note'], true)) {
+        return [
+            'reason' => 'invalid_document',
+            'message' => 'This document does not appear to be a valid invoice for accounting import.',
+        ];
+    }
+
+    $missingFields = [];
+    if (isMissingInvoiceIdentityValue($metadata['invoiceNumber'] ?? null)) {
+        $missingFields[] = 'invoice number';
+    }
+    if (isMissingInvoiceIdentityValue($metadata['vendorName'] ?? null)) {
+        $missingFields[] = 'vendor name';
+    }
+
+    $totalAmount = isset($metadata['totalAmount']) && is_numeric($metadata['totalAmount']) ? (float)$metadata['totalAmount'] : 0.0;
+    if ($totalAmount <= 0) {
+        $missingFields[] = 'total amount';
+    }
+
+    $currency = strtoupper(trim((string)($metadata['currency'] ?? '')));
+    if ($currency === '' || strlen($currency) !== 3) {
+        $missingFields[] = 'currency';
+    }
+
+    if (!empty($missingFields)) {
+        return [
+            'reason' => 'invalid_document',
+            'message' => 'This document cannot be imported to accounting because it is missing required invoice information: ' . implode(', ', $missingFields) . '.',
+        ];
+    }
+
+    return null;
+}
+
 function getVecticumToken($company) {
     if (!empty($company['vecticum_access_token']) && !empty($company['vecticum_token_expires'])) {
         $expires = strtotime($company['vecticum_token_expires']);
@@ -464,6 +507,11 @@ function getEcbExchangeRate($currencyCode, $invoiceDate) {
 function uploadToVecticum($company, $metadata) {
     if (empty($company['vecticum_company_id'])) {
         return ['success' => false, 'error' => 'Vecticum endpoint ID not configured'];
+    }
+
+    $validationError = validateInvoiceForVecticum($metadata);
+    if ($validationError) {
+        return ['success' => false, 'error' => $validationError['message'], 'reason' => $validationError['reason']];
     }
 
     try {

@@ -268,7 +268,7 @@ function processCompanyEmails($companyId) {
                                 } else {
                                     $db->prepare("UPDATE invoices SET vecticum_error = :err, updated_at = NOW() WHERE id = :id")
                                         ->execute(['err' => $vecResult['error'] ?? 'Unknown error', 'id' => $invoiceId]);
-                                    sendIssueReplyForInvoice($db, $invoiceId, 'vecticum_failed');
+                                    sendIssueReplyForInvoice($db, $invoiceId, ($vecResult['reason'] ?? '') === 'invalid_document' ? 'invalid_document' : 'vecticum_failed');
                                 }
                             } elseif (!$buyerOk) {
                                 sendIssueReplyForInvoice($db, $invoiceId, 'buyer_mismatch');
@@ -312,6 +312,8 @@ function processCompanyEmails($companyId) {
                         ->execute(['af' => json_encode($additionalFiles), 'id' => $primaryInvoiceId]);
                 } else {
                     // No invoices in this email — create skipped records
+                    $firstSkippedId = null;
+                    $firstSkippedReason = null;
                     foreach ($otherDocs as $item) {
                         $skipId = generateId();
                         $db->prepare("INSERT INTO invoices (id, company_id, email_inbox_id, source, original_filename, stored_filename, file_type, file_size, status, document_type, skip_reason) VALUES (:id, :companyId, :emailId, 'email', :fn, :sf, :ft, :fs, 'skipped', :dt, :sr)")
@@ -324,6 +326,13 @@ function processCompanyEmails($companyId) {
                                 'dt' => $item['classification']['category'],
                                 'sr' => $item['classification']['detail'],
                             ]);
+                        if ($firstSkippedId === null) {
+                            $firstSkippedId = $skipId;
+                            $firstSkippedReason = $item['classification']['detail'] ?: $item['classification']['category'];
+                        }
+                    }
+                    if ($firstSkippedId !== null) {
+                        sendIssueReplyForInvoice($db, $firstSkippedId, 'invalid_document', 'The attached document could not be processed because it was classified as a non-invoice document: ' . $firstSkippedReason . '. Please resend the actual invoice document.');
                     }
                 }
             }

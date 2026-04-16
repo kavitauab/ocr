@@ -956,6 +956,9 @@ class Invoice extends BaseResource {
         $vecError = $result['error'] ?? 'Failed to upload to Vecticum';
         $this->db->prepare("UPDATE invoices SET vecticum_error = :err, updated_at = NOW() WHERE id = :id")
             ->execute(['err' => $vecError, 'id' => $id]);
+        if (($result['reason'] ?? '') === 'invalid_document') {
+            sendJSON(['error' => $vecError, 'invalidDocument' => true], 400);
+        }
         sendJSON(['error' => $vecError], 500);
     }
 

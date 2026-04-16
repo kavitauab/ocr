@@ -76,6 +76,15 @@ function buildIssueReplyDraft($invoice, $customMessage = null, $reason = '') {
                 . ($buyerName !== '' ? " ({$buyerName}" . ($buyerVat !== '' ? ", {$buyerVat}" : '') . ")" : '')
                 . ($companyName !== '' ? " instead of {$companyName}" : '')
                 . ". Please resend it to the correct company mailbox or send the corrected invoice.";
+        } elseif ($reason === 'invalid_document') {
+            $skipReason = trim((string)($invoice['skip_reason'] ?? ''));
+            $processingError = trim((string)($invoice['processing_error'] ?? ''));
+            $detail = $processingError !== '' ? $processingError : $skipReason;
+            $issueText = 'The attached document could not be accepted because it does not appear to be a valid supplier invoice for accounting import.';
+            if ($detail !== '') {
+                $issueText .= ' Details: ' . $detail;
+            }
+            $issueText .= ' Please resend the actual invoice document.';
         } else {
             $vecticumError = trim((string)($invoice['vecticum_error'] ?? ''));
             $processingError = trim((string)($invoice['processing_error'] ?? ''));
@@ -133,6 +142,9 @@ function shouldAutoReplyForReason($reason) {
     }
     if ($reason === 'vecticum_failed') {
         return getSetting('auto_issue_reply_on_vecticum_failure', '1') === '1';
+    }
+    if ($reason === 'invalid_document') {
+        return true;
     }
     return false;
 }
