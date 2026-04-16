@@ -223,7 +223,7 @@ function sendMail($company, $toEmail, $subject, $body, $contentType = 'Text', $f
     return ['success' => true];
 }
 
-function replyToMessage($company, $messageId, $body, $forceRefresh = false) {
+function replyToMessage($company, $messageId, $body, $contentType = 'Text', $forceRefresh = false) {
     $token = getM365Token($company, $forceRefresh);
     $fromEmail = trim((string)($company['ms_sender_email'] ?? ''));
     $messageId = trim((string)$messageId);
@@ -235,27 +235,106 @@ function replyToMessage($company, $messageId, $body, $forceRefresh = false) {
         throw new Exception('Message ID is required to send a threaded reply');
     }
 
-    $payload = ['comment' => $body];
+    if (strcasecmp((string)$contentType, 'HTML') === 0) {
+        $createCh = curl_init("https://graph.microsoft.com/v1.0/users/{$fromEmail}/messages/{$messageId}/createReply");
+        curl_setopt_array($createCh, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => '{}',
+            CURLOPT_HTTPHEADER => [
+                "Authorization: Bearer $token",
+                'Content-Type: application/json',
+            ],
+            CURLOPT_TIMEOUT => 30,
+        ]);
+        $createResponse = curl_exec($createCh);
+        $createHttpCode = curl_getinfo($createCh, CURLINFO_HTTP_CODE);
+        curl_close($createCh);
 
-    $ch = curl_init("https://graph.microsoft.com/v1.0/users/{$fromEmail}/messages/{$messageId}/reply");
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => json_encode($payload),
-        CURLOPT_HTTPHEADER => [
-            "Authorization: Bearer $token",
-            'Content-Type: application/json',
-        ],
-        CURLOPT_TIMEOUT => 30,
-    ]);
+        if (!in_array($createHttpCode, [200, 201], true)) {
+            $data = json_decode($createResponse, true);
+            throw new Exception('Failed to create threaded reply draft: ' . ($data['error']['message'] ?? "HTTP $createHttpCode"));
+        }
 
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
+        $draft = json_decode($createResponse, true);
+        $draftId = trim((string)($draft['id'] ?? ''));
+        if ($draftId === '') {
+            throw new Exception('Failed to create threaded reply draft: missing draft id');
+        }
 
-    if ($httpCode !== 202) {
-        $data = json_decode($response, true);
-        throw new Exception('Failed to send threaded reply: ' . ($data['error']['message'] ?? "HTTP $httpCode"));
+        $existingBody = trim((string)($draft['body']['content'] ?? ''));
+        $combinedBody = trim((string)$body);
+        if ($existingBody !== '') {
+            $combinedBody .= ($combinedBody !== '' ? '<br><br>' : '') . $existingBody;
+        }
+
+        $patchCh = curl_init("https://graph.microsoft.com/v1.0/users/{$fromEmail}/messages/{$draftId}");
+        curl_setopt_array($patchCh, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => 'PATCH',
+            CURLOPT_POSTFIELDS => json_encode([
+                'body' => [
+                    'contentType' => 'HTML',
+                    'content' => $combinedBody,
+                ],
+            ]),
+            CURLOPT_HTTPHEADER => [
+                "Authorization: Bearer $token",
+                'Content-Type: application/json',
+            ],
+            CURLOPT_TIMEOUT => 30,
+        ]);
+        $patchResponse = curl_exec($patchCh);
+        $patchHttpCode = curl_getinfo($patchCh, CURLINFO_HTTP_CODE);
+        curl_close($patchCh);
+
+        if ($patchHttpCode !== 200) {
+            $data = json_decode($patchResponse, true);
+            throw new Exception('Failed to format threaded reply draft: ' . ($data['error']['message'] ?? "HTTP $patchHttpCode"));
+        }
+
+        $sendCh = curl_init("https://graph.microsoft.com/v1.0/users/{$fromEmail}/messages/{$draftId}/send");
+        curl_setopt_array($sendCh, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => '{}',
+            CURLOPT_HTTPHEADER => [
+                "Authorization: Bearer $token",
+                'Content-Type: application/json',
+            ],
+            CURLOPT_TIMEOUT => 30,
+        ]);
+        $sendResponse = curl_exec($sendCh);
+        $sendHttpCode = curl_getinfo($sendCh, CURLINFO_HTTP_CODE);
+        curl_close($sendCh);
+
+        if ($sendHttpCode !== 202) {
+            $data = json_decode($sendResponse, true);
+            throw new Exception('Failed to send threaded reply draft: ' . ($data['error']['message'] ?? "HTTP $sendHttpCode"));
+        }
+    } else {
+        $payload = ['comment' => $body];
+
+        $ch = curl_init("https://graph.microsoft.com/v1.0/users/{$fromEmail}/messages/{$messageId}/reply");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_HTTPHEADER => [
+                "Authorization: Bearer $token",
+                'Content-Type: application/json',
+            ],
+            CURLOPT_TIMEOUT => 30,
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 202) {
+            $data = json_decode($response, true);
+            throw new Exception('Failed to send threaded reply: ' . ($data['error']['message'] ?? "HTTP $httpCode"));
+        }
     }
 
     return ['success' => true];

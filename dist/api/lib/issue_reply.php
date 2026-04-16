@@ -2,6 +2,52 @@
 
 require_once __DIR__ . '/microsoft_graph.php';
 
+function normalizeIssueReplyTemplate($template) {
+    $template = str_replace(["\r\n", "\r"], "\n", (string)$template);
+    $template = trim($template);
+
+    if ($template !== '' && strpos($template, "\n") === false) {
+        $template = preg_replace('/,\s*We could not complete processing/i', ",\n\nWe could not complete processing", $template);
+        $template = preg_replace('/\.\s*\{issue\}/', ".\n\nIssue:\n{issue}", $template);
+        $template = preg_replace('/\{issue\}\s*Please review the document/i', "{issue}\n\nPlease review the document", $template);
+        $template = preg_replace('/\.\s*Please review the document/i', ".\n\nPlease review the document", $template);
+        $template = preg_replace('/\.\s*Regards,\s*/i', ".\n\nRegards,\n", $template);
+    }
+
+    $template = preg_replace("/\n{3,}/", "\n\n", $template);
+    return trim($template);
+}
+
+function renderIssueReplyHtml($text) {
+    $text = trim(str_replace(["\r\n", "\r"], "\n", (string)$text));
+    if ($text === '') return '';
+
+    $paragraphs = preg_split("/\n\s*\n/", $text) ?: [];
+    $htmlParts = [];
+
+    foreach ($paragraphs as $paragraph) {
+        $paragraph = trim($paragraph);
+        if ($paragraph === '') continue;
+
+        $lines = array_values(array_filter(array_map('trim', explode("\n", $paragraph)), fn($line) => $line !== ''));
+        if (!$lines) continue;
+
+        $isBulletList = count($lines) > 1 && count(array_filter($lines, fn($line) => preg_match('/^[-*]\s+/', $line))) === count($lines);
+        if ($isBulletList) {
+            $items = array_map(fn($line) => '<li>' . htmlspecialchars(trim(preg_replace('/^[-*]\s+/', '', $line)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</li>', $lines);
+            $htmlParts[] = '<ul style="margin:0 0 16px 20px;padding:0;">' . implode('', $items) . '</ul>';
+            continue;
+        }
+
+        $escapedLines = array_map(fn($line) => htmlspecialchars($line, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), $lines);
+        $htmlParts[] = '<p style="margin:0 0 16px 0;">' . implode('<br>', $escapedLines) . '</p>';
+    }
+
+    return '<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.55;color:#111827;">'
+        . implode('', $htmlParts)
+        . '</div>';
+}
+
 function getInvoiceIssueReplyContext($db, $invoiceId) {
     $stmt = $db->prepare("SELECT
         i.*,
@@ -51,10 +97,10 @@ function buildIssueReplyDraft($invoice, $customMessage = null, $reason = '') {
     $reference = trim((string)($invoice['invoice_number'] ?? '')) ?: trim((string)($invoice['original_filename'] ?? '')) ?: trim((string)($invoice['id'] ?? ''));
     $subjectBase = trim((string)($invoice['email_subject'] ?? '')) ?: ('Invoice ' . $reference);
     $defaultSubject = trim((string)getSetting('issue_reply_subject', 'Re: {emailSubject}'));
-    $defaultBody = (string)getSetting(
+    $defaultBody = normalizeIssueReplyTemplate((string)getSetting(
         'issue_reply_body',
-        "Hello {senderName},\n\nWe could not complete processing for \"{reference}\".\n\n{issue}\n\nPlease review the document and resend a corrected version if needed.\n\nRegards,\n{companyName}"
-    );
+        "Hello {senderName},\n\nWe could not complete processing for \"{reference}\".\n\nIssue:\n{issue}\n\nPlease review the document and resend a corrected version if needed.\n\nRegards,\n{companyName}"
+    ));
 
     $replacements = [
         '{senderName}' => trim((string)($invoice['sender_name'] ?? '')) ?: 'there',
@@ -70,11 +116,14 @@ function buildIssueReplyDraft($invoice, $customMessage = null, $reason = '') {
         '{processingError}' => trim((string)($invoice['processing_error'] ?? '')),
     ];
 
+    $bodyText = strtr($defaultBody, $replacements);
+
     return [
         'toEmail' => trim((string)($invoice['sender_email'] ?? '')),
         'messageId' => trim((string)($invoice['email_message_id'] ?? '')),
         'subject' => strtr($defaultSubject, $replacements),
-        'body' => strtr($defaultBody, $replacements),
+        'body' => $bodyText,
+        'bodyHtml' => renderIssueReplyHtml($bodyText),
     ];
 }
 
@@ -117,9 +166,9 @@ function sendIssueReplyForInvoice($db, $invoiceId, $reason, $customMessage = nul
 
     try {
         if ($draft['messageId'] !== '') {
-            replyToMessage($company, $draft['messageId'], $draft['body']);
+            replyToMessage($company, $draft['messageId'], $draft['bodyHtml'] ?: $draft['body'], $draft['bodyHtml'] ? 'HTML' : 'Text');
         } else {
-            sendMail($company, $draft['toEmail'], $draft['subject'], $draft['body']);
+            sendMail($company, $draft['toEmail'], $draft['subject'], $draft['bodyHtml'] ?: $draft['body'], $draft['bodyHtml'] ? 'HTML' : 'Text');
         }
 
         $db->prepare("UPDATE invoices SET issue_reply_sent_at = NOW(), issue_reply_reason = :reason, issue_reply_error = NULL, updated_at = NOW() WHERE id = :id")

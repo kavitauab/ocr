@@ -19,7 +19,7 @@ export default function SystemSettings() {
     extraction_confidence_threshold: "0.9",
     critical_fields: "invoiceNumber,vendorName,totalAmount,currency",
     issue_reply_subject: "Re: {emailSubject}",
-    issue_reply_body: "Hello {senderName},\n\nWe could not complete processing for \"{reference}\".\n\n{issue}\n\nPlease review the document and resend a corrected version if needed.\n\nRegards,\n{companyName}",
+    issue_reply_body: "Hello {senderName},\n\nWe could not complete processing for \"{reference}\".\n\nIssue:\n{issue}\n\nPlease review the document and resend a corrected version if needed.\n\nRegards,\n{companyName}",
     auto_issue_reply_on_vecticum_failure: "1",
     auto_issue_reply_on_buyer_mismatch: "1",
   });
@@ -154,6 +154,9 @@ export default function SystemSettings() {
             />
             <p className="text-xs text-muted-foreground">
               Available placeholders: {"{senderName}"}, {"{senderEmail}"}, {"{reference}"}, {"{invoiceNumber}"}, {"{fileName}"}, {"{emailSubject}"}, {"{companyName}"}, {"{issue}"}, {"{vecticumError}"}, {"{processingError}"}.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Use blank lines to create paragraphs. Replies are now sent as formatted HTML email so Outlook keeps the spacing.
             </p>
           </div>
         </CardContent>
