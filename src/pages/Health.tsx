@@ -1,11 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import api from "@/api/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import { formatDateTime } from "@/lib/ui-utils";
 import {
-  Activity, CheckCircle, AlertTriangle, Clock, Zap, RotateCcw, TrendingUp, Shield,
+  Activity, CheckCircle, AlertTriangle, Clock, Zap, RotateCcw, TrendingUp,
   DollarSign, Cpu, Gauge, Bot,
 } from "lucide-react";
 
@@ -30,6 +32,16 @@ function fmtPct(v: number | null): string {
   return `${(v * 100).toFixed(1)}%`;
 }
 
+function getPresetDates(period: "daily" | "weekly" | "monthly") {
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
+  const start = new Date(end);
+  if (period === "weekly") start.setDate(start.getDate() - 6);
+  if (period === "monthly") start.setDate(start.getDate() - 29);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  return { dateFrom: fmt(start), dateTo: fmt(end) };
+}
+
 function ConfidenceBar({ value, label }: { value: number | null; label: string }) {
   if (value === null) return null;
   const pct = Math.round(value * 100);
@@ -46,9 +58,20 @@ function ConfidenceBar({ value, label }: { value: number | null; label: string }
 }
 
 export default function Health() {
+  const [period, setPeriod] = useState<"daily" | "weekly" | "monthly" | "custom">("monthly");
+  const defaultMonthly = getPresetDates("monthly");
+  const [customDateFrom, setCustomDateFrom] = useState(defaultMonthly.dateFrom);
+  const [customDateTo, setCustomDateTo] = useState(defaultMonthly.dateTo);
+  const queryParams = useMemo(() => {
+    if (period === "custom") {
+      return { period, dateFrom: customDateFrom, dateTo: customDateTo };
+    }
+    return { period };
+  }, [period, customDateFrom, customDateTo]);
+
   const { data, isLoading } = useQuery({
-    queryKey: ["health"],
-    queryFn: () => api.get("/invoices/health").then((r) => r.data),
+    queryKey: ["health", queryParams],
+    queryFn: () => api.get("/invoices/health", { params: queryParams }).then((r) => r.data),
     refetchInterval: 15000,
   });
 
@@ -58,8 +81,22 @@ export default function Health() {
   const models: any[] = data?.models || [];
   const daily: any[] = data?.daily || [];
   const topErrors: any[] = data?.topErrors || [];
-  const rateLimits: any[] = data?.rateLimits || [];
+  const filters = data?.filters;
   const maxDaily = Math.max(1, ...daily.map((d: any) => d.completed + d.failed));
+  const activeRangeLabel = filters?.period === "custom"
+    ? `${filters?.dateFrom} to ${filters?.dateTo}`
+    : filters?.period === "daily"
+      ? "Today"
+      : filters?.period === "weekly"
+        ? "Last 7 days"
+        : "Last 30 days";
+
+  const activatePreset = (next: "daily" | "weekly" | "monthly") => {
+    setPeriod(next);
+    const preset = getPresetDates(next);
+    setCustomDateFrom(preset.dateFrom);
+    setCustomDateTo(preset.dateTo);
+  };
 
   return (
     <div className="space-y-4">
@@ -68,6 +105,49 @@ export default function Health() {
         <h1 className="text-2xl font-bold tracking-tight">System Health</h1>
         <span className="text-xs text-muted-foreground ml-auto">Auto-refreshes every 15s</span>
       </div>
+
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              {(["daily", "weekly", "monthly", "custom"] as const).map((option) => (
+                <button
+                  key={option}
+                  onClick={() => option === "custom" ? setPeriod("custom") : activatePreset(option)}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    period === option
+                      ? "bg-primary text-primary-foreground"
+                      : "border border-border bg-card text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {option === "daily" ? "Daily" : option === "weekly" ? "Weekly" : option === "monthly" ? "Monthly" : "Custom"}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Input
+                type="date"
+                value={customDateFrom}
+                onChange={(e) => {
+                  setPeriod("custom");
+                  setCustomDateFrom(e.target.value);
+                }}
+                className="h-9 w-full sm:w-[160px]"
+              />
+              <Input
+                type="date"
+                value={customDateTo}
+                onChange={(e) => {
+                  setPeriod("custom");
+                  setCustomDateTo(e.target.value);
+                }}
+                className="h-9 w-full sm:w-[160px]"
+              />
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">Showing metrics for {activeRangeLabel}.</p>
+        </CardContent>
+      </Card>
 
       {/* Overview cards */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
@@ -167,78 +247,46 @@ export default function Health() {
         </Card>
       </div>
 
-      {/* Queue + Rate Limits row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <RotateCcw className="h-4 w-4 text-muted-foreground" />
-              Queue Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? <Skeleton className="h-20 w-full" /> : (
-              <div className="space-y-3">
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { label: "Queued", value: overview?.queuedJobs ?? 0, color: "text-blue-600" },
-                    { label: "Processing", value: overview?.processingJobs ?? 0, color: "text-amber-600" },
-                    { label: "Retrying", value: overview?.retryingJobs ?? 0, color: "text-orange-600" },
-                  ].map((item) => (
-                    <div key={item.label} className="rounded-lg border p-3 text-center">
-                      <p className="text-xs text-muted-foreground">{item.label}</p>
-                      <p className={`text-xl font-bold tabular-nums ${item.color}`}>{item.value}</p>
-                    </div>
-                  ))}
-                </div>
-                {queue?.oldestQueuedAt && <p className="text-xs text-muted-foreground">Oldest queued: {formatDateTime(queue.oldestQueuedAt)}</p>}
-                <div className="flex gap-3 text-xs text-muted-foreground">
-                  <span>Completed: <strong className="text-foreground">{overview?.completedJobs ?? 0}</strong></span>
-                  <span>Failed: <strong className="text-foreground">{overview?.failedJobs ?? 0}</strong></span>
-                  <span>Total: <strong className="text-foreground">{overview?.totalJobs ?? 0}</strong></span>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Shield className="h-4 w-4 text-muted-foreground" />
-              Rate Limits
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? <Skeleton className="h-20 w-full" /> : rateLimits.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">No rate limits configured</p>
-            ) : (
-              <div className="space-y-2">
-                {rateLimits.map((rl: any) => (
-                  <div key={rl.companyId} className="rounded-lg border p-3">
-                    <p className="text-sm font-medium">{rl.companyName}</p>
-                    <div className="flex gap-4 mt-1">
-                      {rl.hourlyLimit !== null && (
-                        <span className="text-xs"><span className="text-muted-foreground">Hourly: </span><span className={rl.hourlyUsed >= rl.hourlyLimit ? "text-red-600 font-medium" : ""}>{rl.hourlyUsed}/{rl.hourlyLimit}</span></span>
-                      )}
-                      {rl.dailyLimit !== null && (
-                        <span className="text-xs"><span className="text-muted-foreground">Daily: </span><span className={rl.dailyUsed >= rl.dailyLimit ? "text-red-600 font-medium" : ""}>{rl.dailyUsed}/{rl.dailyLimit}</span></span>
-                      )}
-                    </div>
+      {/* Queue row */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <RotateCcw className="h-4 w-4 text-muted-foreground" />
+            Queue Status
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? <Skeleton className="h-20 w-full" /> : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: "Queued", value: overview?.queuedJobs ?? 0, color: "text-blue-600" },
+                  { label: "Processing", value: overview?.processingJobs ?? 0, color: "text-amber-600" },
+                  { label: "Retrying", value: overview?.retryingJobs ?? 0, color: "text-orange-600" },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-lg border p-3 text-center">
+                    <p className="text-xs text-muted-foreground">{item.label}</p>
+                    <p className={`text-xl font-bold tabular-nums ${item.color}`}>{item.value}</p>
                   </div>
                 ))}
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              {queue?.oldestQueuedAt && <p className="text-xs text-muted-foreground">Oldest queued: {formatDateTime(queue.oldestQueuedAt)}</p>}
+              <div className="flex gap-3 text-xs text-muted-foreground">
+                <span>Completed: <strong className="text-foreground">{overview?.completedJobs ?? 0}</strong></span>
+                <span>Failed: <strong className="text-foreground">{overview?.failedJobs ?? 0}</strong></span>
+                <span>Total: <strong className="text-foreground">{overview?.totalJobs ?? 0}</strong></span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Daily Trend */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            Daily Trend (Last 30 Days)
+            {filters?.trendLabel || "Trend"}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -273,10 +321,10 @@ export default function Health() {
         </CardContent>
       </Card>
 
-      {/* Daily table */}
+      {/* Breakdown table */}
       {daily.length > 0 && (
         <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Daily Breakdown</CardTitle></CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base">{filters?.tableLabel || "Breakdown"}</CardTitle></CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
@@ -309,7 +357,7 @@ export default function Health() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-red-500" />Top Errors (Last 30 Days)
+              <AlertTriangle className="h-4 w-4 text-red-500" />Top Errors
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">

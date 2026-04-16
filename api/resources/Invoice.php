@@ -73,6 +73,52 @@ class Invoice extends BaseResource {
         return $value;
     }
 
+    private function getMetricsScope($defaultPeriod = 'monthly') {
+        $period = strtolower(trim((string)($_GET['period'] ?? $defaultPeriod)));
+        if (!in_array($period, ['daily', 'weekly', 'monthly', 'custom'], true)) {
+            $period = $defaultPeriod;
+        }
+
+        $dateFrom = trim((string)($_GET['dateFrom'] ?? ''));
+        $dateTo = trim((string)($_GET['dateTo'] ?? ''));
+        $hasCustomDates = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo);
+
+        if ($hasCustomDates) {
+            $period = 'custom';
+            $startDate = $dateFrom;
+            $endDate = $dateTo;
+        } else {
+            $today = new \DateTimeImmutable('today');
+            if ($period === 'daily') {
+                $startDate = $today->format('Y-m-d');
+                $endDate = $today->format('Y-m-d');
+            } elseif ($period === 'weekly') {
+                $startDate = $today->modify('-6 days')->format('Y-m-d');
+                $endDate = $today->format('Y-m-d');
+            } else {
+                $period = 'monthly';
+                $startDate = $today->modify('-29 days')->format('Y-m-d');
+                $endDate = $today->format('Y-m-d');
+            }
+        }
+
+        if ($startDate > $endDate) {
+            [$startDate, $endDate] = [$endDate, $startDate];
+        }
+
+        $startDateTime = $startDate . ' 00:00:00';
+        $endExclusive = (new \DateTimeImmutable($endDate . ' 00:00:00'))->modify('+1 day')->format('Y-m-d H:i:s');
+
+        return [
+            'period' => $period,
+            'dateFrom' => $startDate,
+            'dateTo' => $endDate,
+            'startDateTime' => $startDateTime,
+            'endExclusiveDateTime' => $endExclusive,
+            'trendGranularity' => $period === 'daily' ? 'hour' : 'day',
+        ];
+    }
+
     public function list() {
         $user = getAuthUser();
         $search = $_GET['search'] ?? '';
@@ -509,6 +555,7 @@ class Invoice extends BaseResource {
     public function stats($id = null) {
         $user = getAuthUser();
         $companyId = $_GET['companyId'] ?? '';
+        $scope = $this->getMetricsScope('monthly');
         $conditions = [];
         $params = [];
 
@@ -529,6 +576,10 @@ class Invoice extends BaseResource {
             }
             $conditions[] = "company_id IN (" . implode(',', $placeholders) . ")";
         }
+
+        $conditions[] = "created_at >= :scopeStart AND created_at < :scopeEnd";
+        $params['scopeStart'] = $scope['startDateTime'];
+        $params['scopeEnd'] = $scope['endExclusiveDateTime'];
 
         $where = $conditions ? 'WHERE ' . implode(' AND ', $conditions) : '';
 
@@ -554,33 +605,37 @@ class Invoice extends BaseResource {
                 $companySql = "SELECT c.id, c.name, c.code,
                     COALESCE(s.plan, 'free') as plan,
                     COALESCE(s.status, 'active') as billing_status,
-                    COUNT(i.id) as total_invoices,
-                    SUM(CASE WHEN i.status='completed' THEN 1 ELSE 0 END) as completed,
-                    SUM(CASE WHEN i.status='failed' THEN 1 ELSE 0 END) as failed,
-                    MAX(i.created_at) as last_activity,
-                    MAX(i.ocr_sent_at) as last_ocr_sent_at,
-                    MAX(i.ocr_returned_at) as last_ocr_returned_at
+                    COUNT(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd THEN i.id END) as total_invoices,
+                    SUM(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd AND i.status='completed' THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd AND i.status='failed' THEN 1 ELSE 0 END) as failed,
+                    MAX(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd THEN i.created_at END) as last_activity,
+                    MAX(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd THEN i.ocr_sent_at END) as last_ocr_sent_at,
+                    MAX(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd THEN i.ocr_returned_at END) as last_ocr_returned_at
                     FROM companies c
                     LEFT JOIN subscriptions s ON s.company_id = c.id
                     LEFT JOIN invoices i ON i.company_id = c.id
                     GROUP BY c.id, c.name, c.code, s.plan, s.status
                     ORDER BY last_activity DESC";
-                $companyRows = $this->db->query($companySql)->fetchAll();
+                $stmt = $this->db->prepare($companySql);
+                $stmt->execute(['scopeStart' => $scope['startDateTime'], 'scopeEnd' => $scope['endExclusiveDateTime']]);
+                $companyRows = $stmt->fetchAll();
             } catch (\Throwable $e) {
                 // Fallback for DBs without OCR lifecycle columns.
                 $companySql = "SELECT c.id, c.name, c.code,
                     COALESCE(s.plan, 'free') as plan,
                     COALESCE(s.status, 'active') as billing_status,
-                    COUNT(i.id) as total_invoices,
-                    SUM(CASE WHEN i.status='completed' THEN 1 ELSE 0 END) as completed,
-                    SUM(CASE WHEN i.status='failed' THEN 1 ELSE 0 END) as failed,
-                    MAX(i.created_at) as last_activity
+                    COUNT(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd THEN i.id END) as total_invoices,
+                    SUM(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd AND i.status='completed' THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd AND i.status='failed' THEN 1 ELSE 0 END) as failed,
+                    MAX(CASE WHEN i.created_at >= :scopeStart AND i.created_at < :scopeEnd THEN i.created_at END) as last_activity
                     FROM companies c
                     LEFT JOIN subscriptions s ON s.company_id = c.id
                     LEFT JOIN invoices i ON i.company_id = c.id
                     GROUP BY c.id, c.name, c.code, s.plan, s.status
                     ORDER BY last_activity DESC";
-                $companyRows = $this->db->query($companySql)->fetchAll();
+                $stmt = $this->db->prepare($companySql);
+                $stmt->execute(['scopeStart' => $scope['startDateTime'], 'scopeEnd' => $scope['endExclusiveDateTime']]);
+                $companyRows = $stmt->fetchAll();
                 foreach ($companyRows as &$companyRow) {
                     $companyRow['last_ocr_sent_at'] = null;
                     $companyRow['last_ocr_returned_at'] = null;
@@ -592,16 +647,19 @@ class Invoice extends BaseResource {
             try {
                 $usageSql = "SELECT
                     company_id,
-                    SUM(invoices_processed) as processed,
-                    SUM(api_calls_count) as api_calls,
-                    SUM(storage_used_bytes) as storage,
-                    SUM(ocr_input_tokens) as ocr_input_tokens,
-                    SUM(ocr_output_tokens) as ocr_output_tokens,
-                    SUM(ocr_total_tokens) as ocr_total_tokens,
-                    SUM(ocr_cost_usd) as ocr_cost_usd
-                    FROM usage_logs
+                    COUNT(*) as processed,
+                    SUM(CASE WHEN provider IS NOT NULL THEN 1 ELSE 0 END) as api_calls,
+                    0 as storage,
+                    SUM(COALESCE(input_tokens,0)) as ocr_input_tokens,
+                    SUM(COALESCE(output_tokens,0)) as ocr_output_tokens,
+                    SUM(COALESCE(total_tokens,0)) as ocr_total_tokens,
+                    SUM(COALESCE(cost_usd,0)) as ocr_cost_usd
+                    FROM ocr_jobs
+                    WHERE created_at >= :scopeStart AND created_at < :scopeEnd
                     GROUP BY company_id";
-                $usageRows = $this->db->query($usageSql)->fetchAll();
+                $stmt = $this->db->prepare($usageSql);
+                $stmt->execute(['scopeStart' => $scope['startDateTime'], 'scopeEnd' => $scope['endExclusiveDateTime']]);
+                $usageRows = $stmt->fetchAll();
             } catch (\Throwable $e) {
                 // Fallback for DBs without token/cost usage columns.
                 $usageSql = "SELECT
@@ -610,8 +668,14 @@ class Invoice extends BaseResource {
                     SUM(api_calls_count) as api_calls,
                     SUM(storage_used_bytes) as storage
                     FROM usage_logs
+                    WHERE month BETWEEN :monthFrom AND :monthTo
                     GROUP BY company_id";
-                $usageRows = $this->db->query($usageSql)->fetchAll();
+                $stmt = $this->db->prepare($usageSql);
+                $stmt->execute([
+                    'monthFrom' => substr($scope['dateFrom'], 0, 7),
+                    'monthTo' => substr($scope['dateTo'], 0, 7),
+                ]);
+                $usageRows = $stmt->fetchAll();
                 foreach ($usageRows as &$usageRow) {
                     $usageRow['ocr_input_tokens'] = 0;
                     $usageRow['ocr_output_tokens'] = 0;
@@ -668,6 +732,12 @@ class Invoice extends BaseResource {
                 'ocrCostUsd' => round($totalOcrCostUsd, 6),
             ];
         }
+
+        $result['filters'] = [
+            'period' => $scope['period'],
+            'dateFrom' => $scope['dateFrom'],
+            'dateTo' => $scope['dateTo'],
+        ];
 
         sendJSON($result);
     }
@@ -951,9 +1021,16 @@ class Invoice extends BaseResource {
      */
     public function health($id = null) {
         requireRole('superadmin');
+        $scope = $this->getMetricsScope('monthly');
+
+        $jobWhere = "created_at >= :scopeStart AND created_at < :scopeEnd";
+        $jobParams = [
+            'scopeStart' => $scope['startDateTime'],
+            'scopeEnd' => $scope['endExclusiveDateTime'],
+        ];
 
         // Overview stats
-        $overview = $this->db->query("
+        $stmt = $this->db->prepare("
             SELECT
                 COUNT(*) as total_jobs,
                 SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) as completed_jobs,
@@ -964,7 +1041,10 @@ class Invoice extends BaseResource {
                 AVG(CASE WHEN status='completed' AND sent_at IS NOT NULL AND returned_at IS NOT NULL
                     THEN TIMESTAMPDIFF(SECOND, sent_at, returned_at) ELSE NULL END) as avg_processing_seconds
             FROM ocr_jobs
-        ")->fetch();
+            WHERE $jobWhere
+        ");
+        $stmt->execute($jobParams);
+        $overview = $stmt->fetch();
 
         $totalFinished = (int)$overview['completed_jobs'] + (int)$overview['failed_jobs'];
         $successRate = $totalFinished > 0 ? round(((int)$overview['completed_jobs'] / $totalFinished) * 100, 1) : 100;
@@ -980,22 +1060,30 @@ class Invoice extends BaseResource {
         ")->fetch();
 
         // Daily trends (last 30 days)
-        $daily = $this->db->query("
+        $bucketExpr = $scope['trendGranularity'] === 'hour'
+            ? "DATE_FORMAT(COALESCE(returned_at, created_at), '%Y-%m-%d %H:00')"
+            : "DATE(COALESCE(returned_at, created_at))";
+        $trendLabel = $scope['trendGranularity'] === 'hour' ? 'Hourly Trend' : 'Daily Trend';
+        $tableLabel = $scope['trendGranularity'] === 'hour' ? 'Hourly Breakdown' : 'Daily Breakdown';
+
+        $stmt = $this->db->prepare("
             SELECT
-                DATE(COALESCE(returned_at, created_at)) as date,
+                $bucketExpr as bucket,
                 SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) as completed,
                 SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) as failed,
                 AVG(CASE WHEN status='completed' AND sent_at IS NOT NULL AND returned_at IS NOT NULL
                     THEN TIMESTAMPDIFF(SECOND, sent_at, returned_at) ELSE NULL END) as avg_seconds,
                 SUM(cost_usd) as total_cost_usd
             FROM ocr_jobs
-            WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-            GROUP BY DATE(COALESCE(returned_at, created_at))
-            ORDER BY date DESC
-        ")->fetchAll();
+            WHERE $jobWhere
+            GROUP BY bucket
+            ORDER BY bucket DESC
+        ");
+        $stmt->execute($jobParams);
+        $daily = $stmt->fetchAll();
 
         // Top errors (last 30 days)
-        $topErrors = $this->db->query("
+        $stmt = $this->db->prepare("
             SELECT
                 SUBSTRING(error_message, 1, 200) as message,
                 COUNT(*) as count,
@@ -1003,43 +1091,29 @@ class Invoice extends BaseResource {
             FROM ocr_jobs
             WHERE status = 'failed'
               AND error_message IS NOT NULL
-              AND created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+              AND $jobWhere
             GROUP BY SUBSTRING(error_message, 1, 200)
             ORDER BY count DESC
             LIMIT 10
-        ")->fetchAll();
+        ");
+        $stmt->execute($jobParams);
+        $topErrors = $stmt->fetchAll();
 
-        // Rate limit status per company
-        $rateLimits = [];
-        try {
-            require_once __DIR__ . '/../lib/rate_limit.php';
-            $companies = $this->db->query("
-                SELECT c.id, c.name, s.rate_limit_per_hour, s.rate_limit_per_day
-                FROM companies c
-                LEFT JOIN subscriptions s ON s.company_id = c.id
-                WHERE s.rate_limit_per_hour IS NOT NULL OR s.rate_limit_per_day IS NOT NULL
-            ")->fetchAll();
-
-            foreach ($companies as $c) {
-                $rateCheck = checkRateLimit($c['id']);
-                $rateLimits[] = [
-                    'companyId' => $c['id'],
-                    'companyName' => $c['name'],
-                    'hourlyLimit' => $c['rate_limit_per_hour'] !== null ? (int)$c['rate_limit_per_hour'] : null,
-                    'dailyLimit' => $c['rate_limit_per_day'] !== null ? (int)$c['rate_limit_per_day'] : null,
-                    'hourlyUsed' => $rateCheck['limits']['hourlyUsed'] ?? 0,
-                    'dailyUsed' => $rateCheck['limits']['dailyUsed'] ?? 0,
-                ];
-            }
-        } catch (\Throwable $e) {
-            // Rate limit columns may not exist yet
-        }
-
-        // Total cost from usage_logs (accurate)
-        $costRow = $this->db->query("SELECT SUM(ocr_cost_usd) as total_cost, SUM(ocr_total_tokens) as total_tokens, SUM(ocr_input_tokens) as input_tokens, SUM(ocr_output_tokens) as output_tokens FROM usage_logs")->fetch();
+        // Total cost/tokens from filtered OCR jobs
+        $stmt = $this->db->prepare("
+            SELECT
+                SUM(COALESCE(cost_usd,0)) as total_cost,
+                SUM(COALESCE(total_tokens,0)) as total_tokens,
+                SUM(COALESCE(input_tokens,0)) as input_tokens,
+                SUM(COALESCE(output_tokens,0)) as output_tokens
+            FROM ocr_jobs
+            WHERE $jobWhere
+        ");
+        $stmt->execute($jobParams);
+        $costRow = $stmt->fetch();
 
         // Confidence stats from completed invoices
-        $confStats = $this->db->query("
+        $stmt = $this->db->prepare("
             SELECT
                 COUNT(*) as total,
                 SUM(CASE WHEN confidence_scores IS NOT NULL THEN 1 ELSE 0 END) as with_confidence,
@@ -1049,19 +1123,25 @@ class Invoice extends BaseResource {
                 AVG(JSON_EXTRACT(confidence_scores, '$.currency')) as avg_currency
             FROM invoices
             WHERE status = 'completed' AND confidence_scores IS NOT NULL
-        ")->fetch();
+              AND created_at >= :scopeStart AND created_at < :scopeEnd
+        ");
+        $stmt->execute($jobParams);
+        $confStats = $stmt->fetch();
 
         // Model usage breakdown
-        $modelStats = $this->db->query("
+        $stmt = $this->db->prepare("
             SELECT
                 COALESCE(ocr_model, 'unknown') as model,
                 COUNT(*) as count,
                 SUM(CASE WHEN ocr_escalated = 1 THEN 1 ELSE 0 END) as escalated_count
             FROM invoices
             WHERE status = 'completed' AND ocr_model IS NOT NULL
+              AND created_at >= :scopeStart AND created_at < :scopeEnd
             GROUP BY ocr_model
             ORDER BY count DESC
-        ")->fetchAll();
+        ");
+        $stmt->execute($jobParams);
+        $modelStats = $stmt->fetchAll();
 
         sendJSON([
             'overview' => [
@@ -1097,7 +1177,7 @@ class Invoice extends BaseResource {
             ],
             'daily' => array_map(function ($row) {
                 return [
-                    'date' => $row['date'],
+                    'date' => $row['bucket'],
                     'completed' => (int)$row['completed'],
                     'failed' => (int)$row['failed'],
                     'avgSeconds' => $row['avg_seconds'] !== null ? round((float)$row['avg_seconds'], 1) : null,
@@ -1111,7 +1191,14 @@ class Invoice extends BaseResource {
                     'lastSeen' => $row['last_seen'],
                 ];
             }, $topErrors),
-            'rateLimits' => $rateLimits,
+            'filters' => [
+                'period' => $scope['period'],
+                'dateFrom' => $scope['dateFrom'],
+                'dateTo' => $scope['dateTo'],
+                'trendGranularity' => $scope['trendGranularity'],
+                'trendLabel' => $trendLabel,
+                'tableLabel' => $tableLabel,
+            ],
         ]);
     }
 

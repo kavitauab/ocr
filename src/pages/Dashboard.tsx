@@ -56,6 +56,7 @@ export default function Dashboard() {
   const { selectedCompany } = useCompany();
   const navigate = useNavigate();
   const [superadminMode, setSuperadminMode] = useState<"global" | "company">("global");
+  const [period, setPeriod] = useState<"daily" | "weekly" | "monthly">("monthly");
   const [companySearch, setCompanySearch] = useState("");
   const [recentSort, setRecentSort] = useState("-createdAt");
 
@@ -65,11 +66,14 @@ export default function Dashboard() {
       ? selectedCompany?.id || ""
       : ""
     : selectedCompany?.id || "";
-  const companyParam = effectiveCompanyId ? `?companyId=${effectiveCompanyId}` : "";
+  const statsParams = new URLSearchParams();
+  if (effectiveCompanyId) statsParams.set("companyId", effectiveCompanyId);
+  statsParams.set("period", period);
+  const statsUrl = `/invoices/stats${statsParams.toString() ? `?${statsParams}` : ""}`;
 
   const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ["stats", effectiveCompanyId, superadminMode],
-    queryFn: () => api.get(`/invoices/stats${companyParam}`).then((r) => r.data),
+    queryKey: ["stats", effectiveCompanyId, superadminMode, period],
+    queryFn: () => api.get(statsUrl).then((r) => r.data),
   });
 
   const { data: invoicesData } = useQuery({
@@ -89,6 +93,7 @@ export default function Dashboard() {
     });
   }, [companies, companySearch]);
   const showRecentInvoices = !!effectiveCompanyId && (!isSuperadmin || superadminMode === "company");
+  const activeRangeLabel = period === "daily" ? "Today" : period === "weekly" ? "Last 7 days" : "Last 30 days";
 
   const sortedRecentInvoices = useMemo(() => {
     const list = invoicesData?.invoices || [];
@@ -151,6 +156,25 @@ export default function Dashboard() {
             </button>
           </div>
         )}
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center rounded-lg border border-border bg-card p-0.5">
+          {(["daily", "weekly", "monthly"] as const).map((option) => (
+            <button
+              key={option}
+              onClick={() => setPeriod(option)}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
+                period === option
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {option === "daily" ? "Daily" : option === "weekly" ? "Weekly" : "Monthly"}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">Showing metrics for {activeRangeLabel}.</p>
       </div>
 
       {/* Stat cards */}

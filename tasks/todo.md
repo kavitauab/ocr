@@ -220,3 +220,25 @@
   - `php -l api/resources/Subscriptions.php`
   - `npx tsc --noEmit`
   - `npm run build`
+
+---
+
+# Iteration 9 - Health and Dashboard Time Filters
+
+## Plan
+- [x] Add shared period/date filtering support to health and stats backend endpoints.
+- [x] Remove rate limits from the health page.
+- [x] Add daily / weekly / monthly controls to the dashboard and date-range filtering to health.
+- [ ] Verify with syntax checks, frontend build, and production deploy.
+
+## Verification Checklist
+- [x] `php -l api/resources/Invoice.php` passes.
+- [x] `npm run build` passes.
+- [ ] Health page can switch between preset ranges and custom dates.
+- [ ] Dashboard metrics/client overview respond to daily, weekly, and monthly scopes.
+- [ ] Production deploy completes successfully.
+
+## Review
+- Added shared period/date scope handling in the invoices resource so both `/invoices/stats` and `/invoices/health` can filter by daily, weekly, monthly, or custom date range.
+- Health page now exposes preset range controls and custom date inputs, and the unused rate-limits panel has been removed.
+- Dashboard now includes daily / weekly / monthly controls so top metrics and superadmin client overview reflect the selected time scope.
