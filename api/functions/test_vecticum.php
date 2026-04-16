@@ -521,6 +521,28 @@ if ($action === 'match-author') {
     sendJSON(['action' => 'match-author', 'email' => $email, 'match' => $result]);
 }
 
+if ($action === 'resolve-author') {
+    $email = $_GET['email'] ?? '';
+    if (!$email) sendJSON(['error' => 'Need email param'], 400);
+    $token = getVecticumToken($company);
+    $matched = findVecticumAuthor($company, $email, $token);
+    $fallback = getVecticumDefaultAuthor($company, $token);
+    sendJSON([
+        'action' => 'resolve-author',
+        'company' => [
+            'id' => $company['id'],
+            'name' => $company['name'],
+            'ms_sender_email' => $company['ms_sender_email'] ?? null,
+            'vecticum_company_id' => $company['vecticum_company_id'] ?? null,
+            'vecticum_inbox_setup_id' => $company['vecticum_inbox_setup_id'] ?? null,
+        ],
+        'email' => $email,
+        'matchedAuthor' => $matched,
+        'fallbackAuthor' => $fallback,
+        'chosenAuthor' => $matched ?: $fallback,
+    ]);
+}
+
 if ($action === 'match-partner') {
     $vatId = $_GET['vatId'] ?? '';
     $name = $_GET['name'] ?? '';
