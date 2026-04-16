@@ -7,7 +7,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Input } from "@/components/ui/input";
 import { formatDateTime } from "@/lib/ui-utils";
 import {
-  Activity, CheckCircle, AlertTriangle, Clock, Zap, RotateCcw, TrendingUp,
+  Activity, CheckCircle, AlertTriangle, Clock, RotateCcw,
   DollarSign, Cpu, Gauge, Bot,
 } from "lucide-react";
 
@@ -25,11 +25,6 @@ function fmtTokens(v: number): string {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
   return String(v);
-}
-
-function fmtPct(v: number | null): string {
-  if (v === null || v === undefined) return "—";
-  return `${(v * 100).toFixed(1)}%`;
 }
 
 function getPresetDates(period: "daily" | "weekly" | "monthly") {
@@ -82,7 +77,6 @@ export default function Health() {
   const daily: any[] = data?.daily || [];
   const topErrors: any[] = data?.topErrors || [];
   const filters = data?.filters;
-  const maxDaily = Math.max(1, ...daily.map((d: any) => d.completed + d.failed));
   const activeRangeLabel = filters?.period === "custom"
     ? `${filters?.dateFrom} to ${filters?.dateTo}`
     : filters?.period === "daily"
@@ -275,46 +269,6 @@ export default function Health() {
                 <span>Completed: <strong className="text-foreground">{overview?.completedJobs ?? 0}</strong></span>
                 <span>Failed: <strong className="text-foreground">{overview?.failedJobs ?? 0}</strong></span>
                 <span>Total: <strong className="text-foreground">{overview?.totalJobs ?? 0}</strong></span>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Daily Trend */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            {filters?.trendLabel || "Trend"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? <Skeleton className="h-40 w-full" /> : daily.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">No data yet</p>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-end gap-[2px] h-32">
-                {[...daily].reverse().map((d: any) => {
-                  const total = d.completed + d.failed;
-                  const height = total > 0 ? Math.max(4, (total / maxDaily) * 100) : 0;
-                  const failedHeight = d.failed > 0 ? Math.max(2, (d.failed / maxDaily) * 100) : 0;
-                  return (
-                    <div key={d.date} className="flex-1 flex flex-col justify-end group relative"
-                      title={`${d.date}: ${d.completed} completed, ${d.failed} failed, avg ${formatSeconds(d.avgSeconds)}, cost ${fmtCost(d.totalCostUsd)}`}>
-                      {(height - failedHeight) > 0 && <div className="bg-emerald-400 rounded-t-sm hover:bg-emerald-500" style={{ height: `${height - failedHeight}%` }} />}
-                      {failedHeight > 0 && <div className="bg-red-400 hover:bg-red-500" style={{ height: `${failedHeight}%` }} />}
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex justify-between text-[10px] text-muted-foreground">
-                <span>{daily[daily.length - 1]?.date}</span>
-                <span>{daily[0]?.date}</span>
-              </div>
-              <div className="flex gap-4 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm bg-emerald-400" /> Completed</span>
-                <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm bg-red-400" /> Failed</span>
               </div>
             </div>
           )}

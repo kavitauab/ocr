@@ -22,6 +22,16 @@ import {
   ArrowRight,
 } from "lucide-react";
 
+function getPresetDates(period: "daily" | "weekly" | "monthly") {
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
+  const start = new Date(end);
+  if (period === "weekly") start.setDate(start.getDate() - 6);
+  if (period === "monthly") start.setDate(start.getDate() - 29);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  return { dateFrom: fmt(start), dateTo: fmt(end) };
+}
+
 function getCompanyId(company: any): string {
   return String(company?.companyId ?? company?.id ?? "");
 }
@@ -56,7 +66,10 @@ export default function Dashboard() {
   const { selectedCompany } = useCompany();
   const navigate = useNavigate();
   const [superadminMode, setSuperadminMode] = useState<"global" | "company">("global");
-  const [period, setPeriod] = useState<"daily" | "weekly" | "monthly">("monthly");
+  const [period, setPeriod] = useState<"daily" | "weekly" | "monthly" | "custom">("daily");
+  const defaultDaily = getPresetDates("daily");
+  const [customDateFrom, setCustomDateFrom] = useState(defaultDaily.dateFrom);
+  const [customDateTo, setCustomDateTo] = useState(defaultDaily.dateTo);
   const [companySearch, setCompanySearch] = useState("");
   const [recentSort, setRecentSort] = useState("-createdAt");
 
@@ -69,10 +82,14 @@ export default function Dashboard() {
   const statsParams = new URLSearchParams();
   if (effectiveCompanyId) statsParams.set("companyId", effectiveCompanyId);
   statsParams.set("period", period);
+  if (period === "custom") {
+    statsParams.set("dateFrom", customDateFrom);
+    statsParams.set("dateTo", customDateTo);
+  }
   const statsUrl = `/invoices/stats${statsParams.toString() ? `?${statsParams}` : ""}`;
 
   const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ["stats", effectiveCompanyId, superadminMode, period],
+    queryKey: ["stats", effectiveCompanyId, superadminMode, period, customDateFrom, customDateTo],
     queryFn: () => api.get(statsUrl).then((r) => r.data),
   });
 
@@ -93,7 +110,20 @@ export default function Dashboard() {
     });
   }, [companies, companySearch]);
   const showRecentInvoices = !!effectiveCompanyId && (!isSuperadmin || superadminMode === "company");
-  const activeRangeLabel = period === "daily" ? "Today" : period === "weekly" ? "Last 7 days" : "Last 30 days";
+  const activeRangeLabel = period === "custom"
+    ? `${customDateFrom} to ${customDateTo}`
+    : period === "daily"
+      ? "Today"
+      : period === "weekly"
+        ? "Last 7 days"
+        : "Last 30 days";
+
+  const activatePreset = (next: "daily" | "weekly" | "monthly") => {
+    setPeriod(next);
+    const preset = getPresetDates(next);
+    setCustomDateFrom(preset.dateFrom);
+    setCustomDateTo(preset.dateTo);
+  };
 
   const sortedRecentInvoices = useMemo(() => {
     const list = invoicesData?.invoices || [];
@@ -159,20 +189,42 @@ export default function Dashboard() {
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center rounded-lg border border-border bg-card p-0.5">
-          {(["daily", "weekly", "monthly"] as const).map((option) => (
-            <button
-              key={option}
-              onClick={() => setPeriod(option)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
-                period === option
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {option === "daily" ? "Daily" : option === "weekly" ? "Weekly" : "Monthly"}
-            </button>
-          ))}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex items-center rounded-lg border border-border bg-card p-0.5">
+            {(["daily", "weekly", "monthly", "custom"] as const).map((option) => (
+              <button
+                key={option}
+                onClick={() => option === "custom" ? setPeriod("custom") : activatePreset(option)}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
+                  period === option
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {option === "daily" ? "Daily" : option === "weekly" ? "Weekly" : option === "monthly" ? "Monthly" : "Custom"}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Input
+              type="date"
+              value={customDateFrom}
+              onChange={(e) => {
+                setPeriod("custom");
+                setCustomDateFrom(e.target.value);
+              }}
+              className="h-9 w-full sm:w-[160px]"
+            />
+            <Input
+              type="date"
+              value={customDateTo}
+              onChange={(e) => {
+                setPeriod("custom");
+                setCustomDateTo(e.target.value);
+              }}
+              className="h-9 w-full sm:w-[160px]"
+            />
+          </div>
         </div>
         <p className="text-xs text-muted-foreground">Showing metrics for {activeRangeLabel}.</p>
       </div>
