@@ -25,10 +25,20 @@ export function getStatusClasses(status: string): string {
 /**
  * Format a date as relative time (e.g., "2 hours ago", "yesterday")
  */
+function normalizeUtcDateTime(value: string): string {
+  if (!value) return value;
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(value)) {
+    return value.replace(" ", "T") + "Z";
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?$/.test(value)) {
+    return value + "Z";
+  }
+  return value;
+}
+
 export function formatRelativeTime(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
-  // DB stores UTC timestamps without suffix — append Z so JS converts to local
-  const normalized = dateStr.includes("T") || dateStr.includes("Z") ? dateStr : dateStr.replace(" ", "T") + "Z";
+  const normalized = normalizeUtcDateTime(dateStr);
   const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return "";
 
@@ -53,8 +63,7 @@ export function formatRelativeTime(dateStr: string | null | undefined): string {
  */
 export function formatDateTime(value: string | null | undefined): string {
   if (!value) return "\u2014";
-  // DB stores UTC timestamps without suffix — append Z so JS converts to local
-  const normalized = value.includes("T") || value.includes("Z") ? value : value.replace(" ", "T") + "Z";
+  const normalized = normalizeUtcDateTime(value);
   const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return "\u2014";
   return date.toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "medium" });
