@@ -16,3 +16,4 @@
 - For this project, do not use or start local MySQL for deployment/migration tasks; execute deployment flow via API/server environment only.
 - For invoice duplicate handling, do not assume `invoice_number` is unique by itself; validate duplicates with a composite key that includes `invoice_date`, `invoice_number`, and counterparty identity.
 - Configuration fields that are labeled as exact external record IDs must stay strict; do not silently accept overloaded values like author IDs, names, or emails in an inbox-setup ID field.
+- Monetary values sent to external systems must be normalized to fixed decimal strings; do not send raw floating-point results in API payloads.
