@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS `companies` (
   `vecticum_client_id` VARCHAR(255),
   `vecticum_client_secret` VARCHAR(255),
   `vecticum_company_id` VARCHAR(255),
+  `vecticum_inbox_setup_id` VARCHAR(255),
   `vecticum_author_id` VARCHAR(255),
   `vecticum_author_name` VARCHAR(255),
   `vecticum_access_token` TEXT,

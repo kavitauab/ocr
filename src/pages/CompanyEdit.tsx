@@ -67,7 +67,7 @@ export default function CompanyEdit() {
     vecticumEnabled: false, vecticumAutoSend: false,
     vecticumApiBaseUrl: "https://app.vecticum.com/api/v1", vecticumClientId: "",
     vecticumClientSecret: "", vecticumCompanyId: "Rsk9Jv9bV7bGBFupWlE3",
-    vecticumPartnerEndpoint: "gnzSuOSBmKbBdytb1OGc",
+    vecticumPartnerEndpoint: "gnzSuOSBmKbBdytb1OGc", vecticumInboxSetupId: "",
     extractionFields: null,
   });
 
@@ -409,6 +409,18 @@ export default function CompanyEdit() {
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Client Secret</label><Input type="password" value={v("vecticumClientSecret")} onChange={(e) => set("vecticumClientSecret", e.target.value)} disabled={!canEditIntegrations} /></div>
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Invoice Class ID</label><Input value={v("vecticumCompanyId")} onChange={(e) => set("vecticumCompanyId", e.target.value)} disabled={!canEditIntegrations} placeholder="Rsk9Jv9bV7bGBFupWlE3" /></div>
                   <div className="space-y-1.5"><label className="text-sm font-medium text-foreground">Partner Endpoint</label><Input value={v("vecticumPartnerEndpoint")} onChange={(e) => set("vecticumPartnerEndpoint", e.target.value)} disabled={!canEditIntegrations} placeholder="gnzSuOSBmKbBdytb1OGc" /></div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-foreground">Inbox Setup ID</label>
+                    <Input
+                      value={v("vecticumInboxSetupId")}
+                      onChange={(e) => set("vecticumInboxSetupId", e.target.value)}
+                      disabled={!canEditIntegrations}
+                      placeholder="e.g. CtZXWGwUHlwbFFFdLtdg"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Exact Vecticum `_inboxSetup` record ID used to resolve the correct default author for this company mailbox.
+                    </p>
+                  </div>
                   <label className="flex items-center gap-2 text-sm text-foreground pt-2">
                     <input type="checkbox" checked={form.vecticumAutoSend as boolean} onChange={(e) => set("vecticumAutoSend", e.target.checked)} disabled={!canEditIntegrations} />
                     Auto-send to Vecticum after OCR

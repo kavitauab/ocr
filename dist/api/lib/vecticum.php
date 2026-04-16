@@ -221,6 +221,7 @@ function getVecticumDefaultAuthor($company, $token = null) {
     $inboxes = json_decode($response, true);
     if (!is_array($inboxes)) return null;
 
+    $preferredInboxId = trim((string)($company['vecticum_inbox_setup_id'] ?? ''));
     $mailboxEmail = strtolower(trim((string)($company['ms_sender_email'] ?? '')));
     $fallbacks = [];
 
@@ -251,6 +252,10 @@ function getVecticumDefaultAuthor($company, $token = null) {
 
         $author = ['id' => $inbox['defaultAuthor']['id'], 'name' => $inbox['defaultAuthor']['name'] ?? ''];
         $fallbacks[] = $author;
+
+        if ($preferredInboxId !== '' && trim((string)($inbox['id'] ?? '')) === $preferredInboxId) {
+            return $author;
+        }
 
         if ($mailboxEmail !== '') {
             $inboxEmails = $collectEmails($inbox);
