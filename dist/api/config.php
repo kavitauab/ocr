@@ -62,8 +62,23 @@ define('CORS_ORIGIN', $_ENV['CORS_ORIGIN'] ?? $defaultCorsOrigin);
 
 // App
 define('APP_ENV', $_ENV['APP_ENV'] ?? 'development');
-define('API_VERSION', '2026-04-08a');
+define('API_VERSION', '2026-04-16a');
 date_default_timezone_set('Europe/Vilnius');
+
+/**
+ * Timing-safe CRON_SECRET verification for cron/diagnostic endpoints.
+ * Refuses requests when the secret is unset so we never accidentally run
+ * unauthenticated cron tasks in misconfigured environments.
+ */
+function verifyCronAuth() {
+    $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+    if (!defined('CRON_SECRET') || CRON_SECRET === '') {
+        sendJSON(['error' => 'Cron secret not configured'], 500);
+    }
+    if (!preg_match('/^Bearer\s+(\S+)$/', $authHeader, $m) || !hash_equals(CRON_SECRET, $m[1])) {
+        sendJSON(['error' => 'Unauthorized'], 401);
+    }
+}
 
 // Disable OPcache for CLI (cron) to always get fresh files
 if (php_sapi_name() === 'cli' && function_exists('opcache_reset')) {

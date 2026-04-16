@@ -1,9 +1,6 @@
 <?php
-// Auth: CRON_SECRET bearer token
-$authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-if (CRON_SECRET && !preg_match('/Bearer\s+' . preg_quote(CRON_SECRET, '/') . '/', $authHeader)) {
-    sendJSON(['error' => 'Unauthorized'], 401);
-}
+// Auth: CRON_SECRET bearer token (timing-safe)
+verifyCronAuth();
 
 require_once __DIR__ . '/../lib/vecticum.php';
 

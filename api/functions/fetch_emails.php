@@ -1,11 +1,8 @@
 <?php
 // Cron endpoint - fetch emails for all enabled companies
-// Auth: CRON_SECRET bearer token
+// Auth: CRON_SECRET bearer token (timing-safe)
 
-$authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
-if (CRON_SECRET && !preg_match('/Bearer\s+' . preg_quote(CRON_SECRET, '/') . '/', $authHeader)) {
-    sendJSON(['error' => 'Unauthorized'], 401);
-}
+verifyCronAuth();
 
 require_once __DIR__ . '/../lib/email_processor.php';
 

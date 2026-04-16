@@ -2,10 +2,7 @@
 // Cron endpoint - apply idempotent schema updates needed by current code.
 // Auth: CRON_SECRET bearer token
 
-$authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
-if (CRON_SECRET && !preg_match('/Bearer\s+' . preg_quote(CRON_SECRET, '/') . '/', $authHeader)) {
-    sendJSON(['error' => 'Unauthorized'], 401);
-}
+verifyCronAuth();
 
 $db = getDBConnection();
 
@@ -95,6 +92,22 @@ $ensureColumn = function (string $table, string $column, string $definition) use
 
 $ensureIndex = function (string $table, string $index, string $definition) use ($tableExists, $indexExists, $runStatement, $record): void {
     $statement = "ALTER TABLE `{$table}` ADD INDEX `{$index}` {$definition}";
+
+    if (!$tableExists($table)) {
+        $record('error', $statement, "Table `{$table}` does not exist");
+        return;
+    }
+
+    if ($indexExists($table, $index)) {
+        $record('skipped', $statement);
+        return;
+    }
+
+    $runStatement($statement);
+};
+
+$ensureUniqueIndex = function (string $table, string $index, string $definition) use ($tableExists, $indexExists, $runStatement, $record): void {
+    $statement = "ALTER TABLE `{$table}` ADD UNIQUE INDEX `{$index}` {$definition}";
 
     if (!$tableExists($table)) {
         $record('error', $statement, "Table `{$table}` does not exist");
@@ -244,6 +257,20 @@ $ensureColumn('invoices', 'ocr_escalation_reason', 'VARCHAR(500) NULL');
 // --- Document classification: skip_reason + additional_files + skipped status ---
 $ensureColumn('invoices', 'skip_reason', 'VARCHAR(255) NULL');
 $ensureColumn('invoices', 'additional_files', 'JSON NULL');
+
+// --- Performance indexes for hot query paths ---
+// List + stats + queue scans filter on status; most screens sort by created_at
+$ensureIndex('invoices', 'idx_invoices_status_created', '(`status`, `created_at`)');
+// Rate limits, per-company listings, dashboard company filter
+$ensureIndex('invoices', 'idx_invoices_company_created', '(`company_id`, `created_at`)');
+// Email inbox company filter + ordering
+$ensureIndex('email_inbox', 'idx_email_inbox_company_created', '(`company_id`, `received_date`)');
+// Cron picker orders queued/retrying by queued_at
+$ensureIndex('ocr_jobs', 'idx_ocr_jobs_queue_ordered', '(`status`, `next_retry_at`, `queued_at`)');
+
+// --- Prevent duplicate email insertion on concurrent cron runs ---
+// email_inbox.message_id must be globally unique to let us use INSERT IGNORE.
+$ensureUniqueIndex('email_inbox', 'uniq_email_inbox_message_id', '(`message_id`)');
 
 $invoiceStatusSkipped = "ALTER TABLE `invoices` MODIFY COLUMN `status` ENUM('uploaded','queued','processing','completed','failed','retrying','skipped') NOT NULL DEFAULT 'uploaded'";
 if ($tableExists('invoices') && $columnExists('invoices', 'status')) {

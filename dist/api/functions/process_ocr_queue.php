@@ -1,17 +1,15 @@
 <?php
 // Cron endpoint - process queued OCR jobs with retry support.
-// Auth: CRON_SECRET bearer token
+// Auth: CRON_SECRET bearer token (timing-safe)
 // Call: GET /api/cron/process-ocr
 
-$authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
-if (CRON_SECRET && !preg_match('/Bearer\s+' . preg_quote(CRON_SECRET, '/') . '/', $authHeader)) {
-    sendJSON(['error' => 'Unauthorized'], 401);
-}
+verifyCronAuth();
 
 set_time_limit(300); // Allow up to 5 minutes for batch processing
 
 require_once __DIR__ . '/../lib/file_storage.php';
 require_once __DIR__ . '/../lib/claude.php';
+require_once __DIR__ . '/../lib/extraction_config.php';
 require_once __DIR__ . '/../lib/usage.php';
 require_once __DIR__ . '/../lib/rate_limit.php';
 require_once __DIR__ . '/../lib/issue_reply.php';
@@ -51,14 +49,12 @@ try {
 
 // Write diagnostic file so we can verify cron code version via web
 $_apiVer = defined('API_VERSION') ? API_VERSION : 'UNDEFINED';
-@file_put_contents(__DIR__ . '/../_cron_version.txt', $_apiVer . ' | ' . date('Y-m-d H:i:s') . ' | ' . __FILE__ . ' | php=' . PHP_BINARY . ' | jobs=' . count($jobs));
+@file_put_contents(__DIR__ . '/../_cron_version.txt', $_apiVer . ' | ' . date('Y-m-d H:i:s') . ' | jobs=' . count($jobs));
 
 if (empty($jobs)) {
     sendJSON(['message' => 'No jobs in queue', 'processed' => 0]);
     return;
 }
-
-error_log("[OCR Queue] Starting batch, API_VERSION=$_apiVer, jobs=" . count($jobs));
 
 foreach ($jobs as $job) {
     $jobId = $job['id'];
@@ -96,18 +92,12 @@ foreach ($jobs as $job) {
         continue;
     }
 
-    $ocrUsage = ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-20250514'];
+    $defaultModel = getSetting('extraction_model', 'claude-sonnet-4-6');
+    $ocrUsage = ['provider' => 'anthropic', 'model' => $defaultModel];
 
     try {
-        // Load company extraction field preferences
-        $companyStmt = $db->prepare("SELECT extraction_fields FROM companies WHERE id = :id");
-        $companyStmt->execute(['id' => $companyId]);
-        $companyRow = $companyStmt->fetch();
-        $enabledFields = null;
-        if ($companyRow && $companyRow['extraction_fields']) {
-            $enabledFields = json_decode($companyRow['extraction_fields'], true);
-        }
-        error_log("[OCR Queue] Invoice $invoiceId: company $companyId extraction_fields raw=" . json_encode($companyRow['extraction_fields'] ?? 'NULL') . " parsed=" . json_encode($enabledFields));
+        // Load company extraction field preferences (validated against the allow-list)
+        $enabledFields = loadCompanyExtractionFields($db, $companyId);
 
         $filePath = getFilePath($job['stored_filename']);
         if (!file_exists($filePath)) {
@@ -151,19 +141,7 @@ foreach ($jobs as $job) {
         $escalationReason = $extractionResult['escalation_reason'] ?? null;
 
         // Strip fields not in enabledFields (enforce company settings server-side)
-        if ($enabledFields !== null && is_array($enabledFields) && !empty($enabledFields)) {
-            $allFieldKeys = array_keys(getAllExtractionFields());
-            foreach ($allFieldKeys as $fk) {
-                if (!in_array($fk, $enabledFields) && isset($extracted[$fk])) {
-                    unset($extracted[$fk]);
-                    // Also remove from confidence scores
-                    if (isset($extracted['confidence'][$fk])) {
-                        unset($extracted['confidence'][$fk]);
-                    }
-                }
-            }
-            error_log("[OCR Queue] Stripped disabled fields. Enabled: " . implode(',', $enabledFields) . " Remaining keys: " . implode(',', array_keys($extracted)));
-        }
+        $extracted = stripDisabledExtractionFields($extracted, $enabledFields);
 
         // Update invoice with extracted data
         $invoiceUpdateParams = [
@@ -192,39 +170,17 @@ foreach ($jobs as $job) {
             'id' => $invoiceId,
         ];
 
-        error_log("[OCR Queue] Saving invoice $invoiceId: model=$modelUsed escalated=" . ($escalated ? 'Y' : 'N') . " reason=" . ($escalationReason ?? 'none') . " fields=" . ($enabledFields !== null ? count($enabledFields) : 'ALL') . " params=" . json_encode(array_keys($invoiceUpdateParams)));
-
-        try {
-            $stmt = $db->prepare("UPDATE invoices SET status = 'completed',
-                document_type = :documentType,
-                invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
-                vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
-                buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
-                total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
-                subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
-                bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
-                ocr_model = :ocrModel, ocr_escalated = :ocrEscalated, ocr_escalation_reason = :ocrEscalationReason,
-                processing_error = NULL, ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id");
-            $stmt->execute($invoiceUpdateParams);
-            error_log("[OCR Queue] Main UPDATE succeeded for $invoiceId, rowCount=" . $stmt->rowCount());
-        } catch (\Throwable $updateErr) {
-            error_log("[OCR Queue] Main UPDATE FAILED for $invoiceId: " . $updateErr->getMessage());
-            // Fallback: try without the new column in case it doesn't exist yet
-            $db->prepare("UPDATE invoices SET status = 'completed',
-                document_type = :documentType,
-                invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
-                vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
-                buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
-                total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
-                subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
-                bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
-                ocr_model = :ocrModel, ocr_escalated = :ocrEscalated,
-                processing_error = NULL, ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id2")
-                ->execute([
-                    ...$invoiceUpdateParams,
-                    'id2' => $invoiceId,
-                ]);
-        }
+        $stmt = $db->prepare("UPDATE invoices SET status = 'completed',
+            document_type = :documentType,
+            invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
+            vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
+            buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
+            total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
+            subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
+            bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
+            ocr_model = :ocrModel, ocr_escalated = :ocrEscalated, ocr_escalation_reason = :ocrEscalationReason,
+            processing_error = NULL, ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id");
+        $stmt->execute($invoiceUpdateParams);
 
         // Complete the OCR job
         $db->prepare("UPDATE ocr_jobs SET

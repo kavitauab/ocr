@@ -3,6 +3,7 @@
 require_once __DIR__ . '/microsoft_graph.php';
 require_once __DIR__ . '/file_storage.php';
 require_once __DIR__ . '/claude.php';
+require_once __DIR__ . '/extraction_config.php';
 require_once __DIR__ . '/usage.php';
 require_once __DIR__ . '/issue_reply.php';
 
@@ -33,17 +34,14 @@ function processCompanyEmails($companyId) {
 
     foreach ($messages as $message) {
         try {
-            // Check for duplicate
-            $stmt = $db->prepare("SELECT id FROM email_inbox WHERE message_id = :messageId LIMIT 1");
-            $stmt->execute(['messageId' => $message['id']]);
-            if ($stmt->fetch()) continue;
-
             $emailId = generateId();
             $fromEmail = $message['from']['emailAddress']['address'] ?? null;
             $fromName = $message['from']['emailAddress']['name'] ?? null;
             $emailBodyText = normalizeEmailBodyForVecticum($message['body']['content'] ?? '', $message['body']['contentType'] ?? 'html');
 
-            $stmt = $db->prepare("INSERT INTO email_inbox (id, company_id, message_id, subject, from_email, from_name, received_date, has_attachments, status) VALUES (:id, :companyId, :messageId, :subject, :fromEmail, :fromName, :receivedDate, :hasAttachments, 'processing')");
+            // INSERT IGNORE relies on UNIQUE index on message_id to prevent
+            // duplicate rows when two cron runs race on the same mailbox.
+            $stmt = $db->prepare("INSERT IGNORE INTO email_inbox (id, company_id, message_id, subject, from_email, from_name, received_date, has_attachments, status) VALUES (:id, :companyId, :messageId, :subject, :fromEmail, :fromName, :receivedDate, :hasAttachments, 'processing')");
             $stmt->execute([
                 'id' => $emailId,
                 'companyId' => $companyId,
@@ -54,6 +52,10 @@ function processCompanyEmails($companyId) {
                 'receivedDate' => $message['receivedDateTime'] ?? null,
                 'hasAttachments' => $message['hasAttachments'] ? 1 : 0,
             ]);
+            if ($stmt->rowCount() === 0) {
+                // Another process beat us to it, or we've seen this already.
+                continue;
+            }
 
             if (!$message['hasAttachments']) {
                 $db->prepare("UPDATE email_inbox SET status = 'processed', attachment_count = 0 WHERE id = :id")->execute(['id' => $emailId]);
@@ -137,18 +139,15 @@ function processCompanyEmails($companyId) {
                             'fileSize' => $attachment['size'] ?? strlen($item['buffer']),
                         ]);
 
-                    $ocrUsage = ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-20250514'];
-                    $ocrJobId = startOcrJob($invoiceId, $companyId, 'anthropic', 'claude-sonnet-4-20250514');
+                    $defaultModel = getSetting('extraction_model', 'claude-sonnet-4-6');
+                    $ocrUsage = ['provider' => 'anthropic', 'model' => $defaultModel];
+                    $ocrJobId = startOcrJob($invoiceId, $companyId, 'anthropic', $defaultModel);
                     try {
                         $db->prepare("UPDATE invoices SET ocr_sent_at = NOW(), updated_at = NOW() WHERE id = :id")->execute(['id' => $invoiceId]);
                     } catch (Throwable $e) {}
 
-                    // Load company extraction field preferences
-                    $enabledFields = null;
-                    if ($company['extraction_fields']) {
-                        $ef = is_string($company['extraction_fields']) ? json_decode($company['extraction_fields'], true) : $company['extraction_fields'];
-                        if (is_array($ef) && !empty($ef)) $enabledFields = $ef;
-                    }
+                    // Load + validate company extraction field preferences
+                    $enabledFields = loadCompanyExtractionFields($db, $companyId);
 
                     $extractionResult = extractInvoiceData($item['filePath'], $saved['fileType'], $enabledFields, true);
                     $extracted = $extractionResult['data'] ?? $extractionResult;
@@ -158,15 +157,7 @@ function processCompanyEmails($companyId) {
                     $escalationReason = $extractionResult['escalation_reason'] ?? null;
 
                     // Strip fields not in enabledFields (enforce company settings)
-                    if ($enabledFields !== null) {
-                        $allFieldKeys = array_keys(getAllExtractionFields());
-                        foreach ($allFieldKeys as $fk) {
-                            if (!in_array($fk, $enabledFields) && isset($extracted[$fk])) {
-                                unset($extracted[$fk]);
-                                if (isset($extracted['confidence'][$fk])) unset($extracted['confidence'][$fk]);
-                            }
-                        }
-                    }
+                    $extracted = stripDisabledExtractionFields($extracted, $enabledFields);
 
                     // Map order_confirmation to proforma
                     $docType = normalizeDocumentType($extracted['documentType'] ?? $item['classification']['category'], $extracted);

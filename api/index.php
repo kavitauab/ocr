@@ -14,37 +14,43 @@ $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $path = preg_replace('#^/api#', '', $path);
 $pathParts = array_values(array_filter(explode('/', $path)));
 
-// Health check
+// Health check — public endpoint returns only basic status/version.
+// For full diagnostics pass `Authorization: Bearer <CRON_SECRET>` and get
+// cron_version, last_invoice_raw, companies_fields, etc.
 if (($pathParts[0] ?? '') === 'health') {
     try {
-        $db = getDBConnection();
-        $info = ['status' => 'ok', 'version' => API_VERSION, 'php' => PHP_VERSION, 'upload_max' => ini_get('upload_max_filesize'), 'post_max' => ini_get('post_max_size'), 'max_exec' => ini_get('max_execution_time')];
-        // Check uploads dir
-        $uploadDir = UPLOAD_DIR;
-        $info['upload_dir'] = $uploadDir;
-        $info['upload_dir_exists'] = is_dir($uploadDir);
-        $info['upload_dir_writable'] = is_writable($uploadDir);
-        $info['api_key_set'] = !empty(getAnthropicApiKey());
-        $info['opcache_cli'] = ini_get('opcache.enable_cli');
-        $info['opcache_enabled'] = function_exists('opcache_get_status') ? (opcache_get_status(false)['opcache_enabled'] ?? 'N/A') : 'no ext';
-        // Check cron version file
-        $cronVerFile = __DIR__ . '/_cron_version.txt';
-        $info['cron_version'] = file_exists($cronVerFile) ? trim(file_get_contents($cronVerFile)) : 'no cron run yet';
-        // Recent emails
-        $recentEmails = $db->query("SELECT id, subject, company_id FROM email_inbox ORDER BY received_date DESC LIMIT 5")->fetchAll();
-        $info['recent_emails'] = $recentEmails;
-        // Check if ocr_model column exists
-        $cols = $db->query("SHOW COLUMNS FROM invoices LIKE 'ocr_model'")->fetchAll();
-        $info['ocr_model_column_exists'] = count($cols) > 0;
-        // Check raw value for last invoice
-        $rawCheck = $db->query("SELECT id, ocr_model, ocr_escalated, processing_error FROM invoices ORDER BY updated_at DESC LIMIT 1")->fetch();
-        $info['last_invoice_raw'] = $rawCheck;
-        // Check last processed invoice model
-        $lastInv = $db->query("SELECT id, ocr_model, ocr_escalated, updated_at FROM invoices WHERE status='completed' ORDER BY updated_at DESC LIMIT 1")->fetch();
-        $info['last_invoice'] = $lastInv ? ['id' => $lastInv['id'], 'ocr_model' => $lastInv['ocr_model'], 'escalated' => $lastInv['ocr_escalated'], 'updated' => $lastInv['updated_at']] : null;
-        // Check extraction_fields for first company
-        $compFields = $db->query("SELECT id, name, extraction_fields FROM companies LIMIT 3")->fetchAll();
-        $info['companies_fields'] = array_map(fn($c) => ['id' => $c['id'], 'name' => $c['name'], 'extraction_fields' => $c['extraction_fields']], $compFields);
+        $info = [
+            'status' => 'ok',
+            'version' => API_VERSION,
+            'php' => PHP_VERSION,
+        ];
+
+        // Diagnostic fields only exposed when caller presents the CRON_SECRET.
+        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+        $isDiagnostic = defined('CRON_SECRET') && CRON_SECRET !== ''
+            && preg_match('/^Bearer\s+(\S+)$/', $authHeader, $m)
+            && hash_equals(CRON_SECRET, $m[1]);
+
+        if ($isDiagnostic) {
+            $db = getDBConnection();
+            $info['upload_dir'] = UPLOAD_DIR;
+            $info['upload_dir_exists'] = is_dir(UPLOAD_DIR);
+            $info['upload_dir_writable'] = is_writable(UPLOAD_DIR);
+            $info['api_key_set'] = !empty(getAnthropicApiKey());
+            $info['upload_max'] = ini_get('upload_max_filesize');
+            $info['post_max'] = ini_get('post_max_size');
+            $info['max_exec'] = ini_get('max_execution_time');
+            $info['opcache_cli'] = ini_get('opcache.enable_cli');
+            $info['opcache_enabled'] = function_exists('opcache_get_status')
+                ? (opcache_get_status(false)['opcache_enabled'] ?? 'N/A')
+                : 'no ext';
+            $cronVerFile = __DIR__ . '/_cron_version.txt';
+            $info['cron_version'] = file_exists($cronVerFile) ? trim(file_get_contents($cronVerFile)) : 'no cron run yet';
+            $lastInv = $db->query("SELECT id, ocr_model, ocr_escalated, updated_at FROM invoices WHERE status='completed' ORDER BY updated_at DESC LIMIT 1")->fetch();
+            $info['last_invoice'] = $lastInv ?: null;
+            $info['ocr_model_column_exists'] = (bool)$db->query("SHOW COLUMNS FROM invoices LIKE 'ocr_model'")->fetch();
+        }
+
         sendJSON($info);
     } catch (\Throwable $e) {
         sendJSON(['status' => 'error', 'message' => $e->getMessage()], 500);

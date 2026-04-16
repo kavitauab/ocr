@@ -43,10 +43,11 @@ function validateInvoiceForVecticum($metadata) {
     return null;
 }
 
-function getVecticumToken($company) {
-    if (!empty($company['vecticum_access_token']) && !empty($company['vecticum_token_expires'])) {
+function getVecticumToken($company, $forceRefresh = false) {
+    if (!$forceRefresh && !empty($company['vecticum_access_token']) && !empty($company['vecticum_token_expires'])) {
         $expires = strtotime($company['vecticum_token_expires']);
-        if ($expires > time() + 300) {
+        // 10-minute buffer to avoid token expiring mid-request on slow Vecticum calls.
+        if ($expires > time() + 600) {
             return $company['vecticum_access_token'];
         }
     }

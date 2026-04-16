@@ -80,6 +80,20 @@ function compressImage($imageData, $ext) {
 }
 
 function getFilePath($storedFilename) {
+    // Defense in depth: storedFilename is generally a server-generated ID path,
+    // but callers sometimes pass user-influenced values (additional_files JSON).
+    // Reject traversal, null bytes, absolute paths, and double slashes.
+    if (!is_string($storedFilename) || $storedFilename === '') {
+        throw new \RuntimeException('Invalid stored filename');
+    }
+    if (strpos($storedFilename, "\0") !== false
+        || strpos($storedFilename, '..') !== false
+        || strpos($storedFilename, '//') !== false
+        || $storedFilename[0] === '/'
+        || preg_match('/^[a-zA-Z]:\\\\/', $storedFilename)
+    ) {
+        throw new \RuntimeException('Invalid stored filename');
+    }
     return UPLOAD_DIR . '/' . $storedFilename;
 }
 
