@@ -133,6 +133,45 @@ function normalizeVecticumCompanyName($value) {
     return strtolower(implode(' ', $parts));
 }
 
+function tokenizeVecticumCompanyName($value) {
+    $normalized = normalizeVecticumCompanyName($value);
+    if ($normalized === '') return [];
+
+    return array_values(array_filter(explode(' ', $normalized), function ($token) {
+        return strlen($token) >= 4;
+    }));
+}
+
+function isCompatiblePartnerNameFallback($extractedName, $partnerName) {
+    $left = normalizeVecticumCompanyName($extractedName);
+    $right = normalizeVecticumCompanyName($partnerName);
+
+    if ($left === '' || $right === '') {
+        return false;
+    }
+    if ($left === $right) {
+        return true;
+    }
+
+    if (strlen($left) >= 8 && strpos($right, $left) !== false) {
+        return true;
+    }
+    if (strlen($right) >= 8 && strpos($left, $right) !== false) {
+        return true;
+    }
+
+    $leftTokens = tokenizeVecticumCompanyName($left);
+    $rightTokens = tokenizeVecticumCompanyName($right);
+    if (empty($leftTokens) || empty($rightTokens)) {
+        return false;
+    }
+
+    $overlap = array_intersect($leftTokens, $rightTokens);
+    $requiredOverlap = min(count($leftTokens), count($rightTokens)) >= 2 ? 2 : 1;
+
+    return count($overlap) >= $requiredOverlap;
+}
+
 function findVecticumPartner($company, $vatId, $companyName, $token = null) {
     if (!$token) $token = getVecticumToken($company);
     if (empty($company['vecticum_partner_endpoint'])) return null;
@@ -161,10 +200,10 @@ function findVecticumPartner($company, $vatId, $companyName, $token = null) {
                 return ['id' => $p['id'], 'name' => $p['name'] ?? ''];
             }
         }
-        // Try matching company code against VAT suffix
+        // Fallback to company code only when the extracted vendor name is compatible with the partner name.
         foreach ($partners as $p) {
             $pCode = trim($p['companyCode'] ?? '');
-            if ($pCode && strpos($normalizedVat, $pCode) !== false) {
+            if ($pCode && strpos($normalizedVat, $pCode) !== false && isCompatiblePartnerNameFallback($companyName, $p['name'] ?? '')) {
                 return ['id' => $p['id'], 'name' => $p['name'] ?? ''];
             }
         }
@@ -172,12 +211,8 @@ function findVecticumPartner($company, $vatId, $companyName, $token = null) {
 
     // Fallback: match by company name (fuzzy)
     if ($companyName) {
-        $cleanName = normalizeVecticumCompanyName($companyName);
-
         foreach ($partners as $p) {
-            $pClean = normalizeVecticumCompanyName($p['name'] ?? '');
-
-            if ($pClean && $cleanName && ($pClean === $cleanName || strpos($pClean, $cleanName) !== false || strpos($cleanName, $pClean) !== false)) {
+            if (isCompatiblePartnerNameFallback($companyName, $p['name'] ?? '')) {
                 return ['id' => $p['id'], 'name' => $p['name'] ?? ''];
             }
         }

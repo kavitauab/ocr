@@ -18,3 +18,4 @@
 - Configuration fields that are labeled as exact external record IDs must stay strict; do not silently accept overloaded values like author IDs, names, or emails in an inbox-setup ID field.
 - Monetary values sent to external systems must be normalized to fixed decimal strings; do not send raw floating-point results in API payloads.
 - Before sending anything to Vecticum, validate invoice identity completeness. Documents with unknown/missing invoice number or vendor identity must be rejected and treated as invalid documents, not uploaded.
+- When OCR documents show both a trading/venue name and a legal issuer, extraction must use the legal issuer for vendor fields. Partner auto-match must not rely on loose fallbacks that contradict the extracted company name.

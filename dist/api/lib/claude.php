@@ -7,12 +7,12 @@ function getAllExtractionFields() {
         'invoiceNumber' => ['type' => 'string', 'description' => 'The invoice number/ID. If the document shows a series and number separately (e.g. "Serija TE2023 Nr. 285"), combine them with a dash (e.g. "TE2023-285"). Remove prefixes like "Nr.", "No.", "Serija" etc. If the invoice number is already a single value (e.g. "SJ-152138"), keep it as-is.'],
         'invoiceDate' => ['type' => 'string', 'description' => 'Invoice issue date in YYYY-MM-DD format'],
         'dueDate' => ['type' => ['string', 'null'], 'description' => 'Payment due date in YYYY-MM-DD format, or null if not stated'],
-        'vendorName' => ['type' => 'string', 'description' => 'Name of the company/person issuing the invoice'],
-        'vendorAddress' => ['type' => ['string', 'null'], 'description' => 'Full address of the vendor'],
-        'vendorVatId' => ['type' => ['string', 'null'], 'description' => 'VAT/tax ID of the vendor'],
-        'buyerName' => ['type' => ['string', 'null'], 'description' => 'Name of the buyer/recipient'],
-        'buyerAddress' => ['type' => ['string', 'null'], 'description' => 'Full address of the buyer'],
-        'buyerVatId' => ['type' => ['string', 'null'], 'description' => 'VAT/tax ID of the buyer'],
+        'vendorName' => ['type' => 'string', 'description' => 'Legal name of the company/person issuing the invoice. Prefer the legal entity shown next to VAT number, company code, reg. no., bank details, or footer issuer details. Do not use venue, hotel, store, branch, or brand/trading name when a different legal seller is shown.'],
+        'vendorAddress' => ['type' => ['string', 'null'], 'description' => 'Full address of the legal vendor/issuer'],
+        'vendorVatId' => ['type' => ['string', 'null'], 'description' => 'VAT/tax ID of the legal vendor/issuer'],
+        'buyerName' => ['type' => ['string', 'null'], 'description' => 'Legal name of the buyer/recipient'],
+        'buyerAddress' => ['type' => ['string', 'null'], 'description' => 'Full address of the buyer/recipient'],
+        'buyerVatId' => ['type' => ['string', 'null'], 'description' => 'VAT/tax ID of the buyer/recipient'],
         'subtotalAmount' => ['type' => ['number', 'null'], 'description' => 'Amount explicitly labeled Sub Total/Subtotal, before freight/shipping/insurance/handling/other charges and before tax if shown separately'],
         'taxAmount' => ['type' => ['number', 'null'], 'description' => 'Total tax/VAT amount, or null when not shown'],
         'totalAmount' => ['type' => 'number', 'description' => 'Final payable amount explicitly labeled Total/Grand Total/Amount Due/Balance Due, after freight/shipping/insurance/handling/other charges and tax. Never use Sub Total/Subtotal here when a final total exists'],
@@ -441,7 +441,9 @@ Rules:
 8. For multi-page documents, examine ALL pages.
 9. Do not label a document as proforma unless it explicitly says proforma, advance invoice, prepayment, or deposit invoice. A paid invoice/payment receipt that represents the actual invoice should still be classified as invoice.
 10. Distinguish Sub Total/Subtotal from the final Total/Grand Total/Amount Due. totalAmount must be the final payable total, not the subtotal.
-11. If the document shows freight, shipping, insurance, handling, or other charges between subtotal and total, include them in totalAmount.";
+11. If the document shows freight, shipping, insurance, handling, or other charges between subtotal and total, include them in totalAmount.
+12. For vendor/seller fields, prefer the legal issuing company, especially the entity shown with VAT number, company code, bank account, or footer legal details. Do not use a hotel, venue, store, branch, or brand name if the legal issuer is a different company.
+13. For buyer fields, extract the legal billed customer, not the seller/issuer.";
 
     // Build tool properties based on enabled fields
     $allFields = getAllExtractionFields();
