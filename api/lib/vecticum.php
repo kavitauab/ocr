@@ -221,12 +221,49 @@ function getVecticumDefaultAuthor($company, $token = null) {
     $inboxes = json_decode($response, true);
     if (!is_array($inboxes)) return null;
 
-    // Find the first inbox with a defaultAuthor set
+    $mailboxEmail = strtolower(trim((string)($company['ms_sender_email'] ?? '')));
+    $fallbacks = [];
+
+    $collectEmails = function ($value) use (&$collectEmails) {
+        $emails = [];
+        if (is_array($value)) {
+            foreach ($value as $item) {
+                foreach ($collectEmails($item) as $email) {
+                    $emails[] = $email;
+                }
+            }
+            return array_values(array_unique($emails));
+        }
+        if (is_string($value)) {
+            if (preg_match_all('/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i', $value, $matches)) {
+                foreach ($matches[0] as $match) {
+                    $emails[] = strtolower(trim($match));
+                }
+            }
+        }
+        return array_values(array_unique($emails));
+    };
+
     foreach ($inboxes as $inbox) {
-        if (!empty($inbox['defaultAuthor']['id'])) {
-            return ['id' => $inbox['defaultAuthor']['id'], 'name' => $inbox['defaultAuthor']['name'] ?? ''];
+        if (empty($inbox['defaultAuthor']['id'])) {
+            continue;
+        }
+
+        $author = ['id' => $inbox['defaultAuthor']['id'], 'name' => $inbox['defaultAuthor']['name'] ?? ''];
+        $fallbacks[] = $author;
+
+        if ($mailboxEmail !== '') {
+            $inboxEmails = $collectEmails($inbox);
+            if (in_array($mailboxEmail, $inboxEmails, true)) {
+                return $author;
+            }
         }
     }
+
+    if (count($fallbacks) === 1) {
+        return $fallbacks[0];
+    }
+
     return null;
 }
 
@@ -512,11 +549,14 @@ function uploadToVecticum($company, $metadata) {
             $body['exchangeRate'] = $exchangeRate;
         }
 
-        // Match author only by sender email. If no exact person match exists,
-        // leave author unset so Vecticum can apply its own process defaults.
+        // Match author by sender email. If no exact person match exists,
+        // fall back to the defaultAuthor of the matching Vecticum inbox/mail endpoint.
         $author = null;
         if (!empty($metadata['_senderEmail'])) {
             $author = findVecticumAuthor($company, $metadata['_senderEmail'], $token);
+        }
+        if (!$author) {
+            $author = getVecticumDefaultAuthor($company, $token);
         }
         if ($author) {
             $body['author'] = $author;

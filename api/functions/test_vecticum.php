@@ -260,9 +260,6 @@ if ($action === 'test-facet') {
     ];
     if (!empty($invoice['vendor_vat_id'])) $body['counterpartyCode'] = $invoice['vendor_vat_id'];
 
-    $author = getVecticumDefaultAuthor($company, $token);
-    if ($author) $body['author'] = $author;
-
     $partner = findVecticumPartner($company, $invoice['vendor_vat_id'] ?? '', $invoice['vendor_name'] ?? '', $token);
     if ($partner) $body['counterparty'] = $partner;
 
@@ -1049,10 +1046,6 @@ if ($action === 'full-send') {
         'currency' => ['id' => 'O18j5zeck1yHYb5W4H86', 'name' => 'EUR'],
     ], fn($v) => $v !== null && $v !== '');
 
-    if (!empty($company['vecticum_author_id'])) {
-        $body['author'] = ['id' => $company['vecticum_author_id'], 'name' => $company['vecticum_author_name'] ?? ''];
-    }
-
     $ch = curl_init($baseUrl . '/' . $companyEndpoint);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -1177,10 +1170,6 @@ if ($action === 'test-file-upload') {
             'counterpartyCode' => $invoice['vendor_vat_id'],
             'currency' => ['id' => 'O18j5zeck1yHYb5W4H86', 'name' => 'EUR'],
         ], fn($v) => $v !== null && $v !== '');
-
-        if (!empty($company['vecticum_author_id'])) {
-            $body['author'] = ['id' => $company['vecticum_author_id'], 'name' => $company['vecticum_author_name'] ?? ''];
-        }
 
         $ch = curl_init($baseUrl . '/' . $companyEndpoint);
         curl_setopt_array($ch, [
