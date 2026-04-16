@@ -173,6 +173,12 @@ export default function CompanyEdit() {
   };
 
   const handleAddMember = () => {
+    // Defense in depth: the UI hides the form for non-admins, but we re-check
+    // here so a role change between page load and click can't bypass it.
+    if (!canManageMembers) {
+      toast.error("You don't have permission to add members");
+      return;
+    }
     if (memberMode === "search" && selectedUser) {
       addMemberMutation.mutate({ email: selectedUser.email, role: memberForm.role });
     } else if (memberMode === "create") {

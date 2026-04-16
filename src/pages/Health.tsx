@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { formatDateTime } from "@/lib/ui-utils";
+import { formatDateTime, formatDateISO } from "@/lib/ui-utils";
 import {
   Activity, CheckCircle, AlertTriangle, Clock, RotateCcw,
   DollarSign, Cpu, Gauge, Bot,
@@ -28,13 +28,14 @@ function fmtTokens(v: number): string {
 }
 
 function getPresetDates(period: "daily" | "weekly" | "monthly") {
+  // Use local-time dates (backend runs in Europe/Vilnius and parses these
+  // as plain dates without timezone shift). toISOString() would convert to
+  // UTC and potentially shift the date by one day near midnight.
   const end = new Date();
-  end.setHours(0, 0, 0, 0);
-  const start = new Date(end);
+  const start = new Date();
   if (period === "weekly") start.setDate(start.getDate() - 6);
   if (period === "monthly") start.setDate(start.getDate() - 29);
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  return { dateFrom: fmt(start), dateTo: fmt(end) };
+  return { dateFrom: formatDateISO(start), dateTo: formatDateISO(end) };
 }
 
 function ConfidenceBar({ value, label }: { value: number | null; label: string }) {

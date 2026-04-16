@@ -6,6 +6,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Avatar } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownItem, DropdownSeparator } from "@/components/ui/dropdown-menu";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   LayoutDashboard,
   FileText,
@@ -43,6 +44,15 @@ export default function Layout() {
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
+
+  // Body scroll lock while mobile drawer is open
+  useEffect(() => {
+    if (mobileOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [mobileOpen]);
 
   // Set browser tab title based on route
   useEffect(() => {
@@ -387,7 +397,9 @@ export default function Layout() {
       {/* Main content */}
       <main className="flex-1 min-h-screen sidebar-transition pt-14 lg:pt-0 lg:ml-52">
         <div className="p-4 md:p-5 lg:p-6 animate-fade-in">
-          <Outlet />
+          <ErrorBoundary key={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </div>
       </main>
     </div>

@@ -88,3 +88,23 @@ export function formatUsd(value: number | string | null | undefined): string {
   if (Number.isNaN(num)) return "\u2014";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 4 }).format(num);
 }
+
+/**
+ * Return a YYYY-MM-DD string for the given local date (default: today).
+ * Used by date filters that pass plain dates to the API.
+ */
+export function formatDateISO(date: Date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Return YYYY-MM-DD for N days ago (local).
+ */
+export function formatDateISODaysAgo(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return formatDateISO(d);
+}

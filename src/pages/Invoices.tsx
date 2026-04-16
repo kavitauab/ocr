@@ -3,7 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import { useCompany } from "@/lib/company";
 import { useAuth } from "@/lib/auth";
+import { authorizedUrl } from "@/lib/auth-utils";
 import api from "@/api/client";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -122,13 +124,13 @@ export default function Invoices() {
   const hasAnyFilter = !!status || hasLifecycleFilters || !!searchParams.get("search");
 
   const handleExport = (format: "csv" | "json") => {
-    const token = localStorage.getItem("token");
-    const exportParams = new URLSearchParams(searchParams);
-    if (!exportParams.get("companyId") && effectiveCompanyId) exportParams.set("companyId", effectiveCompanyId);
-    if (token) exportParams.set("access_token", token);
-    if (format === "json") exportParams.set("format", "json");
-    const query = exportParams.toString();
-    window.location.href = query ? `/api/invoices/export?${query}` : "/api/invoices/export";
+    const exportParams: Record<string, string> = {};
+    searchParams.forEach((v, k) => { exportParams[k] = v; });
+    if (!exportParams.companyId && effectiveCompanyId) exportParams.companyId = effectiveCompanyId;
+    if (format === "json") exportParams.format = "json";
+    const url = authorizedUrl("/api/invoices/export", exportParams);
+    if (!url) { toast.error("Session expired — please log in again"); return; }
+    window.location.href = url;
   };
 
   const colCount = isSuperadmin && !groupByCompany ? 9 : 8;

@@ -155,11 +155,8 @@ class Invoice extends BaseResource {
         }
 
         if ($search) {
-            $conditions[] = "(i.invoice_number LIKE :search OR i.vendor_name LIKE :search2 OR i.buyer_name LIKE :search3 OR i.original_filename LIKE :search4)";
+            $conditions[] = "(i.invoice_number LIKE :search OR i.vendor_name LIKE :search OR i.buyer_name LIKE :search OR i.original_filename LIKE :search)";
             $params['search'] = "%$search%";
-            $params['search2'] = "%$search%";
-            $params['search3'] = "%$search%";
-            $params['search4'] = "%$search%";
         }
 
         if ($status) {
@@ -206,7 +203,15 @@ class Invoice extends BaseResource {
         $stmt->execute($params);
         $total = (int)$stmt->fetchColumn();
 
-        $sql = "SELECT i.*, c.name as company_name, c.code as company_code, c.vat_number as company_vat_number, c.buyer_keywords as company_buyer_keywords FROM invoices i LEFT JOIN companies c ON c.id = i.company_id $where ORDER BY i.`$orderField` $orderDir LIMIT $limit OFFSET $offset";
+        // Explicit column list: skip raw_extraction (5-50KB per row, never used by list UIs)
+        $invoiceCols = 'i.id, i.company_id, i.email_inbox_id, i.source, i.original_filename, i.stored_filename, '
+            . 'i.file_type, i.file_size, i.status, i.document_type, i.invoice_number, i.invoice_date, i.due_date, '
+            . 'i.vendor_name, i.vendor_address, i.vendor_vat_id, i.buyer_name, i.buyer_address, i.buyer_vat_id, '
+            . 'i.subtotal_amount, i.tax_amount, i.total_amount, i.currency, i.po_number, i.payment_terms, i.bank_details, '
+            . 'i.confidence_scores, i.processing_error, i.skip_reason, i.additional_files, i.vecticum_id, i.vecticum_error, '
+            . 'i.vecticum_sent_at, i.ocr_sent_at, i.ocr_returned_at, i.ocr_model, i.ocr_escalated, i.ocr_escalation_reason, '
+            . 'i.issue_reply_sent_at, i.issue_reply_reason, i.issue_reply_error, i.created_at, i.updated_at';
+        $sql = "SELECT $invoiceCols, c.name as company_name, c.code as company_code, c.vat_number as company_vat_number, c.buyer_keywords as company_buyer_keywords FROM invoices i LEFT JOIN companies c ON c.id = i.company_id $where ORDER BY i.`$orderField` $orderDir LIMIT $limit OFFSET $offset";
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
         $items = $stmt->fetchAll();
@@ -347,11 +352,8 @@ class Invoice extends BaseResource {
         }
 
         if ($search) {
-            $conditions[] = "(i.invoice_number LIKE :search OR i.vendor_name LIKE :search2 OR i.buyer_name LIKE :search3 OR i.original_filename LIKE :search4)";
+            $conditions[] = "(i.invoice_number LIKE :search OR i.vendor_name LIKE :search OR i.buyer_name LIKE :search OR i.original_filename LIKE :search)";
             $params['search'] = "%$search%";
-            $params['search2'] = "%$search%";
-            $params['search3'] = "%$search%";
-            $params['search4'] = "%$search%";
         }
 
         if ($status) {

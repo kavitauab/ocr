@@ -101,16 +101,28 @@ class Email extends BaseResource {
         $stmt->execute($params);
         $emails = $stmt->fetchAll();
 
-        // Enrich each email with its attachment/invoice details
-        $db = $this->db;
-        $enriched = array_map(function($email) use ($db) {
+        // Batch-fetch all related invoices in a single query (was N+1).
+        $emailIds = array_values(array_filter(array_map(fn($e) => $e['id'] ?? null, $emails)));
+        $invoicesByEmailId = [];
+        if (!empty($emailIds)) {
+            $placeholders = implode(',', array_fill(0, count($emailIds), '?'));
+            $invStmt = $this->db->prepare(
+                "SELECT id, email_inbox_id, original_filename, status, document_type, skip_reason, additional_files
+                 FROM invoices
+                 WHERE email_inbox_id IN ($placeholders)
+                 ORDER BY created_at"
+            );
+            $invStmt->execute($emailIds);
+            foreach ($invStmt->fetchAll() as $inv) {
+                $invoicesByEmailId[$inv['email_inbox_id']][] = $inv;
+            }
+        }
+
+        $enriched = array_map(function($email) use ($invoicesByEmailId) {
+            $emailRowId = $email['id'] ?? null;
             $email = snakeToCamel($email);
-            // Get invoices linked to this email
-            $invStmt = $db->prepare("SELECT id, original_filename, status, document_type, skip_reason, additional_files FROM invoices WHERE email_inbox_id = :eid ORDER BY created_at");
-            $invStmt->execute(['eid' => $email['id']]);
-            $invoices = $invStmt->fetchAll();
             $atts = [];
-            foreach ($invoices as $inv) {
+            foreach (($invoicesByEmailId[$emailRowId] ?? []) as $inv) {
                 $atts[] = [
                     'invoiceId' => $inv['id'],
                     'filename' => $inv['original_filename'],
@@ -118,13 +130,12 @@ class Email extends BaseResource {
                     'documentType' => $inv['document_type'],
                     'skipReason' => $inv['skip_reason'],
                 ];
-                // Include additional files linked to this invoice
                 $af = json_decode($inv['additional_files'] ?? '[]', true);
                 if (is_array($af)) {
                     foreach ($af as $f) {
                         $atts[] = [
                             'invoiceId' => $inv['id'],
-                            'filename' => $f['filename'],
+                            'filename' => $f['filename'] ?? null,
                             'status' => 'additional',
                             'documentType' => $f['documentType'] ?? null,
                             'skipReason' => $f['documentDetail'] ?? null,

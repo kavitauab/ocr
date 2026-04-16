@@ -63,11 +63,14 @@ export default function Upload() {
     setResults(initial);
     setUploading(true);
 
+    let ok = 0;
+    let fail = 0;
     for (let i = 0; i < files.length; i++) {
       setResults((prev) => prev.map((r, idx) => idx === i ? { ...r, status: "uploading" } : r));
 
       try {
         const result: any = await uploadInvoice(files[i], selectedCompany.id);
+        ok++;
         setResults((prev) =>
           prev.map((r, idx) =>
             idx === i
@@ -76,6 +79,7 @@ export default function Upload() {
           )
         );
       } catch (err: any) {
+        fail++;
         const status = err.response?.status;
         const errorMsg = status === 429
           ? `Rate limit reached. ${err.response?.data?.error || "Try again later."}`
@@ -86,8 +90,13 @@ export default function Upload() {
     }
 
     setUploading(false);
-    const doneCount = files.length;
-    toast.success(`Processed ${doneCount} file${doneCount > 1 ? "s" : ""}`);
+    if (ok > 0 && fail === 0) {
+      toast.success(`Uploaded ${ok} file${ok > 1 ? "s" : ""}`);
+    } else if (ok > 0 && fail > 0) {
+      toast(`Uploaded ${ok}, ${fail} failed`, { icon: "⚠️" });
+    } else if (fail > 0) {
+      toast.error(`${fail} file${fail > 1 ? "s" : ""} failed to upload`);
+    }
   }, [selectedCompany]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { getStatusClasses, formatRelativeTime } from "@/lib/ui-utils";
+import { authorizedUrl } from "@/lib/auth-utils";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
@@ -130,7 +131,6 @@ function PreviewPanel({
 }) {
   const additionalFiles = invoice.additionalFiles || [];
   const [selectedAdditionalIdx, setSelectedAdditionalIdx] = useState(0);
-  const token = localStorage.getItem("token");
 
   if (additionalFiles.length === 0) {
     // No additional files — simple preview without tabs
@@ -155,7 +155,10 @@ function PreviewPanel({
     );
   }
 
-  const additionalFileUrl = `/api/invoices/${invoice.id}/additional-file?index=${selectedAdditionalIdx}&access_token=${token}`;
+  const additionalFileUrl = authorizedUrl(
+    `/api/invoices/${invoice.id}/additional-file`,
+    { index: String(selectedAdditionalIdx) }
+  ) ?? "";
   const selectedFile = additionalFiles[selectedAdditionalIdx];
 
   return (
@@ -228,8 +231,7 @@ export default function InvoiceDetail() {
   const [replyDialogOpen, setReplyDialogOpen] = useState(false);
   const [replyMessage, setReplyMessage] = useState("");
 
-  const token = localStorage.getItem("token");
-  const fileUrl = `/api/invoices/${id}/file?access_token=${encodeURIComponent(token || "")}`;
+  const fileUrl = authorizedUrl(`/api/invoices/${id}/file`) ?? "";
 
   const { data, isLoading } = useQuery({
     queryKey: ["invoice", id],
@@ -334,29 +336,29 @@ export default function InvoiceDetail() {
   const saveInvoice = async (sendToVecticum = false) => {
     try {
       await updateMutation.mutateAsync(form);
-      await queryClient.invalidateQueries({ queryKey: ["invoice", id] });
       setEditing(false);
-      toast.success("Invoice updated");
-
       if (sendToVecticum) {
         const response = await vecticumMutation.mutateAsync();
-        await queryClient.invalidateQueries({ queryKey: ["invoice", id] });
-        toast.success(response.message || "Sent to Vecticum");
+        toast.success(response.message || "Invoice updated and sent to Vecticum");
+      } else {
+        toast.success("Invoice updated");
       }
     } catch (err: any) {
-      await queryClient.invalidateQueries({ queryKey: ["invoice", id] });
       toast.error(getErrorMessage(err, sendToVecticum ? "Failed to update and send" : "Failed to update"));
+    } finally {
+      // Single invalidation after all mutations settle, not 2-3 during the run.
+      queryClient.invalidateQueries({ queryKey: ["invoice", id] });
     }
   };
 
   const sendToVecticum = async () => {
     try {
       const response = await vecticumMutation.mutateAsync();
-      await queryClient.invalidateQueries({ queryKey: ["invoice", id] });
       toast.success(response.message || "Sent to Vecticum");
     } catch (err: any) {
-      await queryClient.invalidateQueries({ queryKey: ["invoice", id] });
       toast.error(getErrorMessage(err, "Failed"));
+    } finally {
+      queryClient.invalidateQueries({ queryKey: ["invoice", id] });
     }
   };
 
@@ -436,7 +438,11 @@ export default function InvoiceDetail() {
           >
             Next
           </Button>
-          <Button variant="outline" size="sm" className="gap-1 h-7 text-xs px-2.5" onClick={() => { window.open(`/api/invoices/${id}/metadata?access_token=${encodeURIComponent(token || "")}`, "_blank"); }}>
+          <Button variant="outline" size="sm" className="gap-1 h-7 text-xs px-2.5" onClick={() => {
+            const url = authorizedUrl(`/api/invoices/${id}/metadata`);
+            if (!url) { toast.error("Session expired — please log in again"); return; }
+            window.open(url, "_blank");
+          }}>
             <Download className="h-3 w-3" />JSON
           </Button>
           {canReplyToSender && (
