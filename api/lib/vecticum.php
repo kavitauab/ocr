@@ -253,8 +253,19 @@ function getVecticumDefaultAuthor($company, $token = null) {
         $author = ['id' => $inbox['defaultAuthor']['id'], 'name' => $inbox['defaultAuthor']['name'] ?? ''];
         $fallbacks[] = $author;
 
-        if ($preferredInboxId !== '' && trim((string)($inbox['id'] ?? '')) === $preferredInboxId) {
-            return $author;
+        if ($preferredInboxId !== '') {
+            $preferredNeedle = strtolower($preferredInboxId);
+            $candidateValues = [
+                strtolower(trim((string)($inbox['id'] ?? ''))),
+                strtolower(trim((string)($inbox['defaultAuthor']['id'] ?? ''))),
+                strtolower(trim((string)($inbox['email'] ?? ''))),
+                strtolower(trim((string)($inbox['emailPreview'] ?? ''))),
+                strtolower(trim((string)($inbox['emailPrefix'] ?? ''))),
+                strtolower(trim((string)($inbox['name'] ?? ''))),
+            ];
+            if (in_array($preferredNeedle, array_filter($candidateValues), true)) {
+                return $author;
+            }
         }
 
         if ($mailboxEmail !== '') {
