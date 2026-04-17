@@ -560,6 +560,10 @@ function uploadToVecticum($company, $metadata) {
             'paymentDate' => $metadata['dueDate'] ?? null,
             'invoiceAmount' => $invoiceAmount,
             'vatAmount' => $vatAmount,
+            // "PVM suma sąskaitos valiuta" in the UI — VAT amount in invoice currency.
+            // When invoice currency matches company base currency it's the same value,
+            // but Vecticum doesn't auto-copy from vatAmount, so we set it explicitly.
+            'vatSumInvoice' => $vatAmount,
             'totalAmount' => $totalAmount,
             'totalInclVat' => $totalInclVat,
         ];
