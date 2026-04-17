@@ -488,6 +488,64 @@ if ($action === 'debug-email-attachments') {
     sendJSON(['action' => 'debug-email-attachments', 'email' => $email['subject'], 'attachmentCount' => count($attachments), 'attachments' => $summary]);
 }
 
+if ($action === 'raw-graph-query') {
+    // Query Microsoft Graph directly without any filters — to find missed emails
+    require_once __DIR__ . '/../lib/microsoft_graph.php';
+    $days = max(1, min(30, intval($_GET['days'] ?? 3)));
+    $fromFilter = trim($_GET['from'] ?? '');
+
+    $token = getM365Token($company);
+    $folder = $company['ms_fetch_folder'] ?: 'INBOX';
+    $email = $company['ms_sender_email'];
+    $since = gmdate('Y-m-d\TH:i:s\Z', time() - $days * 86400);
+
+    $q = ["\$top" => '100', "\$orderby" => 'receivedDateTime desc', "\$select" => 'id,subject,from,receivedDateTime,hasAttachments,isRead'];
+    $filter = "receivedDateTime ge $since";
+    if ($fromFilter) $filter .= " and contains(from/emailAddress/address, '" . addslashes($fromFilter) . "')";
+    $q["\$filter"] = $filter;
+    $url = "https://graph.microsoft.com/v1.0/users/$email/mailFolders/$folder/messages?" . http_build_query($q);
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ["Authorization: Bearer $token"],
+        CURLOPT_TIMEOUT => 30,
+    ]);
+    $response = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $data = json_decode($response, true);
+    $messages = $data['value'] ?? [];
+
+    // Cross-reference with our DB
+    $db = getDBConnection();
+    $summary = ['total_in_graph' => count($messages), 'in_db' => 0, 'missing_from_db' => 0, 'messages' => []];
+    foreach ($messages as $m) {
+        $stmt = $db->prepare("SELECT id, status FROM email_inbox WHERE message_id = :m LIMIT 1");
+        $stmt->execute(['m' => $m['id']]);
+        $row = $stmt->fetch();
+        $inDb = (bool)$row;
+        if ($inDb) $summary['in_db']++; else $summary['missing_from_db']++;
+        $summary['messages'][] = [
+            'subject' => $m['subject'] ?? '',
+            'from' => $m['from']['emailAddress']['address'] ?? '',
+            'received' => $m['receivedDateTime'] ?? '',
+            'isRead' => $m['isRead'] ?? null,
+            'hasAttachments' => $m['hasAttachments'] ?? null,
+            'in_db' => $inDb,
+            'db_status' => $row['status'] ?? null,
+        ];
+    }
+    sendJSON([
+        'action' => 'raw-graph-query',
+        'httpCode' => $code,
+        'since' => $since,
+        'fromFilter' => $fromFilter,
+        'summary' => $summary,
+    ]);
+}
+
 if ($action === 'fetch') {
     // Fetch any Vecticum endpoint - for exploration
     $endpoint = $_GET['endpoint'] ?? '';
