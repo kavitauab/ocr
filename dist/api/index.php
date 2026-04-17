@@ -131,10 +131,13 @@ if (($pathParts[0] ?? '') === 'health') {
                     'id' => $c['id'],
                     'code' => $c['code'],
                     'name' => $c['name'],
+                    'ms_sender_email' => $c['ms_sender_email'],
+                    'ms_fetch_enabled' => (int)$c['ms_fetch_enabled'],
+                    'ms_fetch_folder' => $c['ms_fetch_folder'],
                     'tax_enabled' => $parsed === null ? 'ALL' : (in_array('taxAmount', $parsed ?: []) ? 'YES' : 'NO'),
                     'email_inbox_counts' => $byStatus,
                 ];
-            }, $db->query("SELECT id, name, code, extraction_fields FROM companies")->fetchAll() ?: []);
+            }, $db->query("SELECT id, name, code, extraction_fields, ms_sender_email, ms_fetch_enabled, ms_fetch_folder FROM companies")->fetchAll() ?: []);
         }
 
         sendJSON($info);
