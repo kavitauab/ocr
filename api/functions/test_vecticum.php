@@ -522,11 +522,20 @@ if ($action === 'raw-graph-query') {
     $db = getDBConnection();
     $summary = ['total_in_graph' => count($messages), 'in_db' => 0, 'missing_from_db' => 0, 'messages' => []];
     foreach ($messages as $m) {
-        $stmt = $db->prepare("SELECT id, status FROM email_inbox WHERE message_id = :m LIMIT 1");
+        // Case-sensitive exact match (guard against utf8mb4_unicode_ci collation collision)
+        $stmt = $db->prepare("SELECT id, status, subject FROM email_inbox WHERE message_id = :m COLLATE utf8mb4_bin LIMIT 1");
         $stmt->execute(['m' => $m['id']]);
         $row = $stmt->fetch();
         $inDb = (bool)$row;
+        // Also check case-insensitive match to detect collisions
+        $stmt2 = $db->prepare("SELECT id, subject FROM email_inbox WHERE message_id = :m LIMIT 1");
+        $stmt2->execute(['m' => $m['id']]);
+        $row2 = $stmt2->fetch();
+        $ciMatchDifferent = $row2 && (!$row || $row['id'] !== $row2['id']);
         if ($inDb) $summary['in_db']++; else $summary['missing_from_db']++;
+        if ($ciMatchDifferent) {
+            $summary['case_collisions'] = ($summary['case_collisions'] ?? 0) + 1;
+        }
         $summary['messages'][] = [
             'subject' => $m['subject'] ?? '',
             'from' => $m['from']['emailAddress']['address'] ?? '',
@@ -536,6 +545,7 @@ if ($action === 'raw-graph-query') {
             'in_db' => $inDb,
             'db_status' => $row['status'] ?? null,
             'db_row_id' => $row['id'] ?? null,
+            'ci_match_different_row' => $ciMatchDifferent,
             'graph_id_prefix' => substr($m['id'] ?? '', 0, 20),
         ];
         // Also check which company the DB row belongs to (to catch cross-company collisions)
