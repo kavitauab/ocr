@@ -535,7 +535,15 @@ if ($action === 'raw-graph-query') {
             'hasAttachments' => $m['hasAttachments'] ?? null,
             'in_db' => $inDb,
             'db_status' => $row['status'] ?? null,
+            'db_row_id' => $row['id'] ?? null,
+            'graph_id_prefix' => substr($m['id'] ?? '', 0, 20),
         ];
+        // Also check which company the DB row belongs to (to catch cross-company collisions)
+        if ($inDb) {
+            $ccStmt = $db->prepare("SELECT c.name FROM email_inbox e LEFT JOIN companies c ON c.id = e.company_id WHERE e.id = :id");
+            $ccStmt->execute(['id' => $row['id']]);
+            $summary['messages'][count($summary['messages']) - 1]['db_company'] = $ccStmt->fetchColumn();
+        }
     }
     sendJSON([
         'action' => 'raw-graph-query',
