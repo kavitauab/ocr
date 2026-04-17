@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { getStatusClasses, formatRelativeTime } from "@/lib/ui-utils";
 import { authorizedUrl } from "@/lib/auth-utils";
+import { EmptyState } from "@/components/EmptyState";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
@@ -297,11 +298,12 @@ export default function InvoiceDetail() {
     </div>
   );
   if (!invoice) return (
-    <div className="flex flex-col items-center justify-center py-20">
-      <div className="rounded-full bg-muted p-4 mb-3"><FileText className="h-8 w-8 text-muted-foreground" /></div>
-      <p className="text-sm font-medium">Invoice not found</p>
-      <Link to={backTo}><Button variant="outline" size="sm" className="mt-3">Back to Invoices</Button></Link>
-    </div>
+    <EmptyState
+      icon={FileText}
+      title="Invoice not found"
+      description="The invoice may have been deleted or you may not have access to it."
+      action={<Link to={backTo}><Button variant="outline" size="sm">Back to Invoices</Button></Link>}
+    />
   );
 
   const startEdit = () => {

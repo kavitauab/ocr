@@ -4,6 +4,7 @@ import { Link, useSearchParams, useNavigate, useLocation } from "react-router-do
 import { useCompany } from "@/lib/company";
 import { useAuth } from "@/lib/auth";
 import { authorizedUrl } from "@/lib/auth-utils";
+import { EmptyState } from "@/components/EmptyState";
 import api from "@/api/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -158,7 +159,9 @@ export default function Invoices() {
             {inv.status}
           </span>
           {inv.buyerMismatch && (
-            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" title="Buyer mismatch" />
+            <span title="Buyer mismatch" aria-label="Buyer mismatch">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+            </span>
           )}
         </div>
       </TableCell>
@@ -376,23 +379,17 @@ export default function Invoices() {
               )}
               {!isLoading && invoices.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={colCount} className="py-12">
-                    <div className="flex flex-col items-center justify-center text-center">
-                      <div className="rounded-full bg-muted p-3 mb-2">
-                        <FileText className="h-6 w-6 text-muted-foreground" />
-                      </div>
-                      <p className="text-sm font-medium text-foreground">No invoices found</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {hasAnyFilter ? "Try adjusting your filters" : "Upload your first invoice to get started"}
-                      </p>
-                      {!hasAnyFilter && (
+                  <TableCell colSpan={colCount}>
+                    <EmptyState
+                      icon={FileText}
+                      title="No invoices found"
+                      description={hasAnyFilter ? "Try adjusting your filters." : "Upload your first invoice to get started."}
+                      action={!hasAnyFilter ? (
                         <Link to="/upload">
-                          <Button size="sm" className="mt-2 gap-1">
-                            <Upload className="h-3.5 w-3.5" />Upload
-                          </Button>
+                          <Button size="sm" className="gap-1"><Upload className="h-3.5 w-3.5" />Upload</Button>
                         </Link>
-                      )}
-                    </div>
+                      ) : undefined}
+                    />
                   </TableCell>
                 </TableRow>
               )}

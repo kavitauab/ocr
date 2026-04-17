@@ -123,6 +123,10 @@ if (($pathParts[0] ?? '') === 'cron') {
         require_once __DIR__ . '/functions/send_test_email.php';
         exit;
     }
+    if (($pathParts[1] ?? '') === 'cleanup') {
+        require_once __DIR__ . '/functions/cleanup.php';
+        exit;
+    }
     sendJSON(['error' => 'Not found'], 404);
 }
 
