@@ -48,12 +48,14 @@ if (($pathParts[0] ?? '') === 'health') {
             $info['cron_version'] = file_exists($cronVerFile) ? trim(file_get_contents($cronVerFile)) : 'no cron run yet';
             // Optional search param to find a specific invoice by invoice_number / vendor_name / raw_extraction contents
             $diagSearch = trim($_GET['findInvoice'] ?? '');
+            $diagLimit = intval($_GET['diagLimit'] ?? 3);
+            $diagLimit = max(1, min(30, $diagLimit));
             if ($diagSearch !== '') {
-                $stmt = $db->prepare("SELECT id, ocr_model, ocr_escalated, updated_at, invoice_number, vendor_name, subtotal_amount, tax_amount, total_amount, currency, confidence_scores, raw_extraction FROM invoices WHERE invoice_number LIKE :q OR vendor_name LIKE :q OR raw_extraction LIKE :q ORDER BY updated_at DESC LIMIT 3");
+                $stmt = $db->prepare("SELECT id, ocr_model, ocr_escalated, updated_at, invoice_number, vendor_name, subtotal_amount, tax_amount, total_amount, currency, confidence_scores, raw_extraction, vecticum_id, vecticum_error FROM invoices WHERE invoice_number LIKE :q OR vendor_name LIKE :q OR raw_extraction LIKE :q ORDER BY updated_at DESC LIMIT $diagLimit");
                 $stmt->execute(['q' => '%' . $diagSearch . '%']);
                 $lastInv = $stmt->fetchAll();
             } else {
-                $lastInv = $db->query("SELECT id, ocr_model, ocr_escalated, updated_at, invoice_number, vendor_name, subtotal_amount, tax_amount, total_amount, currency, confidence_scores FROM invoices WHERE status='completed' ORDER BY updated_at DESC LIMIT 3")->fetchAll();
+                $lastInv = $db->query("SELECT id, ocr_model, ocr_escalated, updated_at, invoice_number, vendor_name, subtotal_amount, tax_amount, total_amount, currency, confidence_scores, vecticum_id, vecticum_error FROM invoices WHERE status='completed' ORDER BY updated_at DESC LIMIT $diagLimit")->fetchAll();
             }
             $info['last_invoices'] = array_map(function ($i) {
                 $conf = json_decode($i['confidence_scores'] ?? '{}', true) ?: [];
@@ -68,6 +70,8 @@ if (($pathParts[0] ?? '') === 'health') {
                     'confidence_tax' => $conf['taxAmount'] ?? null,
                     'confidence_subtotal' => $conf['subtotalAmount'] ?? null,
                     'confidence_total' => $conf['totalAmount'] ?? null,
+                    'vecticum_id' => $i['vecticum_id'] ?? null,
+                    'vecticum_error' => $i['vecticum_error'] ?? null,
                     'ocr_model' => $i['ocr_model'],
                     'ocr_escalated' => $i['ocr_escalated'],
                     'updated_at' => $i['updated_at'],
