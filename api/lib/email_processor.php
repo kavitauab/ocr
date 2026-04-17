@@ -53,7 +53,16 @@ function processCompanyEmails($companyId) {
                 'hasAttachments' => $message['hasAttachments'] ? 1 : 0,
             ]);
             if ($stmt->rowCount() === 0) {
-                // Another process beat us to it, or we've seen this already.
+                // Already in DB (dedup'd by unique index on message_id).
+                // Still try to mark as read in Microsoft — covers the case where
+                // the previous ingestion succeeded in DB but failed the PATCH to
+                // Graph, leaving the email stuck as unread and refetched forever.
+                $existingStmt = $db->prepare("SELECT status FROM email_inbox WHERE message_id = :mid LIMIT 1");
+                $existingStmt->execute(['mid' => $message['id']]);
+                $existing = $existingStmt->fetch();
+                if ($existing && $existing['status'] === 'processed') {
+                    try { markAsRead($company, $message['id']); } catch (Exception $e) { /* Non-critical */ }
+                }
                 continue;
             }
 
