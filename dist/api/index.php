@@ -91,6 +91,23 @@ if (($pathParts[0] ?? '') === 'health') {
                     $emailsStmt = $db->prepare("SELECT id, message_id, subject, from_email, received_date, has_attachments, attachment_count, status, created_at FROM email_inbox WHERE company_id = :cid ORDER BY received_date DESC LIMIT 20");
                     $emailsStmt->execute(['cid' => $cid]);
                     $info['company_recent_emails'] = $emailsStmt->fetchAll();
+
+                    // Also show invoice counts by status for this company
+                    $iStmt = $db->prepare("SELECT status, COUNT(*) AS n FROM invoices WHERE company_id = :cid GROUP BY status");
+                    $iStmt->execute(['cid' => $cid]);
+                    $byStatus = [];
+                    foreach ($iStmt->fetchAll() as $r) $byStatus[$r['status']] = (int)$r['n'];
+                    $info['company_invoice_counts'] = $byStatus;
+
+                    // And most recent invoices (to see if new ones landed)
+                    $rStmt = $db->prepare("SELECT id, status, invoice_number, vendor_name, created_at, updated_at FROM invoices WHERE company_id = :cid ORDER BY created_at DESC LIMIT 10");
+                    $rStmt->execute(['cid' => $cid]);
+                    $info['company_recent_invoices'] = $rStmt->fetchAll();
+
+                    // Active OCR jobs for this company
+                    $jStmt = $db->prepare("SELECT oj.id, oj.invoice_id, oj.status, oj.attempt, oj.next_retry_at, oj.error_message, oj.updated_at FROM ocr_jobs oj WHERE oj.company_id = :cid AND oj.status IN ('queued','processing','retrying') ORDER BY oj.updated_at DESC LIMIT 20");
+                    $jStmt->execute(['cid' => $cid]);
+                    $info['company_active_jobs'] = $jStmt->fetchAll();
                 } else {
                     $info['company_recent_emails'] = 'company not found';
                 }
