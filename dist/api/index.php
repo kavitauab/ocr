@@ -46,7 +46,15 @@ if (($pathParts[0] ?? '') === 'health') {
                 : 'no ext';
             $cronVerFile = __DIR__ . '/_cron_version.txt';
             $info['cron_version'] = file_exists($cronVerFile) ? trim(file_get_contents($cronVerFile)) : 'no cron run yet';
-            $lastInv = $db->query("SELECT id, ocr_model, ocr_escalated, updated_at, invoice_number, vendor_name, subtotal_amount, tax_amount, total_amount, currency, confidence_scores FROM invoices WHERE status='completed' ORDER BY updated_at DESC LIMIT 3")->fetchAll();
+            // Optional search param to find a specific invoice by invoice_number / vendor_name / raw_extraction contents
+            $diagSearch = trim($_GET['findInvoice'] ?? '');
+            if ($diagSearch !== '') {
+                $stmt = $db->prepare("SELECT id, ocr_model, ocr_escalated, updated_at, invoice_number, vendor_name, subtotal_amount, tax_amount, total_amount, currency, confidence_scores, raw_extraction FROM invoices WHERE invoice_number LIKE :q OR vendor_name LIKE :q OR raw_extraction LIKE :q ORDER BY updated_at DESC LIMIT 3");
+                $stmt->execute(['q' => '%' . $diagSearch . '%']);
+                $lastInv = $stmt->fetchAll();
+            } else {
+                $lastInv = $db->query("SELECT id, ocr_model, ocr_escalated, updated_at, invoice_number, vendor_name, subtotal_amount, tax_amount, total_amount, currency, confidence_scores FROM invoices WHERE status='completed' ORDER BY updated_at DESC LIMIT 3")->fetchAll();
+            }
             $info['last_invoices'] = array_map(function ($i) {
                 $conf = json_decode($i['confidence_scores'] ?? '{}', true) ?: [];
                 return [
