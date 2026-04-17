@@ -81,6 +81,20 @@ if (($pathParts[0] ?? '') === 'health') {
             $info['ocr_model_column_exists'] = (bool)$db->query("SHOW COLUMNS FROM invoices LIKE 'ocr_model'")->fetch();
 
             // Show which fields each company has enabled + email-ingest summary
+            // Recent emails for specific company (findCompany=<id|code|name>)
+            $findCompany = trim($_GET['findCompany'] ?? '');
+            if ($findCompany !== '') {
+                $stmt = $db->prepare("SELECT id FROM companies WHERE id = :c1 OR code = :c2 OR name LIKE :c3 LIMIT 1");
+                $stmt->execute(['c1' => $findCompany, 'c2' => $findCompany, 'c3' => '%' . $findCompany . '%']);
+                $cid = $stmt->fetchColumn();
+                if ($cid) {
+                    $emailsStmt = $db->prepare("SELECT id, message_id, subject, from_email, received_date, has_attachments, attachment_count, status, created_at FROM email_inbox WHERE company_id = :cid ORDER BY received_date DESC LIMIT 20");
+                    $emailsStmt->execute(['cid' => $cid]);
+                    $info['company_recent_emails'] = $emailsStmt->fetchAll();
+                } else {
+                    $info['company_recent_emails'] = 'company not found';
+                }
+            }
             $info['company_extraction_fields'] = array_map(function ($c) use ($db) {
                 $ef = $c['extraction_fields'];
                 $parsed = is_string($ef) ? json_decode($ef, true) : $ef;
