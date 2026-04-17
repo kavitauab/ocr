@@ -491,6 +491,7 @@ if ($action === 'debug-email-attachments') {
 if ($action === 'fetch') {
     // Fetch any Vecticum endpoint - for exploration
     $endpoint = $_GET['endpoint'] ?? '';
+    $full = !empty($_GET['full']);
     if (!$endpoint) sendJSON(['error' => 'Need endpoint param'], 400);
     $token = getVecticumToken($company);
     $url = $company['vecticum_api_base_url'] . '/' . $endpoint;
@@ -498,15 +499,16 @@ if ($action === 'fetch') {
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => ['Accept: application/json', "Authorization: Bearer $token"],
-        CURLOPT_TIMEOUT => 15,
+        CURLOPT_TIMEOUT => 30,
     ]);
     $response = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     $data = json_decode($response, true);
     $count = is_array($data) ? count($data) : 0;
-    // Show first 3 records as sample
-    $sample = is_array($data) ? array_slice($data, 0, 3) : $data;
+    // When fetching a single record (object), return the whole thing; for lists, sample first 3
+    $isAssoc = is_array($data) && array_keys($data) !== range(0, count($data) - 1);
+    $sample = $isAssoc || $full ? $data : (is_array($data) ? array_slice($data, 0, 3) : $data);
     sendJSON(['action' => 'fetch', 'url' => $url, 'httpCode' => $code, 'count' => $count, 'sample' => $sample]);
 }
 
