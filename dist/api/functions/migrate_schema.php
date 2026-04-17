@@ -272,6 +272,26 @@ $ensureIndex('ocr_jobs', 'idx_ocr_jobs_queue_ordered', '(`status`, `next_retry_a
 // email_inbox.message_id must be globally unique to let us use INSERT IGNORE.
 $ensureUniqueIndex('email_inbox', 'uniq_email_inbox_message_id', '(`message_id`)');
 
+// --- Force case-sensitive collation on message_id ---
+// Microsoft Graph IDs are base64-like and CASE-SENSITIVE. Our default
+// utf8mb4_unicode_ci collation treated case-variants as duplicates, so
+// INSERT IGNORE silently dropped new emails whose Graph IDs case-collided
+// with earlier ones. Switching to utf8mb4_bin makes the unique constraint
+// treat them correctly.
+if ($tableExists('email_inbox') && $columnExists('email_inbox', 'message_id')) {
+    $stmt = $db->prepare("SELECT COLLATION_NAME FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'email_inbox' AND column_name = 'message_id'");
+    $stmt->execute();
+    $coll = $stmt->fetchColumn();
+    $msgIdCollationFix = "ALTER TABLE `email_inbox` MODIFY COLUMN `message_id` VARCHAR(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL";
+    if ($coll && $coll !== 'utf8mb4_bin') {
+        $runStatement($msgIdCollationFix);
+    } else {
+        $record('skipped', $msgIdCollationFix);
+    }
+} else {
+    $record('skipped', 'email_inbox.message_id collation change');
+}
+
 $invoiceStatusSkipped = "ALTER TABLE `invoices` MODIFY COLUMN `status` ENUM('uploaded','queued','processing','completed','failed','retrying','skipped') NOT NULL DEFAULT 'uploaded'";
 if ($tableExists('invoices') && $columnExists('invoices', 'status')) {
     $stmt = $db->prepare("SELECT COLUMN_TYPE FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'invoices' AND column_name = 'status'");
