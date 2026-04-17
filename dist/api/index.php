@@ -88,8 +88,15 @@ if (($pathParts[0] ?? '') === 'health') {
                 $stmt->execute(['c1' => $findCompany, 'c2' => $findCompany, 'c3' => '%' . $findCompany . '%']);
                 $cid = $stmt->fetchColumn();
                 if ($cid) {
-                    $emailsStmt = $db->prepare("SELECT id, message_id, subject, from_email, received_date, has_attachments, attachment_count, status, created_at FROM email_inbox WHERE company_id = :cid ORDER BY received_date DESC LIMIT 20");
-                    $emailsStmt->execute(['cid' => $cid]);
+                    $fromFilter = trim($_GET['fromFilter'] ?? '');
+                    $limit = max(1, min(100, intval($_GET['limit'] ?? 20)));
+                    if ($fromFilter !== '') {
+                        $emailsStmt = $db->prepare("SELECT id, message_id, subject, from_email, received_date, has_attachments, attachment_count, status, created_at FROM email_inbox WHERE company_id = :cid AND from_email LIKE :ff ORDER BY received_date DESC LIMIT $limit");
+                        $emailsStmt->execute(['cid' => $cid, 'ff' => '%' . $fromFilter . '%']);
+                    } else {
+                        $emailsStmt = $db->prepare("SELECT id, message_id, subject, from_email, received_date, has_attachments, attachment_count, status, created_at FROM email_inbox WHERE company_id = :cid ORDER BY received_date DESC LIMIT $limit");
+                        $emailsStmt->execute(['cid' => $cid]);
+                    }
                     $info['company_recent_emails'] = $emailsStmt->fetchAll();
 
                     // Also show invoice counts by status for this company
