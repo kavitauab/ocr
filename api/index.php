@@ -79,6 +79,10 @@ if (($pathParts[0] ?? '') === 'health') {
                 ];
             }, $lastInv ?: []);
             $info['ocr_model_column_exists'] = (bool)$db->query("SHOW COLUMNS FROM invoices LIKE 'ocr_model'")->fetch();
+            // Inspect email_inbox.message_id column for truncation / collation issues
+            $colInfo = $db->query("SHOW FULL COLUMNS FROM email_inbox WHERE Field = 'message_id'")->fetch();
+            $info['email_inbox_message_id_col'] = $colInfo;
+            $info['email_inbox_max_msgid_len'] = $db->query("SELECT MAX(LENGTH(message_id)) FROM email_inbox")->fetchColumn();
 
             // Show which fields each company has enabled + email-ingest summary
             // Count emails across ALL companies for a specific sender (fromFilter-only)
