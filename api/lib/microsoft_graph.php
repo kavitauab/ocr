@@ -43,7 +43,7 @@ function getM365Token($company, $forceRefresh = false) {
     return $data['access_token'];
 }
 
-function fetchEmails($company, $sinceHours = 5) {
+function fetchEmails($company, $sinceHours = 72) {
     $token = getM365Token($company);
     $folder = $company['ms_fetch_folder'] ?: 'INBOX';
     $email = $company['ms_sender_email'];
