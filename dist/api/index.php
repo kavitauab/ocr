@@ -51,8 +51,9 @@ if (($pathParts[0] ?? '') === 'health') {
             $diagLimit = intval($_GET['diagLimit'] ?? 3);
             $diagLimit = max(1, min(30, $diagLimit));
             if ($diagSearch !== '') {
-                $stmt = $db->prepare("SELECT id, ocr_model, ocr_escalated, updated_at, invoice_number, vendor_name, subtotal_amount, tax_amount, total_amount, currency, confidence_scores, raw_extraction, vecticum_id, vecticum_error FROM invoices WHERE invoice_number LIKE :q OR vendor_name LIKE :q OR raw_extraction LIKE :q ORDER BY updated_at DESC LIMIT $diagLimit");
-                $stmt->execute(['q' => '%' . $diagSearch . '%']);
+                $stmt = $db->prepare("SELECT id, ocr_model, ocr_escalated, updated_at, invoice_number, vendor_name, subtotal_amount, tax_amount, total_amount, currency, confidence_scores, raw_extraction, vecticum_id, vecticum_error FROM invoices WHERE invoice_number LIKE :q1 OR vendor_name LIKE :q2 OR raw_extraction LIKE :q3 ORDER BY updated_at DESC LIMIT $diagLimit");
+                $q = '%' . $diagSearch . '%';
+                $stmt->execute(['q1' => $q, 'q2' => $q, 'q3' => $q]);
                 $lastInv = $stmt->fetchAll();
             } else {
                 $lastInv = $db->query("SELECT id, ocr_model, ocr_escalated, updated_at, invoice_number, vendor_name, subtotal_amount, tax_amount, total_amount, currency, confidence_scores, vecticum_id, vecticum_error FROM invoices WHERE status='completed' ORDER BY updated_at DESC LIMIT $diagLimit")->fetchAll();
