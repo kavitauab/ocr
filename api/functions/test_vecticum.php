@@ -540,9 +540,13 @@ if ($action === 'raw-graph-query') {
         ];
         // Also check which company the DB row belongs to (to catch cross-company collisions)
         if ($inDb) {
-            $ccStmt = $db->prepare("SELECT c.name FROM email_inbox e LEFT JOIN companies c ON c.id = e.company_id WHERE e.id = :id");
+            $ccStmt = $db->prepare("SELECT c.name AS cname, e.from_email, e.subject FROM email_inbox e LEFT JOIN companies c ON c.id = e.company_id WHERE e.id = :id");
             $ccStmt->execute(['id' => $row['id']]);
-            $summary['messages'][count($summary['messages']) - 1]['db_company'] = $ccStmt->fetchColumn();
+            $ccRow = $ccStmt->fetch();
+            $idx = count($summary['messages']) - 1;
+            $summary['messages'][$idx]['db_company'] = $ccRow['cname'] ?? null;
+            $summary['messages'][$idx]['db_from_email'] = $ccRow['from_email'] ?? null;
+            $summary['messages'][$idx]['db_subject'] = $ccRow['subject'] ?? null;
         }
     }
     sendJSON([
