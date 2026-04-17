@@ -74,6 +74,18 @@ if (($pathParts[0] ?? '') === 'health') {
                 ];
             }, $lastInv ?: []);
             $info['ocr_model_column_exists'] = (bool)$db->query("SHOW COLUMNS FROM invoices LIKE 'ocr_model'")->fetch();
+
+            // Show which fields each company has enabled
+            $info['company_extraction_fields'] = array_map(function ($c) {
+                $ef = $c['extraction_fields'];
+                $parsed = is_string($ef) ? json_decode($ef, true) : $ef;
+                return [
+                    'id' => $c['id'],
+                    'name' => $c['name'],
+                    'tax_enabled' => $parsed === null ? 'ALL' : (in_array('taxAmount', $parsed ?: []) ? 'YES' : 'NO'),
+                    'fields' => $parsed,
+                ];
+            }, $db->query("SELECT id, name, extraction_fields FROM companies")->fetchAll() ?: []);
         }
 
         sendJSON($info);
