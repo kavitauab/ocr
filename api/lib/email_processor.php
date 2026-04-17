@@ -189,19 +189,26 @@ function processCompanyEmails($companyId) {
                         'id' => $invoiceId,
                     ];
 
-                    $db->prepare("UPDATE invoices SET status = 'completed',
-                        document_type = :documentType,
-                        invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
-                        vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
-                        buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
-                        total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
-                        subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
-                        bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
-                        ocr_model = :ocrModel, ocr_escalated = :ocrEscalated, ocr_escalation_reason = :ocrEscalationReason,
-                        ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id")
-                        ->execute($invoiceUpdateParams);
-
-                    completeOcrJob($ocrJobId, $ocrUsage);
+                    // Invoice completion + ocr_job completion are atomic.
+                    try {
+                        $db->beginTransaction();
+                        $db->prepare("UPDATE invoices SET status = 'completed',
+                            document_type = :documentType,
+                            invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
+                            vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
+                            buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
+                            total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
+                            subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
+                            bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
+                            ocr_model = :ocrModel, ocr_escalated = :ocrEscalated, ocr_escalation_reason = :ocrEscalationReason,
+                            ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id")
+                            ->execute($invoiceUpdateParams);
+                        completeOcrJob($ocrJobId, $ocrUsage);
+                        $db->commit();
+                    } catch (\Throwable $txErr) {
+                        if ($db->inTransaction()) $db->rollBack();
+                        throw $txErr;
+                    }
                     trackInvoiceProcessed($companyId, $attachment['size'] ?? strlen($item['buffer']), $ocrUsage);
                     $createdInvoiceIds[] = $invoiceId;
                     $processed++;

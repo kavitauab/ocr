@@ -11,6 +11,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateTime, formatNumber, formatUsd, getStatusClasses } from "@/lib/ui-utils";
+import { EmptyState } from "@/components/EmptyState";
 import {
   FileText,
   CheckCircle,
@@ -331,14 +332,8 @@ export default function Dashboard() {
                   })}
                   {filteredCompanies.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-12">
-                        <div className="flex flex-col items-center justify-center text-center">
-                          <div className="rounded-full bg-muted p-3 mb-3">
-                            <Building2 className="h-6 w-6 text-muted-foreground" />
-                          </div>
-                          <p className="text-sm font-medium text-foreground">No clients found</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">Try a different search term</p>
-                        </div>
+                      <TableCell colSpan={6}>
+                        <EmptyState icon={Building2} title="No clients found" description="Try a different search term." />
                       </TableCell>
                     </TableRow>
                   )}
@@ -352,14 +347,12 @@ export default function Dashboard() {
       {/* No company selected */}
       {isSuperadmin && superadminMode === "company" && !selectedCompany && (
         <Card>
-          <CardContent className="py-12">
-            <div className="flex flex-col items-center justify-center text-center">
-              <div className="rounded-full bg-muted p-3 mb-3">
-                <Building2 className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <p className="text-sm font-medium text-foreground">No company selected</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Select a company in the sidebar to view metrics</p>
-            </div>
+          <CardContent>
+            <EmptyState
+              icon={Building2}
+              title="No company selected"
+              description="Select a company in the sidebar to view metrics."
+            />
           </CardContent>
         </Card>
       )}
@@ -414,17 +407,13 @@ export default function Dashboard() {
                   ))}
                   {sortedRecentInvoices.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-12">
-                        <div className="flex flex-col items-center justify-center text-center">
-                          <div className="rounded-full bg-muted p-3 mb-3">
-                            <BarChart3 className="h-6 w-6 text-muted-foreground" />
-                          </div>
-                          <p className="text-sm font-medium text-foreground">No invoices yet</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">Upload your first invoice to get started</p>
-                          <Link to="/upload">
-                            <Button size="sm" className="mt-3">Upload Invoice</Button>
-                          </Link>
-                        </div>
+                      <TableCell colSpan={6}>
+                        <EmptyState
+                          icon={BarChart3}
+                          title="No invoices yet"
+                          description="Upload your first invoice to get started."
+                          action={<Link to="/upload"><Button size="sm">Upload Invoice</Button></Link>}
+                        />
                       </TableCell>
                     </TableRow>
                   )}

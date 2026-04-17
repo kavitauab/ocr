@@ -41,7 +41,9 @@ abstract class BaseResource {
         }
 
         $page = max(1, intval($_GET['page'] ?? 1));
-        $perPage = min(1000, max(10, intval($_GET['per_page'] ?? $_GET['limit'] ?? 100)));
+        // Cap per-page at 200 — prevents someone from requesting `?per_page=1000`
+        // on tables like audit_log and overwhelming memory. Most pages use 20-50.
+        $perPage = min(200, max(10, intval($_GET['per_page'] ?? $_GET['limit'] ?? 100)));
         $offset = ($page - 1) * $perPage;
 
         $countSql = "SELECT COUNT(*) FROM `{$this->tableName}` $where";

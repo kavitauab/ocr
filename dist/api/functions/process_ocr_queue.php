@@ -81,13 +81,16 @@ foreach ($jobs as $job) {
         continue;
     }
 
-    // Mark job as processing
+    // Mark job as processing (atomic: either both rows move to 'processing' or neither)
     try {
+        $db->beginTransaction();
         $db->prepare("UPDATE ocr_jobs SET status = 'processing', updated_at = NOW() WHERE id = :id")
             ->execute(['id' => $jobId]);
         $db->prepare("UPDATE invoices SET status = 'processing', ocr_sent_at = NOW(), updated_at = NOW() WHERE id = :id")
             ->execute(['id' => $invoiceId]);
+        $db->commit();
     } catch (\Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
         error_log("Queue: Failed to mark job $jobId as processing: " . $e->getMessage());
         continue;
     }
@@ -108,11 +111,21 @@ foreach ($jobs as $job) {
         try {
             $classification = classifyDocument($filePath, $job['file_type']);
             if (!isInvoiceCategory($classification['category'])) {
-                // Not an invoice — skip OCR extraction
-                $db->prepare("UPDATE invoices SET status = 'skipped', document_type = :dt, skip_reason = :sr, updated_at = NOW() WHERE id = :id")
-                    ->execute(['dt' => $classification['category'], 'sr' => $classification['detail'], 'id' => $invoiceId]);
-                $db->prepare("UPDATE ocr_jobs SET status = 'completed', returned_at = NOW() WHERE id = :id")
-                    ->execute(['id' => $jobId]);
+                // Not an invoice — skip OCR extraction.
+                // DB state flip (invoice skipped + job completed) is atomic.
+                try {
+                    $db->beginTransaction();
+                    $db->prepare("UPDATE invoices SET status = 'skipped', document_type = :dt, skip_reason = :sr, updated_at = NOW() WHERE id = :id")
+                        ->execute(['dt' => $classification['category'], 'sr' => $classification['detail'], 'id' => $invoiceId]);
+                    $db->prepare("UPDATE ocr_jobs SET status = 'completed', returned_at = NOW() WHERE id = :id")
+                        ->execute(['id' => $jobId]);
+                    $db->commit();
+                } catch (\Throwable $txErr) {
+                    if ($db->inTransaction()) $db->rollBack();
+                    throw $txErr;
+                }
+                // Network side-effects happen AFTER commit, so a partial failure
+                // can't leave the invoice half-flipped.
                 sendIssueReplyForInvoice($db, $invoiceId, 'invalid_document', 'The attached document could not be processed because it was classified as a non-invoice document: ' . ($classification['detail'] ?: $classification['category']) . '. Please resend the actual invoice document.');
                 if (isset($classification['usage'])) {
                     trackApiCall($companyId, $classification['usage']);
@@ -170,42 +183,52 @@ foreach ($jobs as $job) {
             'id' => $invoiceId,
         ];
 
-        $stmt = $db->prepare("UPDATE invoices SET status = 'completed',
-            document_type = :documentType,
-            invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
-            vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
-            buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
-            total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
-            subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
-            bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
-            ocr_model = :ocrModel, ocr_escalated = :ocrEscalated, ocr_escalation_reason = :ocrEscalationReason,
-            processing_error = NULL, ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id");
-        $stmt->execute($invoiceUpdateParams);
+        // Invoice + ocr_job must transition to 'completed' atomically.
+        // A crash between the two UPDATEs previously left zombies (invoice
+        // completed but ocr_job stuck processing, so the retry never fired).
+        try {
+            $db->beginTransaction();
+            $stmt = $db->prepare("UPDATE invoices SET status = 'completed',
+                document_type = :documentType,
+                invoice_number = :invoiceNumber, invoice_date = :invoiceDate, due_date = :dueDate,
+                vendor_name = :vendorName, vendor_address = :vendorAddress, vendor_vat_id = :vendorVatId,
+                buyer_name = :buyerName, buyer_address = :buyerAddress, buyer_vat_id = :buyerVatId,
+                total_amount = :totalAmount, currency = :currency, tax_amount = :taxAmount,
+                subtotal_amount = :subtotalAmount, po_number = :poNumber, payment_terms = :paymentTerms,
+                bank_details = :bankDetails, confidence_scores = :confidence, raw_extraction = :raw,
+                ocr_model = :ocrModel, ocr_escalated = :ocrEscalated, ocr_escalation_reason = :ocrEscalationReason,
+                processing_error = NULL, ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id");
+            $stmt->execute($invoiceUpdateParams);
 
-        // Complete the OCR job
-        $db->prepare("UPDATE ocr_jobs SET
-            status = 'completed',
-            request_id = :requestId,
-            input_tokens = :inputTokens,
-            output_tokens = :outputTokens,
-            total_tokens = :totalTokens,
-            cache_creation_input_tokens = :cacheCreation,
-            cache_read_input_tokens = :cacheRead,
-            cost_usd = :costUsd,
-            returned_at = NOW(),
-            updated_at = NOW()
-            WHERE id = :id")
-            ->execute([
-                'requestId' => $ocrUsage['requestId'] ?? null,
-                'inputTokens' => $ocrUsage['inputTokens'] ?? $ocrUsage['input_tokens'] ?? 0,
-                'outputTokens' => $ocrUsage['outputTokens'] ?? $ocrUsage['output_tokens'] ?? 0,
-                'totalTokens' => $ocrUsage['totalTokens'] ?? $ocrUsage['total_tokens'] ?? 0,
-                'cacheCreation' => $ocrUsage['cacheCreationInputTokens'] ?? $ocrUsage['cache_creation_input_tokens'] ?? 0,
-                'cacheRead' => $ocrUsage['cacheReadInputTokens'] ?? $ocrUsage['cache_read_input_tokens'] ?? 0,
-                'costUsd' => number_format(($ocrUsage['costUsd'] ?? $ocrUsage['cost_usd'] ?? 0), 6, '.', ''),
-                'id' => $jobId,
-            ]);
+            $db->prepare("UPDATE ocr_jobs SET
+                status = 'completed',
+                request_id = :requestId,
+                input_tokens = :inputTokens,
+                output_tokens = :outputTokens,
+                total_tokens = :totalTokens,
+                cache_creation_input_tokens = :cacheCreation,
+                cache_read_input_tokens = :cacheRead,
+                cost_usd = :costUsd,
+                returned_at = NOW(),
+                updated_at = NOW()
+                WHERE id = :id")
+                ->execute([
+                    'requestId' => $ocrUsage['requestId'] ?? null,
+                    'inputTokens' => $ocrUsage['inputTokens'] ?? $ocrUsage['input_tokens'] ?? 0,
+                    'outputTokens' => $ocrUsage['outputTokens'] ?? $ocrUsage['output_tokens'] ?? 0,
+                    'totalTokens' => $ocrUsage['totalTokens'] ?? $ocrUsage['total_tokens'] ?? 0,
+                    'cacheCreation' => $ocrUsage['cacheCreationInputTokens'] ?? $ocrUsage['cache_creation_input_tokens'] ?? 0,
+                    'cacheRead' => $ocrUsage['cacheReadInputTokens'] ?? $ocrUsage['cache_read_input_tokens'] ?? 0,
+                    'costUsd' => number_format(($ocrUsage['costUsd'] ?? $ocrUsage['cost_usd'] ?? 0), 6, '.', ''),
+                    'id' => $jobId,
+                ]);
+            $db->commit();
+        } catch (\Throwable $txErr) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $txErr;
+        }
 
+        // Usage tracking is additive; safe to run after commit.
         trackInvoiceProcessed($companyId, (int)$job['file_size'], $ocrUsage);
 
         $jobResult['status'] = 'completed';
@@ -313,6 +336,9 @@ foreach ($jobs as $job) {
         }
 
     } catch (\Throwable $e) {
+        // Defensive: an earlier transaction may have been rolled back but in
+        // rare cases the exception can occur with a txn still open.
+        if ($db->inTransaction()) $db->rollBack();
         error_log("Queue: Job $jobId failed (attempt $attempt): " . $e->getMessage());
 
         $nextAttempt = $attempt + 1;
@@ -320,38 +346,52 @@ foreach ($jobs as $job) {
         if ($nextAttempt <= $maxAttempts) {
             // Schedule retry with exponential backoff: 30s, 2min, 8min
             $delaySeconds = 30 * pow(4, $attempt - 1);
-            $db->prepare("UPDATE ocr_jobs SET
-                status = 'retrying',
-                attempt = :nextAttempt,
-                next_retry_at = DATE_ADD(NOW(), INTERVAL :delay SECOND),
-                error_message = :error,
-                updated_at = NOW()
-                WHERE id = :id")
-                ->execute([
-                    'nextAttempt' => $nextAttempt,
-                    'delay' => $delaySeconds,
-                    'error' => $e->getMessage(),
-                    'id' => $jobId,
-                ]);
+            try {
+                $db->beginTransaction();
+                $db->prepare("UPDATE ocr_jobs SET
+                    status = 'retrying',
+                    attempt = :nextAttempt,
+                    next_retry_at = DATE_ADD(NOW(), INTERVAL :delay SECOND),
+                    error_message = :error,
+                    updated_at = NOW()
+                    WHERE id = :id")
+                    ->execute([
+                        'nextAttempt' => $nextAttempt,
+                        'delay' => $delaySeconds,
+                        'error' => $e->getMessage(),
+                        'id' => $jobId,
+                    ]);
 
-            $db->prepare("UPDATE invoices SET status = 'retrying', processing_error = :error, updated_at = NOW() WHERE id = :id")
-                ->execute(['error' => "Attempt $attempt failed, retrying in {$delaySeconds}s: " . $e->getMessage(), 'id' => $invoiceId]);
+                $db->prepare("UPDATE invoices SET status = 'retrying', processing_error = :error, updated_at = NOW() WHERE id = :id")
+                    ->execute(['error' => "Attempt $attempt failed, retrying in {$delaySeconds}s: " . $e->getMessage(), 'id' => $invoiceId]);
+                $db->commit();
+            } catch (\Throwable $retryTxErr) {
+                if ($db->inTransaction()) $db->rollBack();
+                error_log("Queue: Failed to schedule retry for $jobId: " . $retryTxErr->getMessage());
+            }
 
             $jobResult['status'] = 'retrying';
             $jobResult['nextRetryIn'] = $delaySeconds;
             $summary['retrying']++;
         } else {
-            // Permanent failure
-            $db->prepare("UPDATE ocr_jobs SET
-                status = 'failed',
-                error_message = :error,
-                returned_at = NOW(),
-                updated_at = NOW()
-                WHERE id = :id")
-                ->execute(['error' => $e->getMessage(), 'id' => $jobId]);
+            // Permanent failure — keep invoice + ocr_job statuses consistent.
+            try {
+                $db->beginTransaction();
+                $db->prepare("UPDATE ocr_jobs SET
+                    status = 'failed',
+                    error_message = :error,
+                    returned_at = NOW(),
+                    updated_at = NOW()
+                    WHERE id = :id")
+                    ->execute(['error' => $e->getMessage(), 'id' => $jobId]);
 
-            $db->prepare("UPDATE invoices SET status = 'failed', processing_error = :error, ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id")
-                ->execute(['error' => $e->getMessage(), 'id' => $invoiceId]);
+                $db->prepare("UPDATE invoices SET status = 'failed', processing_error = :error, ocr_returned_at = NOW(), updated_at = NOW() WHERE id = :id")
+                    ->execute(['error' => $e->getMessage(), 'id' => $invoiceId]);
+                $db->commit();
+            } catch (\Throwable $failTxErr) {
+                if ($db->inTransaction()) $db->rollBack();
+                error_log("Queue: Failed to record permanent failure for $jobId: " . $failTxErr->getMessage());
+            }
 
             // Track usage even on failure
             try {

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { getStatusClasses, formatDateTime } from "@/lib/ui-utils";
+import { EmptyState } from "@/components/EmptyState";
 import { toast } from "sonner";
 import { useMemo, useState } from "react";
 import { Mail, FileText, AlertCircle, ChevronDown, ChevronRight, Search } from "lucide-react";
@@ -251,14 +252,12 @@ export default function Emails() {
                 )}
                 {!isLoading && (!data?.emails || data.emails.length === 0) && (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-12">
-                      <div className="flex flex-col items-center justify-center text-center">
-                        <div className="rounded-full bg-muted p-3 mb-3">
-                          <Mail className="h-5 w-5 text-muted-foreground" />
-                        </div>
-                        <p className="text-sm font-medium text-foreground">No emails</p>
-                        <p className="text-sm text-muted-foreground mt-0.5">Emails will appear here once fetched from your mailbox</p>
-                      </div>
+                    <TableCell colSpan={6}>
+                      <EmptyState
+                        icon={Mail}
+                        title="No emails"
+                        description="Emails will appear here once fetched from your mailbox."
+                      />
                     </TableCell>
                   </TableRow>
                 )}
