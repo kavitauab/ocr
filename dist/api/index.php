@@ -46,8 +46,25 @@ if (($pathParts[0] ?? '') === 'health') {
                 : 'no ext';
             $cronVerFile = __DIR__ . '/_cron_version.txt';
             $info['cron_version'] = file_exists($cronVerFile) ? trim(file_get_contents($cronVerFile)) : 'no cron run yet';
-            $lastInv = $db->query("SELECT id, ocr_model, ocr_escalated, updated_at FROM invoices WHERE status='completed' ORDER BY updated_at DESC LIMIT 1")->fetch();
-            $info['last_invoice'] = $lastInv ?: null;
+            $lastInv = $db->query("SELECT id, ocr_model, ocr_escalated, updated_at, invoice_number, vendor_name, subtotal_amount, tax_amount, total_amount, currency, confidence_scores FROM invoices WHERE status='completed' ORDER BY updated_at DESC LIMIT 3")->fetchAll();
+            $info['last_invoices'] = array_map(function ($i) {
+                $conf = json_decode($i['confidence_scores'] ?? '{}', true) ?: [];
+                return [
+                    'id' => $i['id'],
+                    'invoice_number' => $i['invoice_number'],
+                    'vendor_name' => $i['vendor_name'],
+                    'subtotal_amount' => $i['subtotal_amount'],
+                    'tax_amount' => $i['tax_amount'],
+                    'total_amount' => $i['total_amount'],
+                    'currency' => $i['currency'],
+                    'confidence_tax' => $conf['taxAmount'] ?? null,
+                    'confidence_subtotal' => $conf['subtotalAmount'] ?? null,
+                    'confidence_total' => $conf['totalAmount'] ?? null,
+                    'ocr_model' => $i['ocr_model'],
+                    'ocr_escalated' => $i['ocr_escalated'],
+                    'updated_at' => $i['updated_at'],
+                ];
+            }, $lastInv ?: []);
             $info['ocr_model_column_exists'] = (bool)$db->query("SHOW COLUMNS FROM invoices LIKE 'ocr_model'")->fetch();
         }
 
