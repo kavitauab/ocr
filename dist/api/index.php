@@ -81,6 +81,13 @@ if (($pathParts[0] ?? '') === 'health') {
             $info['ocr_model_column_exists'] = (bool)$db->query("SHOW COLUMNS FROM invoices LIKE 'ocr_model'")->fetch();
 
             // Show which fields each company has enabled + email-ingest summary
+            // Count emails across ALL companies for a specific sender (fromFilter-only)
+            $crossCompanyFrom = trim($_GET['crossCompanyFrom'] ?? '');
+            if ($crossCompanyFrom !== '') {
+                $stmt = $db->prepare("SELECT c.name AS company_name, e.from_email, COUNT(*) AS n FROM email_inbox e LEFT JOIN companies c ON c.id = e.company_id WHERE e.from_email LIKE :ff GROUP BY e.company_id, e.from_email ORDER BY n DESC");
+                $stmt->execute(['ff' => '%' . $crossCompanyFrom . '%']);
+                $info['cross_company_from'] = $stmt->fetchAll();
+            }
             // Recent emails for specific company (findCompany=<id|code|name>)
             $findCompany = trim($_GET['findCompany'] ?? '');
             if ($findCompany !== '') {
