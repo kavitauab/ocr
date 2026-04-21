@@ -237,6 +237,9 @@ $ensureColumn('companies', 'vecticum_inbox_setup_id', 'VARCHAR(255) NULL');
 // --- Vecticum error tracking on invoices ---
 $ensureColumn('invoices', 'vecticum_error', 'TEXT NULL');
 
+// --- Vecticum author blocklist per company (skip sender-based author match) ---
+$ensureColumn('companies', 'vecticum_author_blocklist', 'TEXT NULL');
+
 // --- Automatic issue reply tracking on invoices ---
 $ensureColumn('invoices', 'issue_reply_sent_at', 'DATETIME NULL');
 $ensureColumn('invoices', 'issue_reply_reason', 'VARCHAR(100) NULL');

@@ -488,6 +488,44 @@ if ($action === 'debug-email-attachments') {
     sendJSON(['action' => 'debug-email-attachments', 'email' => $email['subject'], 'attachmentCount' => count($attachments), 'attachments' => $summary]);
 }
 
+if ($action === 'why-author') {
+    // Explain author resolution for a given email sender + company
+    require_once __DIR__ . '/../lib/vecticum.php';
+    $email = trim($_GET['email'] ?? '');
+    if (!$email) sendJSON(['error' => 'Need email param'], 400);
+    $token = getVecticumToken($company);
+    $result = [
+        'sender_email' => $email,
+        'blocked' => isVecticumAuthorBlocked($company, $email),
+        'blocklist_raw' => $company['vecticum_author_blocklist'] ?? null,
+        'company_inbox_setup_id' => $company['vecticum_inbox_setup_id'] ?? null,
+    ];
+    $authorBySender = $result['blocked'] ? null : findVecticumAuthor($company, $email, $token);
+    $result['author_by_sender'] = $authorBySender;
+    $defaultAuthor = getVecticumDefaultAuthor($company, $token);
+    $result['inbox_default_author'] = $defaultAuthor;
+
+    // Fetch full inbox list to show raw config
+    $ch = curl_init($company['vecticum_api_base_url'] . '/_inboxSetup');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['Accept: application/json', "Authorization: Bearer $token"],
+        CURLOPT_TIMEOUT => 10,
+    ]);
+    $resp = curl_exec($ch);
+    curl_close($ch);
+    $inboxes = json_decode($resp, true);
+    $result['all_vecticum_inboxes'] = array_map(fn($i) => [
+        'id' => $i['id'] ?? null,
+        'name' => $i['name'] ?? null,
+        'defaultAuthor' => $i['defaultAuthor'] ?? null,
+    ], is_array($inboxes) ? $inboxes : []);
+
+    // What we'd finally send
+    $result['final_author'] = $authorBySender ?: $defaultAuthor;
+    sendJSON(['action' => 'why-author', 'result' => $result]);
+}
+
 if ($action === 'raw-graph-query') {
     // Query Microsoft Graph directly without any filters — to find missed emails
     require_once __DIR__ . '/../lib/microsoft_graph.php';

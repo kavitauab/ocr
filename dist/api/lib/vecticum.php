@@ -193,6 +193,26 @@ function findVecticumPartner($company, $vatId, $companyName, $token = null) {
     return null;
 }
 
+/**
+ * Returns true when the sender email is on the company's author blocklist.
+ * The blocklist is a comma/semicolon/newline-separated list of emails kept
+ * in companies.vecticum_author_blocklist. Internal users who shouldn't be
+ * auto-assigned as the invoice author go there; the upload then falls back
+ * to the Vecticum inbox defaultAuthor instead.
+ */
+function isVecticumAuthorBlocked($company, $senderEmail): bool {
+    $raw = trim((string)($company['vecticum_author_blocklist'] ?? ''));
+    if ($raw === '' || !$senderEmail) return false;
+    $senderLower = strtolower(trim($senderEmail));
+    $parts = preg_split('/[,;\s\n\r]+/', $raw) ?: [];
+    foreach ($parts as $p) {
+        $p = strtolower(trim($p));
+        if ($p === '') continue;
+        if ($p === $senderLower) return true;
+    }
+    return false;
+}
+
 function findVecticumAuthor($company, $senderEmail, $token = null) {
     if (!$senderEmail) return null;
     if (!$token) $token = getVecticumToken($company);
@@ -599,10 +619,14 @@ function uploadToVecticum($company, $metadata) {
             $body['exchangeRate'] = $exchangeRate;
         }
 
-        // Match author by sender email. If no exact person match exists,
-        // fall back to the defaultAuthor of the matching Vecticum inbox/mail endpoint.
+        // Author: prefer the sender email (matches the forwarding person in
+        // Vecticum). Fall back to the inbox's defaultAuthor when:
+        //   - no sender is provided, or
+        //   - sender lookup returned nothing, or
+        //   - sender matches an email in the company's author_blocklist
+        //     (e.g. internal users who shouldn't be auto-assigned as author).
         $author = null;
-        if (!empty($metadata['_senderEmail'])) {
+        if (!empty($metadata['_senderEmail']) && !isVecticumAuthorBlocked($company, $metadata['_senderEmail'])) {
             $author = findVecticumAuthor($company, $metadata['_senderEmail'], $token);
         }
         if (!$author) {
