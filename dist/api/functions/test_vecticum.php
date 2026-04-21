@@ -488,6 +488,78 @@ if ($action === 'debug-email-attachments') {
     sendJSON(['action' => 'debug-email-attachments', 'email' => $email['subject'], 'attachmentCount' => count($attachments), 'attachments' => $summary]);
 }
 
+if ($action === 'probe-record') {
+    // Try a series of PATCHes against an existing record and report which (if any)
+    // populates the _facet field. Read-only on metadata values (we restore every
+    // patch body shape that we send).
+    $recordId = trim($_GET['recordId'] ?? '');
+    $classIdOverride = trim($_GET['classId'] ?? '');
+    if (!$recordId) sendJSON(['error' => 'Need recordId'], 400);
+    $token = getVecticumToken($company);
+    $cid = $classIdOverride !== '' ? $classIdOverride : $company['vecticum_company_id'];
+    $base = $company['vecticum_api_base_url'];
+
+    $call = function ($method, $path, $body = null) use ($base, $token) {
+        $ch = curl_init($base . $path);
+        $opts = [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => $method,
+            CURLOPT_HTTPHEADER => [
+                'Accept: application/json',
+                'Content-Type: application/json',
+                "Authorization: Bearer $token",
+            ],
+            CURLOPT_TIMEOUT => 15,
+        ];
+        if ($body !== null) $opts[CURLOPT_POSTFIELDS] = json_encode($body);
+        curl_setopt_array($ch, $opts);
+        $r = curl_exec($ch);
+        $c = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        return ['http' => $c, 'body' => json_decode($r ?? '', true), 'raw' => substr($r ?? '', 0, 400)];
+    };
+
+    $getRecord = fn() => $call('GET', "/$cid/$recordId");
+
+    $result = [];
+    $r0 = $getRecord();
+    $result['initial_get'] = ['http' => $r0['http'], 'facet' => $r0['body']['_facet'] ?? '(no key)', 'raw' => $r0['http'] !== 200 ? $r0['raw'] : null];
+
+    $customFacet = 'PROBE-' . substr(md5(uniqid('', true)), 0, 6);
+    $strategies = [
+        // Explicit _facet overrides
+        ['name' => 'PATCH _facet=<string>', 'method' => 'PATCH', 'path' => "/$cid/$recordId", 'body' => ['_facet' => $customFacet]],
+        ['name' => 'PATCH _facet=null',     'method' => 'PATCH', 'path' => "/$cid/$recordId", 'body' => ['_facet' => null]],
+        ['name' => 'PATCH _facet="" (reset)', 'method' => 'PATCH', 'path' => "/$cid/$recordId", 'body' => ['_facet' => '']],
+        // Side-channel triggers
+        ['name' => 'PATCH regenerateFacet=true', 'method' => 'PATCH', 'path' => "/$cid/$recordId", 'body' => ['regenerateFacet' => true]],
+        ['name' => 'PATCH refresh=true',          'method' => 'PATCH', 'path' => "/$cid/$recordId", 'body' => ['refresh' => true]],
+        ['name' => 'POST /recomputeFacet',        'method' => 'POST',  'path' => "/$cid/$recordId/recomputeFacet", 'body' => null],
+        ['name' => 'POST /recompute',             'method' => 'POST',  'path' => "/$cid/$recordId/recompute",      'body' => null],
+        ['name' => 'POST /refresh',               'method' => 'POST',  'path' => "/$cid/$recordId/refresh",        'body' => null],
+        ['name' => 'POST /rebuild',               'method' => 'POST',  'path' => "/$cid/$recordId/rebuild",        'body' => null],
+        // PATCH ignoreVatError toggle (to trigger a non-no-op PATCH)
+        ['name' => 'PATCH ignoreVatError=true',   'method' => 'PATCH', 'path' => "/$cid/$recordId", 'body' => ['ignoreVatError' => true]],
+    ];
+
+    $trials = [];
+    foreach ($strategies as $s) {
+        $call_result = $call($s['method'], $s['path'], $s['body']);
+        $after = $getRecord();
+        $afterFacet = is_array($after['body']) ? ($after['body']['_facet'] ?? null) : null;
+        $trials[] = [
+            'strategy' => $s['name'],
+            'call_http' => $call_result['http'],
+            'call_raw_preview' => $call_result['http'] >= 400 ? $call_result['raw'] : null,
+            'facet_after' => $afterFacet,
+            'populated' => is_string($afterFacet) && trim($afterFacet) !== '',
+        ];
+    }
+
+    $result['trials'] = $trials;
+    sendJSON(['action' => 'probe-record', 'recordId' => $recordId, 'classId' => $cid, 'result' => $result]);
+}
+
 if ($action === 'why-author') {
     // Explain author resolution for a given email sender + company
     require_once __DIR__ . '/../lib/vecticum.php';
