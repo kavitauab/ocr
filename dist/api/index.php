@@ -79,6 +79,13 @@ if (($pathParts[0] ?? '') === 'health') {
                 ];
             }, $lastInv ?: []);
             $info['ocr_model_column_exists'] = (bool)$db->query("SHOW COLUMNS FROM invoices LIKE 'ocr_model'")->fetch();
+            // Look up specific invoice by ID
+            $findInvId = trim($_GET['invoiceId'] ?? '');
+            if ($findInvId !== '') {
+                $stmt = $db->prepare("SELECT id, company_id, email_inbox_id, stored_filename, status, skip_reason, document_type FROM invoices WHERE id = :id");
+                $stmt->execute(['id' => $findInvId]);
+                $info['invoice_lookup'] = $stmt->fetch();
+            }
             // Inspect email_inbox.message_id column for truncation / collation issues
             $colInfo = $db->query("SHOW FULL COLUMNS FROM email_inbox WHERE Field = 'message_id'")->fetch();
             $info['email_inbox_message_id_col'] = $colInfo;
