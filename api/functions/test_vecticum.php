@@ -527,19 +527,15 @@ if ($action === 'probe-record') {
 
     $customFacet = 'PROBE-' . substr(md5(uniqid('', true)), 0, 6);
     $strategies = [
-        // Explicit _facet overrides
+        // __force: prefix — documented escape hatch for special/system fields
+        ['name' => 'PATCH __force:_facet=<string>', 'method' => 'PATCH', 'path' => "/$cid/$recordId", 'body' => ['__force:_facet' => $customFacet]],
+        ['name' => 'PATCH __force:_facet=""',       'method' => 'PATCH', 'path' => "/$cid/$recordId", 'body' => ['__force:_facet' => '']],
+        ['name' => 'PATCH __force:_facet=null',     'method' => 'PATCH', 'path' => "/$cid/$recordId", 'body' => ['__force:_facet' => null]],
+        // Explicit _facet overrides (previously failed, keep for comparison)
         ['name' => 'PATCH _facet=<string>', 'method' => 'PATCH', 'path' => "/$cid/$recordId", 'body' => ['_facet' => $customFacet]],
-        ['name' => 'PATCH _facet=null',     'method' => 'PATCH', 'path' => "/$cid/$recordId", 'body' => ['_facet' => null]],
-        ['name' => 'PATCH _facet="" (reset)', 'method' => 'PATCH', 'path' => "/$cid/$recordId", 'body' => ['_facet' => '']],
         // Side-channel triggers
         ['name' => 'PATCH regenerateFacet=true', 'method' => 'PATCH', 'path' => "/$cid/$recordId", 'body' => ['regenerateFacet' => true]],
-        ['name' => 'PATCH refresh=true',          'method' => 'PATCH', 'path' => "/$cid/$recordId", 'body' => ['refresh' => true]],
-        ['name' => 'POST /recomputeFacet',        'method' => 'POST',  'path' => "/$cid/$recordId/recomputeFacet", 'body' => null],
-        ['name' => 'POST /recompute',             'method' => 'POST',  'path' => "/$cid/$recordId/recompute",      'body' => null],
-        ['name' => 'POST /refresh',               'method' => 'POST',  'path' => "/$cid/$recordId/refresh",        'body' => null],
-        ['name' => 'POST /rebuild',               'method' => 'POST',  'path' => "/$cid/$recordId/rebuild",        'body' => null],
-        // PATCH ignoreVatError toggle (to trigger a non-no-op PATCH)
-        ['name' => 'PATCH ignoreVatError=true',   'method' => 'PATCH', 'path' => "/$cid/$recordId", 'body' => ['ignoreVatError' => true]],
+        ['name' => 'PATCH __force:regenerateFacet=true', 'method' => 'PATCH', 'path' => "/$cid/$recordId", 'body' => ['__force:regenerateFacet' => true]],
     ];
 
     $trials = [];
