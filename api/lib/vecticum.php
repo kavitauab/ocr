@@ -23,8 +23,10 @@ function validateInvoiceForVecticum($metadata) {
         $missingFields[] = 'vendor name';
     }
 
+    // Accept any non-zero total. Negative totals are credit invoices — they'll
+    // be uploaded with creditInvoice=true and absolute values in uploadToVecticum.
     $totalAmount = isset($metadata['totalAmount']) && is_numeric($metadata['totalAmount']) ? (float)$metadata['totalAmount'] : 0.0;
-    if ($totalAmount <= 0) {
+    if (abs($totalAmount) < 0.005) {
         $missingFields[] = 'total amount';
     }
 
@@ -554,6 +556,15 @@ function uploadToVecticum($company, $metadata) {
         $tax = floatval($metadata['taxAmount'] ?? 0);
         $subtotal = floatval($metadata['subtotalAmount'] ?? 0);
 
+        // Negative total → treat as credit invoice. Vecticum stores amounts
+        // as positive values with the creditInvoice boolean flag set.
+        $isCredit = $extractedTotal < 0 || $subtotal < 0;
+        if ($isCredit) {
+            $extractedTotal = abs($extractedTotal);
+            $tax = abs($tax);
+            $subtotal = abs($subtotal);
+        }
+
         // Backfill missing values only when not extracted
         if ($subtotal <= 0 && $extractedTotal > 0) {
             // Only case where we derive subtotal: no subtotal extracted.
@@ -593,7 +604,11 @@ function uploadToVecticum($company, $metadata) {
         if ($docType === 'proforma' || strpos($docType, 'pro forma') !== false || strpos($docType, 'pro-forma') !== false) {
             $body['proFormaInvoice'] = true;
         }
-        if ($docType === 'credit_note' || $docType === 'credit note' || strpos($docType, 'credit') !== false) {
+        // Credit invoice — either Claude classified it explicitly, OR the
+        // extracted total was negative (correction/refund invoice).
+        if ($isCredit
+            || $docType === 'credit_note' || $docType === 'credit note'
+            || strpos($docType, 'credit') !== false) {
             $body['creditInvoice'] = true;
         }
 
