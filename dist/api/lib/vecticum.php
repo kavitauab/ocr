@@ -556,32 +556,35 @@ function uploadToVecticum($company, $metadata) {
         $tax = floatval($metadata['taxAmount'] ?? 0);
         $subtotal = floatval($metadata['subtotalAmount'] ?? 0);
 
-        // Negative total → treat as credit invoice. Vecticum stores amounts
-        // as positive values with the creditInvoice boolean flag set.
+        // Negative total → credit invoice. Keep values negative as-is (matches
+        // how the invoice reads) and set creditInvoice=true below.
         $isCredit = $extractedTotal < 0 || $subtotal < 0;
-        if ($isCredit) {
-            $extractedTotal = abs($extractedTotal);
-            $tax = abs($tax);
-            $subtotal = abs($subtotal);
-        }
 
-        // Backfill missing values only when not extracted
-        if ($subtotal <= 0 && $extractedTotal > 0) {
+        // Backfill missing values only when not extracted (works for both signs)
+        if ($subtotal == 0.0 && $extractedTotal != 0.0) {
             // Only case where we derive subtotal: no subtotal extracted.
             // Assume extractedTotal already includes VAT.
-            $subtotal = max($extractedTotal - $tax, 0);
+            $subtotal = $extractedTotal - $tax;
         }
-        if ($extractedTotal <= 0 && $subtotal > 0) {
+        if ($extractedTotal == 0.0 && $subtotal != 0.0) {
             $extractedTotal = $subtotal + $tax;
         }
 
-        // Gross = larger of extracted total or (subtotal + tax).
-        // For reverse-charge: extractedTotal=subtotal, tax>0 → grossTotal = subtotal + tax
-        // For normal invoices: extractedTotal includes tax → grossTotal = extractedTotal
-        $grossTotal = max($extractedTotal, $subtotal + $tax);
+        // Gross magnitude: |subtotal| + |tax| (tax always positive for VAT);
+        // preserve sign from subtotal for credit invoices.
+        $signed = function ($v, $refSign) {
+            if ($refSign < 0) return -abs($v);
+            return abs($v);
+        };
+        if ($isCredit) {
+            $grossAbs = abs($subtotal) + abs($tax);
+            $grossTotal = -$grossAbs;
+        } else {
+            $grossTotal = max($extractedTotal, $subtotal + $tax);
+        }
 
         $invoiceAmount = $formatMoney($subtotal);
-        $vatAmount = $formatMoney($tax);
+        $vatAmount = $formatMoney($isCredit ? -abs($tax) : $tax);
         $totalAmount = $formatMoney($subtotal);
         $totalInclVat = $formatMoney($grossTotal);
 
