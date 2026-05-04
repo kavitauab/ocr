@@ -56,7 +56,7 @@ class Company extends BaseResource {
         if (!$stmt->fetch()) sendJSON(['error' => 'Company not found'], 404);
 
         $data = $this->getRequestBody();
-        $allowed = ['name', 'code', 'logo_url', 'vat_number', 'buyer_keywords', 'vecticum_auto_send', 'vecticum_class_id', 'vecticum_inbox_setup_id', 'ms_client_id', 'ms_client_secret', 'ms_tenant_id', 'ms_sender_email', 'ms_fetch_enabled', 'ms_fetch_folder', 'ms_fetch_interval_minutes', 'vecticum_enabled', 'vecticum_api_base_url', 'vecticum_client_id', 'vecticum_client_secret', 'vecticum_company_id', 'vecticum_partner_endpoint', 'vecticum_author_id', 'vecticum_author_name', 'vecticum_author_blocklist', 'extraction_fields'];
+        $allowed = ['name', 'code', 'logo_url', 'vat_number', 'buyer_keywords', 'vecticum_auto_send', 'vecticum_class_id', 'vecticum_inbox_setup_id', 'ms_client_id', 'ms_client_secret', 'ms_tenant_id', 'ms_sender_email', 'ms_fetch_enabled', 'ms_fetch_folder', 'ms_fetch_interval_minutes', 'vecticum_enabled', 'vecticum_api_base_url', 'vecticum_client_id', 'vecticum_client_secret', 'vecticum_company_id', 'vecticum_partner_endpoint', 'vecticum_author_id', 'vecticum_author_name', 'extraction_fields'];
 
         // Handle camelCase from frontend
         $camelMap = [
@@ -71,7 +71,6 @@ class Company extends BaseResource {
             'vecticumInboxSetupId' => 'vecticum_inbox_setup_id',
             'vecticumPartnerEndpoint' => 'vecticum_partner_endpoint',
             'vecticumAuthorId' => 'vecticum_author_id', 'vecticumAuthorName' => 'vecticum_author_name',
-            'vecticumAuthorBlocklist' => 'vecticum_author_blocklist',
             'extractionFields' => 'extraction_fields',
         ];
 

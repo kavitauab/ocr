@@ -195,26 +195,6 @@ function findVecticumPartner($company, $vatId, $companyName, $token = null) {
     return null;
 }
 
-/**
- * Returns true when the sender email is on the company's author blocklist.
- * The blocklist is a comma/semicolon/newline-separated list of emails kept
- * in companies.vecticum_author_blocklist. Internal users who shouldn't be
- * auto-assigned as the invoice author go there; the upload then falls back
- * to the Vecticum inbox defaultAuthor instead.
- */
-function isVecticumAuthorBlocked($company, $senderEmail): bool {
-    $raw = trim((string)($company['vecticum_author_blocklist'] ?? ''));
-    if ($raw === '' || !$senderEmail) return false;
-    $senderLower = strtolower(trim($senderEmail));
-    $parts = preg_split('/[,;\s\n\r]+/', $raw) ?: [];
-    foreach ($parts as $p) {
-        $p = strtolower(trim($p));
-        if ($p === '') continue;
-        if ($p === $senderLower) return true;
-    }
-    return false;
-}
-
 function findVecticumAuthor($company, $senderEmail, $token = null) {
     if (!$senderEmail) return null;
     if (!$token) $token = getVecticumToken($company);
@@ -637,14 +617,32 @@ function uploadToVecticum($company, $metadata) {
             $body['exchangeRate'] = $exchangeRate;
         }
 
-        // Author: prefer the sender email (matches the forwarding person in
-        // Vecticum). Fall back to the inbox's defaultAuthor when:
-        //   - no sender is provided, or
-        //   - sender lookup returned nothing, or
-        //   - sender matches an email in the company's author_blocklist
-        //     (e.g. internal users who shouldn't be auto-assigned as author).
+        // EUR-denominated mirror fields. Vecticum's class defines these as
+        // expression-computed fields (e.g. invoiceAmountEur, vatSumEur), but
+        // the expressions only evaluate on UI Save / workflow recalculation —
+        // not on REST creates. To unblock downstream workflow steps that read
+        // these (e.g. invoiceAmountForSplit), we compute and send them up
+        // front using the LB-of-Lithuania exchange rate.
+        //
+        // Rate convention: "1 EUR = X invoiceCurrency", so EUR = invoiceCcy / rate.
+        // For EUR invoices the value matches the invoice-currency value (rate=1).
+        $rateNum = $exchangeRate !== null ? (float)$exchangeRate : 0.0;
+        $isEur = ($currency === 'EUR');
+        if ($isEur || $rateNum > 0) {
+            $rateForCalc = $isEur ? 1.0 : $rateNum;
+            $body['invoiceAmountEur'] = $formatMoney($subtotal / $rateForCalc);
+            $body['vatSumEur']        = $formatMoney(($isCredit ? -abs($tax) : $tax) / $rateForCalc);
+        }
+
+        // Author resolution:
+        //   1. If the invoice has a sender email AND that email matches a
+        //      Vecticum person, use that person as the author.
+        //   2. Otherwise, fall back to the defaultAuthor on the inbox record
+        //      pointed to by companies.vecticum_inbox_setup_id.
+        //   3. If neither resolves, omit author entirely (Vecticum will pick
+        //      its own default — usually the OAuth token owner).
         $author = null;
-        if (!empty($metadata['_senderEmail']) && !isVecticumAuthorBlocked($company, $metadata['_senderEmail'])) {
+        if (!empty($metadata['_senderEmail'])) {
             $author = findVecticumAuthor($company, $metadata['_senderEmail'], $token);
         }
         if (!$author) {

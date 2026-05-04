@@ -564,11 +564,10 @@ if ($action === 'why-author') {
     $token = getVecticumToken($company);
     $result = [
         'sender_email' => $email,
-        'blocked' => isVecticumAuthorBlocked($company, $email),
-        'blocklist_raw' => $company['vecticum_author_blocklist'] ?? null,
         'company_inbox_setup_id' => $company['vecticum_inbox_setup_id'] ?? null,
+        'note' => 'Sender-based author resolution is DISABLED in the live path; this probe still shows what the lookup WOULD return for debugging.',
     ];
-    $authorBySender = $result['blocked'] ? null : findVecticumAuthor($company, $email, $token);
+    $authorBySender = findVecticumAuthor($company, $email, $token);
     $result['author_by_sender'] = $authorBySender;
     $defaultAuthor = getVecticumDefaultAuthor($company, $token);
     $result['inbox_default_author'] = $defaultAuthor;

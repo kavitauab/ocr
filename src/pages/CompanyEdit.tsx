@@ -67,7 +67,7 @@ export default function CompanyEdit() {
     vecticumEnabled: false, vecticumAutoSend: false,
     vecticumApiBaseUrl: "https://app.vecticum.com/api/v1", vecticumClientId: "",
     vecticumClientSecret: "", vecticumCompanyId: "Rsk9Jv9bV7bGBFupWlE3",
-    vecticumPartnerEndpoint: "gnzSuOSBmKbBdytb1OGc", vecticumInboxSetupId: "", vecticumAuthorBlocklist: "",
+    vecticumPartnerEndpoint: "gnzSuOSBmKbBdytb1OGc", vecticumInboxSetupId: "",
     extractionFields: null,
   });
 
@@ -425,18 +425,6 @@ export default function CompanyEdit() {
                     />
                     <p className="text-xs text-muted-foreground">
                       Exact Vecticum `_inboxSetup` record ID used to resolve the correct default author for this company mailbox.
-                    </p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">Author Blocklist</label>
-                    <Input
-                      value={v("vecticumAuthorBlocklist")}
-                      onChange={(e) => set("vecticumAuthorBlocklist", e.target.value)}
-                      disabled={!canEditIntegrations}
-                      placeholder="user1@example.com, user2@example.com"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Comma-separated emails that should NOT be matched as the Vecticum author when forwarding invoices — the upload falls back to the inbox's default accountant instead.
                     </p>
                   </div>
                   <label className="flex items-center gap-2 text-sm text-foreground pt-2">
