@@ -92,9 +92,17 @@ function processCompanyEmails($companyId) {
             // TWO-PASS APPROACH: Classify then Extract
             // ========================================
 
-            // PASS 1: Save all files and classify each document
+            // PASS 1: Save all files and classify each document.
+            // When classification throws (timeout / API error / unreadable file),
+            // we DO NOT silently drop the attachment — a synthetic classification
+            // is recorded so the file still gets a DB row downstream.
             $classified = [];
             foreach ($invoiceAttachments as $attachment) {
+                $buffer = null;
+                $saved = null;
+                $filePath = null;
+                $classification = null;
+                $classifyError = null;
                 try {
                     $buffer = base64_decode($attachment['contentBytes']);
                     $saved = saveFile($buffer, $attachment['name'], $companyId);
@@ -107,18 +115,63 @@ function processCompanyEmails($companyId) {
                     if (!empty($classification['usage'])) {
                         trackApiCall($companyId, $classification['usage']);
                     }
-
-                    $classified[] = [
-                        'attachment' => $attachment,
-                        'saved' => $saved,
-                        'buffer' => $buffer,
-                        'classification' => $classification,
-                        'filePath' => $filePath,
-                    ];
                 } catch (Exception $e) {
-                    $errors[] = "Classification of {$attachment['name']}: " . $e->getMessage();
+                    $classifyError = $e->getMessage();
+                    $errors[] = "Classification of {$attachment['name']}: " . $classifyError;
+                }
+
+                // If we never got a saved file (saveFile itself failed) we have
+                // nothing to record — skip entirely. Otherwise always record.
+                if ($saved === null) continue;
+
+                if ($classification === null) {
+                    // Classification call failed. PDFs in business mail are
+                    // overwhelmingly invoices — assume invoice so the user sees
+                    // the doc rather than losing it. Other types stay "other".
+                    $isPdf = ($saved['fileType'] ?? '') === 'pdf';
+                    $classification = [
+                        'category' => $isPdf ? 'invoice' : 'other',
+                        'detail'   => 'Classification failed: ' . ($classifyError ?? 'unknown error') . ($isPdf ? ' — defaulting PDF to invoice' : ''),
+                        'confidence' => 0.0,
+                    ];
+                }
+
+                $classified[] = [
+                    'attachment' => $attachment,
+                    'saved' => $saved,
+                    'buffer' => $buffer,
+                    'classification' => $classification,
+                    'filePath' => $filePath,
+                ];
+            }
+
+            // PASS 1b: heuristic recovery — if classification returned "other"
+            // for a PDF whose filename clearly looks like an invoice (INV_*,
+            // contains "invoice"/"saskaita"/"faktur"/"rēķin"), override to
+            // invoice. Tiny PNGs/JPEGs (<40 KB) inside the same email are
+            // almost always logos/signatures that should stay "other".
+            foreach ($classified as &$item) {
+                $cat = $item['classification']['category'] ?? 'other';
+                if ($cat !== 'other') continue;
+                $ft = $item['saved']['fileType'] ?? '';
+                $name = strtolower($item['attachment']['name'] ?? '');
+                if ($ft === 'pdf') {
+                    $looksLikeInvoiceName = (
+                        strpos($name, 'inv') === 0
+                        || strpos($name, 'invoice') !== false
+                        || strpos($name, 'saskaita') !== false
+                        || strpos($name, 'sąskaita') !== false
+                        || strpos($name, 'faktur') !== false
+                        || strpos($name, 'rēķin') !== false
+                        || strpos($name, 'rekin') !== false
+                    );
+                    if ($looksLikeInvoiceName) {
+                        $item['classification']['category'] = 'invoice';
+                        $item['classification']['detail']   = 'Filename-based override (PDF named like an invoice; classifier returned other)';
+                    }
                 }
             }
+            unset($item);
 
             // PASS 2: Group into invoice-types and other-types
             $invoiceDocs = [];
@@ -128,6 +181,31 @@ function processCompanyEmails($companyId) {
                     $invoiceDocs[] = $item;
                 } else {
                     $otherDocs[] = $item;
+                }
+            }
+
+            // PASS 2b: rescue — if every passed-filter attachment ended up in
+            // otherDocs but at least one of them is a PDF, the largest PDF is
+            // almost certainly the actual invoice (forwarded inline logos and
+            // signature images get picked up alongside the real PDF). Promote
+            // the largest PDF from otherDocs to invoiceDocs so it gets full OCR.
+            if (empty($invoiceDocs) && !empty($otherDocs)) {
+                $bestPdfIdx = -1;
+                $bestPdfSize = 0;
+                foreach ($otherDocs as $idx => $item) {
+                    if (($item['saved']['fileType'] ?? '') !== 'pdf') continue;
+                    $size = (int)($item['attachment']['size'] ?? strlen((string)$item['buffer']));
+                    if ($size > $bestPdfSize) {
+                        $bestPdfSize = $size;
+                        $bestPdfIdx = $idx;
+                    }
+                }
+                if ($bestPdfIdx >= 0) {
+                    $promoted = $otherDocs[$bestPdfIdx];
+                    $promoted['classification']['category'] = 'invoice';
+                    $promoted['classification']['detail']   = 'Rescue: only PDF among non-invoices in this email — promoted to primary';
+                    $invoiceDocs[] = $promoted;
+                    array_splice($otherDocs, $bestPdfIdx, 1);
                 }
             }
 
