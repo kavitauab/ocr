@@ -367,11 +367,60 @@ function processCompanyEmails($companyId) {
                     }
 
                 } catch (Exception $e) {
-                    // OCR failed for this attachment
+                    // Inline OCR failed for this attachment. Instead of marking
+                    // the invoice as permanently failed, hand the job back to
+                    // the queue worker so it gets retried with exponential
+                    // backoff (30s, 2min, 8min). Permanent failure is only
+                    // reached after max_attempts (default 3) in the queue.
                     if (isset($invoiceId)) {
-                        $db->prepare("UPDATE invoices SET status = 'failed', processing_error = :error, updated_at = NOW() WHERE id = :id")
-                            ->execute(['error' => $e->getMessage(), 'id' => $invoiceId]);
-                        if (isset($ocrJobId)) failOcrJob($ocrJobId, $e->getMessage(), $ocrUsage ?? null);
+                        $errMsg = $e->getMessage();
+                        $rescheduled = false;
+                        if (isset($ocrJobId) && $ocrJobId) {
+                            try {
+                                // Look up current attempt + max_attempts; if we
+                                // can still retry, set status='retrying' with a
+                                // 30s delay; the cron worker will pick it up.
+                                $jstmt = $db->prepare("SELECT attempt, max_attempts FROM ocr_jobs WHERE id = :id");
+                                $jstmt->execute(['id' => $ocrJobId]);
+                                $jrow = $jstmt->fetch();
+                                $curAttempt = (int)($jrow['attempt'] ?? 1);
+                                $maxAttempts = (int)($jrow['max_attempts'] ?? 3);
+                                if ($curAttempt < $maxAttempts) {
+                                    $delaySeconds = 30 * pow(4, max(0, $curAttempt - 1));
+                                    $db->beginTransaction();
+                                    $db->prepare("UPDATE ocr_jobs SET
+                                        status = 'retrying',
+                                        attempt = :nextAttempt,
+                                        next_retry_at = DATE_ADD(NOW(), INTERVAL :delay SECOND),
+                                        error_message = :error,
+                                        updated_at = NOW()
+                                        WHERE id = :id")
+                                        ->execute([
+                                            'nextAttempt' => $curAttempt + 1,
+                                            'delay' => $delaySeconds,
+                                            'error' => $errMsg,
+                                            'id' => $ocrJobId,
+                                        ]);
+                                    $db->prepare("UPDATE invoices SET status = 'retrying', processing_error = :error, updated_at = NOW() WHERE id = :id")
+                                        ->execute([
+                                            'error' => "Attempt $curAttempt failed, retrying in {$delaySeconds}s: " . $errMsg,
+                                            'id' => $invoiceId,
+                                        ]);
+                                    $db->commit();
+                                    $rescheduled = true;
+                                }
+                            } catch (\Throwable $rsErr) {
+                                if ($db->inTransaction()) $db->rollBack();
+                                error_log("email_processor: failed to reschedule OCR job $ocrJobId: " . $rsErr->getMessage());
+                            }
+                        }
+                        if (!$rescheduled) {
+                            // Couldn't reschedule (max attempts reached, no
+                            // job id, or DB error) — record permanent failure.
+                            $db->prepare("UPDATE invoices SET status = 'failed', processing_error = :error, updated_at = NOW() WHERE id = :id")
+                                ->execute(['error' => $errMsg, 'id' => $invoiceId]);
+                            if (isset($ocrJobId)) failOcrJob($ocrJobId, $errMsg, $ocrUsage ?? null);
+                        }
                     }
                     $errors[] = "Extraction of {$item['attachment']['name']}: " . $e->getMessage();
                 }
