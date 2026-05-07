@@ -185,15 +185,23 @@ function processCompanyEmails($companyId) {
             }
 
             // PASS 2b: rescue — if every passed-filter attachment ended up in
-            // otherDocs but at least one of them is a PDF, the largest PDF is
+            // otherDocs but at least one of them is a PDF the classifier was
+            // UNCERTAIN about (category="other"), the largest such PDF is
             // almost certainly the actual invoice (forwarded inline logos and
             // signature images get picked up alongside the real PDF). Promote
-            // the largest PDF from otherDocs to invoiceDocs so it gets full OCR.
+            // it to invoiceDocs so it gets full OCR.
+            //
+            // IMPORTANT: do NOT promote PDFs the classifier explicitly tagged
+            // as "act" / "report" / "contract" / "proforma" / "credit_note" /
+            // "order_confirmation" — those decisions are intentional and a
+            // rescue would override them with the wrong document type.
             if (empty($invoiceDocs) && !empty($otherDocs)) {
                 $bestPdfIdx = -1;
                 $bestPdfSize = 0;
                 foreach ($otherDocs as $idx => $item) {
                     if (($item['saved']['fileType'] ?? '') !== 'pdf') continue;
+                    $cat = $item['classification']['category'] ?? 'other';
+                    if ($cat !== 'other') continue; // never override an explicit non-invoice classification
                     $size = (int)($item['attachment']['size'] ?? strlen((string)$item['buffer']));
                     if ($size > $bestPdfSize) {
                         $bestPdfSize = $size;
@@ -203,7 +211,7 @@ function processCompanyEmails($companyId) {
                 if ($bestPdfIdx >= 0) {
                     $promoted = $otherDocs[$bestPdfIdx];
                     $promoted['classification']['category'] = 'invoice';
-                    $promoted['classification']['detail']   = 'Rescue: only PDF among non-invoices in this email — promoted to primary';
+                    $promoted['classification']['detail']   = 'Rescue: only unclassified PDF among non-invoices — promoted to primary';
                     $invoiceDocs[] = $promoted;
                     array_splice($otherDocs, $bestPdfIdx, 1);
                 }
