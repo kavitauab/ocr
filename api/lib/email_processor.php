@@ -254,6 +254,13 @@ function processCompanyEmails($companyId) {
                     // Strip fields not in enabledFields (enforce company settings)
                     $extracted = stripDisabledExtractionFields($extracted, $enabledFields);
 
+                    // Auto-correct buyer ↔ vendor swap when the model flipped
+                    // them (logo on buyer side / unusual party ordering).
+                    $swapped = detectAndSwapBuyerVendor($extracted, $company);
+                    if ($swapped) {
+                        error_log("email_processor: auto-corrected buyer/vendor swap for invoice $invoiceId");
+                    }
+
                     // Map order_confirmation to proforma
                     $docType = normalizeDocumentType($extracted['documentType'] ?? $item['classification']['category'], $extracted);
                     if ($docType === 'order_confirmation') $docType = 'proforma';

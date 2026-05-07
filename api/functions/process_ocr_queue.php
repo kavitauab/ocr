@@ -156,6 +156,20 @@ foreach ($jobs as $job) {
         // Strip fields not in enabledFields (enforce company settings server-side)
         $extracted = stripDisabledExtractionFields($extracted, $enabledFields);
 
+        // Auto-correct buyer ↔ vendor swap (logo on buyer side / unusual party
+        // ordering can flip these in the model output).
+        try {
+            $companyStmt = $db->prepare("SELECT * FROM companies WHERE id = :id");
+            $companyStmt->execute(['id' => $companyId]);
+            $companyRow = $companyStmt->fetch();
+            if ($companyRow && detectAndSwapBuyerVendor($extracted, $companyRow)) {
+                error_log("Queue: auto-corrected buyer/vendor swap for invoice $invoiceId");
+            }
+        } catch (\Throwable $swapErr) {
+            // Non-critical: extraction proceeds even if swap detection fails.
+            error_log("Queue: swap detection failed for $invoiceId: " . $swapErr->getMessage());
+        }
+
         // Update invoice with extracted data
         $invoiceUpdateParams = [
             'documentType' => normalizeDocumentType($extracted['documentType'] ?? null, $extracted),
