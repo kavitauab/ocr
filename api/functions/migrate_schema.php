@@ -257,6 +257,12 @@ $ensureColumn('invoices', 'ocr_model', 'VARCHAR(100) NULL');
 $ensureColumn('invoices', 'ocr_escalated', 'TINYINT(1) NOT NULL DEFAULT 0');
 $ensureColumn('invoices', 'ocr_escalation_reason', 'VARCHAR(500) NULL');
 
+// --- Company registration code (Lithuanian Įmonės kodas) on invoices ---
+// Distinct from VAT ID; used by the buyer/vendor swap detector to match
+// against companies.code when the VAT field is missing or doesn't match.
+$ensureColumn('invoices', 'vendor_company_code', 'VARCHAR(100) NULL');
+$ensureColumn('invoices', 'buyer_company_code', 'VARCHAR(100) NULL');
+
 // --- Document classification: skip_reason + additional_files + skipped status ---
 $ensureColumn('invoices', 'skip_reason', 'VARCHAR(255) NULL');
 $ensureColumn('invoices', 'additional_files', 'JSON NULL');

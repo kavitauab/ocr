@@ -68,11 +68,16 @@ function stripDisabledExtractionFields(array $extracted, ?array $enabledFields):
  * Some invoice layouts (logo on the buyer side, issuer details on the right;
  * unusual party ordering; reverse-charge documents) confuse the model into
  * flipping who's the seller and who's the customer. We detect this by checking
- * the company's known VAT number and buyer keywords against the extracted
- * fields:
+ * the company's known identifiers against the extracted party fields:
+ *   - companies.vat_number   → matched against {vendor,buyer}VatId
+ *   - companies.code         → matched against {vendor,buyer}CompanyCode
+ *                              (Lithuanian "Įmonės kodas" — distinct from VAT)
+ *   - companies.buyer_keywords → matched against {vendor,buyer}Name
+ *
+ * Logic:
  *   - If extracted buyer matches the company → all good, no swap.
  *   - If extracted vendor matches the company AND extracted buyer does NOT →
- *     the model swapped them; flip name/address/VAT pairs.
+ *     the model swapped them; flip name/address/VAT/company-code pairs.
  *
  * Returns true when a swap was applied. Mutates the extracted array in place.
  */
@@ -80,7 +85,13 @@ function detectAndSwapBuyerVendor(array &$extracted, array $company): bool {
     $normalizeVat = function ($v) {
         return strtoupper(preg_replace('/\s+/', '', (string)($v ?? '')));
     };
-    $companyVat = $normalizeVat($company['vat_number'] ?? '');
+    $normalizeCode = function ($v) {
+        // Registration codes are typically numeric; strip whitespace/punctuation
+        // and case-fold so a stray prefix or trailing dot doesn't break match.
+        return preg_replace('/[^A-Z0-9]/', '', strtoupper((string)($v ?? '')));
+    };
+    $companyVat  = $normalizeVat($company['vat_number'] ?? '');
+    $companyCode = $normalizeCode($company['code'] ?? '');
     $kwRaw = trim((string)($company['buyer_keywords'] ?? ''));
     $keywords = [];
     if ($kwRaw !== '') {
@@ -92,11 +103,14 @@ function detectAndSwapBuyerVendor(array &$extracted, array $company): bool {
 
     $buyerName  = strtolower((string)($extracted['buyerName'] ?? ''));
     $buyerVat   = $normalizeVat($extracted['buyerVatId'] ?? '');
+    $buyerCode  = $normalizeCode($extracted['buyerCompanyCode'] ?? '');
     $vendorName = strtolower((string)($extracted['vendorName'] ?? ''));
     $vendorVat  = $normalizeVat($extracted['vendorVatId'] ?? '');
+    $vendorCode = $normalizeCode($extracted['vendorCompanyCode'] ?? '');
 
-    $matchesCompany = function ($name, $vat) use ($companyVat, $keywords) {
-        if ($companyVat !== '' && $vat !== '' && $vat === $companyVat) return true;
+    $matchesCompany = function ($name, $vat, $code) use ($companyVat, $companyCode, $keywords) {
+        if ($companyVat  !== '' && $vat  !== '' && $vat  === $companyVat)  return true;
+        if ($companyCode !== '' && $code !== '' && $code === $companyCode) return true;
         if (!empty($keywords) && $name !== '') {
             foreach ($keywords as $k) {
                 if (strpos($name, $k) !== false) return true;
@@ -105,27 +119,30 @@ function detectAndSwapBuyerVendor(array &$extracted, array $company): bool {
         return false;
     };
 
-    $buyerOk  = $matchesCompany($buyerName, $buyerVat);
-    $vendorOk = $matchesCompany($vendorName, $vendorVat);
+    $buyerOk  = $matchesCompany($buyerName, $buyerVat, $buyerCode);
+    $vendorOk = $matchesCompany($vendorName, $vendorVat, $vendorCode);
 
     if (!$buyerOk && $vendorOk) {
         // Swap: vendor → buyer, buyer → vendor.
-        $tmpName  = $extracted['vendorName']    ?? null;
-        $tmpAddr  = $extracted['vendorAddress'] ?? null;
-        $tmpVat   = $extracted['vendorVatId']   ?? null;
+        $tmpName  = $extracted['vendorName']        ?? null;
+        $tmpAddr  = $extracted['vendorAddress']     ?? null;
+        $tmpVat   = $extracted['vendorVatId']       ?? null;
+        $tmpCode  = $extracted['vendorCompanyCode'] ?? null;
 
-        $extracted['vendorName']    = $extracted['buyerName']    ?? null;
-        $extracted['vendorAddress'] = $extracted['buyerAddress'] ?? null;
-        $extracted['vendorVatId']   = $extracted['buyerVatId']   ?? null;
+        $extracted['vendorName']        = $extracted['buyerName']        ?? null;
+        $extracted['vendorAddress']     = $extracted['buyerAddress']     ?? null;
+        $extracted['vendorVatId']       = $extracted['buyerVatId']       ?? null;
+        $extracted['vendorCompanyCode'] = $extracted['buyerCompanyCode'] ?? null;
 
-        $extracted['buyerName']    = $tmpName;
-        $extracted['buyerAddress'] = $tmpAddr;
-        $extracted['buyerVatId']   = $tmpVat;
+        $extracted['buyerName']        = $tmpName;
+        $extracted['buyerAddress']     = $tmpAddr;
+        $extracted['buyerVatId']       = $tmpVat;
+        $extracted['buyerCompanyCode'] = $tmpCode;
 
         // Confidence map (per-field) — swap the confidence pairs too so the UI
         // shows the right per-field colour after the correction.
         if (isset($extracted['confidence']) && is_array($extracted['confidence'])) {
-            foreach (['Name', 'Address', 'VatId'] as $suffix) {
+            foreach (['Name', 'Address', 'VatId', 'CompanyCode'] as $suffix) {
                 $vKey = 'vendor' . $suffix;
                 $bKey = 'buyer'  . $suffix;
                 $vConf = $extracted['confidence'][$vKey] ?? null;
