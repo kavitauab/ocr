@@ -62,7 +62,7 @@ define('CORS_ORIGIN', $_ENV['CORS_ORIGIN'] ?? $defaultCorsOrigin);
 
 // App
 define('APP_ENV', $_ENV['APP_ENV'] ?? 'development');
-define('API_VERSION', '2026-05-08c');
+define('API_VERSION', '2026-05-08d');
 date_default_timezone_set('Europe/Vilnius');
 
 /**

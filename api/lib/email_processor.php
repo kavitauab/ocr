@@ -327,14 +327,25 @@ function processCompanyEmails($companyId) {
                             $invStmt->execute(['id' => $invoiceId]);
                             $updatedInv = $invStmt->fetch();
 
-                            $buyerOk = true;
-                            $bkw = trim($company['buyer_keywords'] ?? '');
-                            if ($bkw && !empty($updatedInv['buyer_name'])) {
-                                $buyerOk = false;
-                                $bn = strtolower($updatedInv['buyer_name']);
-                                foreach (explode(',', $bkw) as $kw) {
-                                    if (trim($kw) && strpos($bn, strtolower(trim($kw))) !== false) { $buyerOk = true; break; }
-                                }
+                            // Buyer match — any of name keywords, VAT, or company code
+                            // is sufficient. Default to OK only when we have no
+                            // identifiers to compare (preserves prior behaviour for
+                            // companies that haven't filled in any settings yet).
+                            $hasAnyPartyId = !empty($updatedInv['buyer_name'])
+                                || !empty($updatedInv['buyer_vat_id'])
+                                || !empty($updatedInv['buyer_company_code']);
+                            $hasCompanyId = !empty($company['vat_number'])
+                                || !empty($company['code'])
+                                || !empty($company['buyer_keywords']);
+                            if ($hasAnyPartyId && $hasCompanyId) {
+                                $buyerOk = partyMatchesCompany(
+                                    $updatedInv['buyer_name']         ?? null,
+                                    $updatedInv['buyer_vat_id']       ?? null,
+                                    $updatedInv['buyer_company_code'] ?? null,
+                                    $company
+                                );
+                            } else {
+                                $buyerOk = true;
                             }
 
                             if ($buyerOk && empty($updatedInv['vecticum_id'])) {

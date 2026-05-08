@@ -63,6 +63,37 @@ function stripDisabledExtractionFields(array $extracted, ?array $enabledFields):
 }
 
 /**
+ * Returns true when the given party (name + VAT + company code) matches the
+ * company. Any one of the three identifiers is sufficient — name keyword
+ * (substring), VAT number (case-insensitive exact), or registration code
+ * (alphanumeric exact). Designed to be the SINGLE source of truth for
+ * "is this party us?" across swap detection, buyer-mismatch validation, and
+ * any future identity check.
+ */
+function partyMatchesCompany(?string $name, ?string $vat, ?string $code, array $company): bool {
+    $normalizeVat  = static fn($v) => strtoupper(preg_replace('/\s+/', '', (string)($v ?? '')));
+    $normalizeCode = static fn($v) => preg_replace('/[^A-Z0-9]/', '', strtoupper((string)($v ?? '')));
+
+    $companyVat  = $normalizeVat($company['vat_number'] ?? '');
+    $companyCode = $normalizeCode($company['code'] ?? '');
+    $partyVat    = $normalizeVat($vat);
+    $partyCode   = $normalizeCode($code);
+    $partyName   = strtolower((string)($name ?? ''));
+
+    if ($companyVat  !== '' && $partyVat  !== '' && $partyVat  === $companyVat)  return true;
+    if ($companyCode !== '' && $partyCode !== '' && $partyCode === $companyCode) return true;
+
+    $kwRaw = trim((string)($company['buyer_keywords'] ?? ''));
+    if ($kwRaw !== '' && $partyName !== '') {
+        foreach (explode(',', $kwRaw) as $k) {
+            $k = strtolower(trim($k));
+            if ($k !== '' && strpos($partyName, $k) !== false) return true;
+        }
+    }
+    return false;
+}
+
+/**
  * Detect and auto-correct buyer ↔ vendor swap.
  *
  * Some invoice layouts (logo on the buyer side, issuer details on the right;
@@ -82,45 +113,18 @@ function stripDisabledExtractionFields(array $extracted, ?array $enabledFields):
  * Returns true when a swap was applied. Mutates the extracted array in place.
  */
 function detectAndSwapBuyerVendor(array &$extracted, array $company): bool {
-    $normalizeVat = function ($v) {
-        return strtoupper(preg_replace('/\s+/', '', (string)($v ?? '')));
-    };
-    $normalizeCode = function ($v) {
-        // Registration codes are typically numeric; strip whitespace/punctuation
-        // and case-fold so a stray prefix or trailing dot doesn't break match.
-        return preg_replace('/[^A-Z0-9]/', '', strtoupper((string)($v ?? '')));
-    };
-    $companyVat  = $normalizeVat($company['vat_number'] ?? '');
-    $companyCode = $normalizeCode($company['code'] ?? '');
-    $kwRaw = trim((string)($company['buyer_keywords'] ?? ''));
-    $keywords = [];
-    if ($kwRaw !== '') {
-        foreach (explode(',', $kwRaw) as $k) {
-            $k = strtolower(trim($k));
-            if ($k !== '') $keywords[] = $k;
-        }
-    }
-
-    $buyerName  = strtolower((string)($extracted['buyerName'] ?? ''));
-    $buyerVat   = $normalizeVat($extracted['buyerVatId'] ?? '');
-    $buyerCode  = $normalizeCode($extracted['buyerCompanyCode'] ?? '');
-    $vendorName = strtolower((string)($extracted['vendorName'] ?? ''));
-    $vendorVat  = $normalizeVat($extracted['vendorVatId'] ?? '');
-    $vendorCode = $normalizeCode($extracted['vendorCompanyCode'] ?? '');
-
-    $matchesCompany = function ($name, $vat, $code) use ($companyVat, $companyCode, $keywords) {
-        if ($companyVat  !== '' && $vat  !== '' && $vat  === $companyVat)  return true;
-        if ($companyCode !== '' && $code !== '' && $code === $companyCode) return true;
-        if (!empty($keywords) && $name !== '') {
-            foreach ($keywords as $k) {
-                if (strpos($name, $k) !== false) return true;
-            }
-        }
-        return false;
-    };
-
-    $buyerOk  = $matchesCompany($buyerName, $buyerVat, $buyerCode);
-    $vendorOk = $matchesCompany($vendorName, $vendorVat, $vendorCode);
+    $buyerOk  = partyMatchesCompany(
+        $extracted['buyerName']        ?? null,
+        $extracted['buyerVatId']       ?? null,
+        $extracted['buyerCompanyCode'] ?? null,
+        $company
+    );
+    $vendorOk = partyMatchesCompany(
+        $extracted['vendorName']        ?? null,
+        $extracted['vendorVatId']       ?? null,
+        $extracted['vendorCompanyCode'] ?? null,
+        $company
+    );
 
     if (!$buyerOk && $vendorOk) {
         // Swap: vendor → buyer, buyer → vendor.

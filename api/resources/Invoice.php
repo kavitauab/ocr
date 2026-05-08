@@ -18,28 +18,30 @@ class Invoice extends BaseResource {
         if (isset($row['raw_extraction'])) $row['raw_extraction'] = json_decode($row['raw_extraction'], true);
         if (isset($row['additional_files'])) $row['additional_files'] = json_decode($row['additional_files'], true);
 
-        // Compute buyer mismatch using keywords or VAT
+        // Compute buyer mismatch using shared partyMatchesCompany helper:
+        // any of name keywords / VAT / company registration code is a match.
+        require_once __DIR__ . '/../lib/extraction_config.php';
         $row['buyer_mismatch'] = false;
-        if ($row['status'] === 'completed' && !empty($row['buyer_name'])) {
-            $keywords = trim($row['company_buyer_keywords'] ?? '');
-            $companyVat = strtoupper(preg_replace('/\s+/', '', $row['company_vat_number'] ?? ''));
-            $buyerVat = strtoupper(preg_replace('/\s+/', '', $row['buyer_vat_id'] ?? ''));
-            $buyerName = strtolower($row['buyer_name']);
-
-            if ($keywords) {
-                // Check if buyer name contains any of the keywords (comma-separated)
-                $matched = false;
-                foreach (explode(',', $keywords) as $kw) {
-                    $kw = trim(strtolower($kw));
-                    if ($kw && strpos($buyerName, $kw) !== false) {
-                        $matched = true;
-                        break;
-                    }
-                }
-                $row['buyer_mismatch'] = !$matched;
-            } elseif ($companyVat && $buyerVat) {
-                // Fallback to VAT comparison if no keywords set
-                $row['buyer_mismatch'] = $companyVat !== $buyerVat;
+        if ($row['status'] === 'completed') {
+            $hasAnyPartyId = !empty($row['buyer_name'])
+                || !empty($row['buyer_vat_id'])
+                || !empty($row['buyer_company_code']);
+            $hasCompanyId = !empty($row['company_vat_number'])
+                || !empty($row['company_code'])
+                || !empty($row['company_buyer_keywords']);
+            if ($hasAnyPartyId && $hasCompanyId) {
+                $companyShape = [
+                    'vat_number'      => $row['company_vat_number']      ?? '',
+                    'code'            => $row['company_code']            ?? '',
+                    'buyer_keywords'  => $row['company_buyer_keywords']  ?? '',
+                ];
+                $matches = partyMatchesCompany(
+                    $row['buyer_name']         ?? null,
+                    $row['buyer_vat_id']       ?? null,
+                    $row['buyer_company_code'] ?? null,
+                    $companyShape
+                );
+                $row['buyer_mismatch'] = !$matches;
             }
         }
 
@@ -206,7 +208,8 @@ class Invoice extends BaseResource {
         // Explicit column list: skip raw_extraction (5-50KB per row, never used by list UIs)
         $invoiceCols = 'i.id, i.company_id, i.email_inbox_id, i.source, i.original_filename, i.stored_filename, '
             . 'i.file_type, i.file_size, i.status, i.document_type, i.invoice_number, i.invoice_date, i.due_date, '
-            . 'i.vendor_name, i.vendor_address, i.vendor_vat_id, i.buyer_name, i.buyer_address, i.buyer_vat_id, '
+            . 'i.vendor_name, i.vendor_address, i.vendor_vat_id, i.vendor_company_code, '
+            . 'i.buyer_name, i.buyer_address, i.buyer_vat_id, i.buyer_company_code, '
             . 'i.subtotal_amount, i.tax_amount, i.total_amount, i.currency, i.po_number, i.payment_terms, i.bank_details, '
             . 'i.confidence_scores, i.processing_error, i.skip_reason, i.additional_files, i.vecticum_id, i.vecticum_error, '
             . 'i.vecticum_sent_at, i.ocr_sent_at, i.ocr_returned_at, i.ocr_model, i.ocr_escalated, i.ocr_escalation_reason, '
@@ -860,34 +863,32 @@ class Invoice extends BaseResource {
         if (!$company) sendJSON(['error' => 'Company not found'], 404);
         if (!$company['vecticum_enabled']) sendJSON(['error' => 'Vecticum not enabled for this company'], 400);
 
-        // Buyer validation — check if invoice buyer matches the company
+        // Buyer validation — match on any of: name keywords, VAT number,
+        // or company registration code. Single source of truth lives in
+        // partyMatchesCompany() so swap detection and this check stay aligned.
+        require_once __DIR__ . '/../lib/extraction_config.php';
         $force = ($_GET['force'] ?? '') === 'true';
-        if (!$force && !empty($invoice['buyer_name'])) {
-            $keywords = trim($company['buyer_keywords'] ?? '');
-            $buyerName = strtolower($invoice['buyer_name']);
-            $mismatch = false;
-
-            if ($keywords) {
-                $mismatch = true;
-                foreach (explode(',', $keywords) as $kw) {
-                    $kw = trim(strtolower($kw));
-                    if ($kw && strpos($buyerName, $kw) !== false) {
-                        $mismatch = false;
-                        break;
-                    }
+        if (!$force) {
+            $hasAnyId = !empty($invoice['buyer_name'])
+                || !empty($invoice['buyer_vat_id'])
+                || !empty($invoice['buyer_company_code']);
+            $hasCompanyId = !empty($company['vat_number'])
+                || !empty($company['code'])
+                || !empty($company['buyer_keywords']);
+            if ($hasAnyId && $hasCompanyId) {
+                $matches = partyMatchesCompany(
+                    $invoice['buyer_name']         ?? null,
+                    $invoice['buyer_vat_id']       ?? null,
+                    $invoice['buyer_company_code'] ?? null,
+                    $company
+                );
+                if (!$matches) {
+                    sendJSON([
+                        'error' => 'Buyer mismatch',
+                        'message' => "Invoice buyer ({$invoice['buyer_name']}) does not match company ({$company['name']})",
+                        'buyerMismatch' => true,
+                    ], 400);
                 }
-            } elseif (!empty($company['vat_number']) && !empty($invoice['buyer_vat_id'])) {
-                $companyVat = strtoupper(preg_replace('/\s+/', '', $company['vat_number']));
-                $buyerVat = strtoupper(preg_replace('/\s+/', '', $invoice['buyer_vat_id']));
-                $mismatch = $companyVat !== $buyerVat;
-            }
-
-            if ($mismatch) {
-                sendJSON([
-                    'error' => 'Buyer mismatch',
-                    'message' => "Invoice buyer ({$invoice['buyer_name']}) does not match company ({$company['name']})",
-                    'buyerMismatch' => true,
-                ], 400);
             }
         }
 
