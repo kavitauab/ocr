@@ -284,6 +284,14 @@ export default function InvoiceDetail() {
     onSuccess: () => { toast.success("Invoice queued for retry"); queryClient.invalidateQueries({ queryKey: ["invoice", id] }); },
     onError: (err: any) => toast.error(err.response?.data?.error || "Retry failed"),
   });
+  const reocrMutation = useMutation({
+    mutationFn: () => api.post(`/invoices/${id}/reocr`).then((r) => r.data),
+    onSuccess: () => {
+      toast.success("Invoice queued for re-OCR");
+      queryClient.invalidateQueries({ queryKey: ["invoice", id] });
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || "Re-OCR failed"),
+  });
   const replyIssueMutation = useMutation({
     mutationFn: (message: string) => api.post(`/invoices/${id}/reply-issue`, { message }).then((r) => r.data),
   });
@@ -458,6 +466,22 @@ export default function InvoiceDetail() {
           {(invoice.status === "failed" || invoice.status === "retrying") && (
             <Button variant="outline" size="sm" className="gap-1 h-7 text-xs px-2.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50" onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending}>
               <RotateCcw className="h-3 w-3" />Retry
+            </Button>
+          )}
+          {(invoice.status === "completed" || invoice.status === "skipped") && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1 h-7 text-xs px-2.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+              onClick={() => {
+                if (confirm("Re-run OCR on this invoice? Existing extracted fields will be overwritten with fresh extraction using current company settings and the configured model.")) {
+                  reocrMutation.mutate();
+                }
+              }}
+              disabled={editing || reocrMutation.isPending}
+              title="Re-extract with current company settings + model"
+            >
+              <RotateCcw className="h-3 w-3" />Re-OCR
             </Button>
           )}
           {hasCompanyRole("admin") && (

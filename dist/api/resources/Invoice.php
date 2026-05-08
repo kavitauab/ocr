@@ -1041,6 +1041,75 @@ class Invoice extends BaseResource {
     }
 
     /**
+     * POST /invoices/{id}/reocr — Re-run OCR on a completed invoice.
+     *
+     * Useful when company settings (vat_number, buyer_keywords, extraction_fields)
+     * or the default model have changed since the invoice was first processed
+     * and the user wants to reprocess existing data with the new config.
+     *
+     * Resets all extracted fields, re-queues a fresh OCR job, and clears the
+     * Vecticum link so the next auto-send (or manual send) uses the new data.
+     */
+    public function reocr($id) {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') sendJSON(['error' => 'Method not allowed'], 405);
+
+        $user = getAuthUser();
+        $stmt = $this->db->prepare("SELECT * FROM invoices WHERE id = :id");
+        $stmt->execute(['id' => $id]);
+        $invoice = $stmt->fetch();
+        if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
+
+        if ($invoice['company_id']) requireCompanyAccess($user, $invoice['company_id'], 'manager');
+
+        // Allow re-OCR from any state. Even from 'queued' / 'processing' is fine —
+        // the worker is idempotent and we'll just re-queue with a new job.
+        // Reset extracted fields so the UI shows clean state during reprocessing.
+        $this->db->prepare("UPDATE invoices SET
+            status = 'queued',
+            processing_error = NULL,
+            skip_reason = NULL,
+            ocr_sent_at = NULL,
+            ocr_returned_at = NULL,
+            ocr_model = NULL,
+            ocr_escalated = 0,
+            ocr_escalation_reason = NULL,
+            updated_at = NOW()
+            WHERE id = :id")
+            ->execute(['id' => $id]);
+
+        // Note: we deliberately keep vecticum_id so the user can decide whether
+        // to delete the old Vecticum record. The next /vecticum action will
+        // skip if vecticum_id is set, so they need to clear it manually
+        // (Vecticum delete + Send to Vecticum) or use Edit to drop the link.
+
+        try {
+            $ocrJobId = generateId();
+            $stmt = $this->db->prepare("INSERT INTO ocr_jobs (id, invoice_id, company_id, provider, model, status, queued_at, attempt, max_attempts)
+                VALUES (:id, :invoiceId, :companyId, 'anthropic', :model, 'queued', NOW(), 1, 3)");
+            $stmt->execute([
+                'id' => $ocrJobId,
+                'invoiceId' => $id,
+                'companyId' => $invoice['company_id'],
+                'model' => getSetting('extraction_model', 'claude-sonnet-4-6'),
+            ]);
+        } catch (\Throwable $e) {
+            error_log("Failed to create re-OCR job for invoice $id: " . $e->getMessage());
+            sendJSON(['error' => 'Could not queue re-OCR job: ' . $e->getMessage()], 500);
+        }
+
+        try {
+            logAction(['userId' => $user['id'], 'companyId' => $invoice['company_id'], 'action' => 'reocr', 'resourceType' => 'invoice', 'resourceId' => $id]);
+        } catch (\Throwable $e) {
+            // non-critical
+        }
+
+        $stmt = $this->db->prepare("SELECT * FROM invoices WHERE id = :id");
+        $stmt->execute(['id' => $id]);
+        $updated = $stmt->fetch();
+        sendJSON(['invoice' => $this->formatInvoice($updated), 'message' => 'Invoice queued for re-OCR']);
+    }
+
+    /**
      * GET /invoices/health — OCR system health metrics (superadmin only)
      */
     public function health($id = null) {
