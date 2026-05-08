@@ -56,6 +56,9 @@ if ($action === 'debug-auth') {
         'author_name' => $company['vecticum_author_name'] ?? null,
         'cached_token_present' => !empty($company['vecticum_access_token']),
         'cached_token_expires' => $company['vecticum_token_expires'] ?? null,
+        // Identity fields used by buyer/vendor swap detection
+        'identity_vat_number' => $company['vat_number'] ?? null,
+        'identity_buyer_keywords' => $company['buyer_keywords'] ?? null,
     ];
 
     if (empty($company['vecticum_client_id']) || empty($company['vecticum_client_secret'])) {
