@@ -461,6 +461,43 @@ if ($action === 'test-facet') {
     }
 }
 
+if ($action === 'requeue-ocr') {
+    // Cron-authed re-OCR for a specific invoice. Mirrors Invoice::reocr() so we
+    // can trigger it from CLI without needing a JWT for one-off recovery cases.
+    $invoiceId = trim($_GET['invoiceId'] ?? '');
+    if (!$invoiceId) sendJSON(['error' => 'Need invoiceId param'], 400);
+    $invStmt = $db->prepare("SELECT * FROM invoices WHERE id = :id");
+    $invStmt->execute(['id' => $invoiceId]);
+    $invoice = $invStmt->fetch();
+    if (!$invoice) sendJSON(['error' => 'Invoice not found'], 404);
+
+    $db->prepare("UPDATE invoices SET
+        status = 'queued',
+        processing_error = NULL,
+        skip_reason = NULL,
+        ocr_sent_at = NULL,
+        ocr_returned_at = NULL,
+        ocr_model = NULL,
+        ocr_escalated = 0,
+        ocr_escalation_reason = NULL,
+        updated_at = NOW()
+        WHERE id = :id")
+        ->execute(['id' => $invoiceId]);
+
+    $jobId = bin2hex(random_bytes(10));
+    $model = getSetting('extraction_model', 'claude-sonnet-4-6');
+    $db->prepare("INSERT INTO ocr_jobs (id, invoice_id, company_id, provider, model, status, queued_at, attempt, max_attempts)
+        VALUES (:id, :invoiceId, :companyId, 'anthropic', :model, 'queued', NOW(), 1, 3)")
+        ->execute([
+            'id' => $jobId,
+            'invoiceId' => $invoiceId,
+            'companyId' => $invoice['company_id'],
+            'model' => $model,
+        ]);
+
+    sendJSON(['action' => 'requeue-ocr', 'invoiceId' => $invoiceId, 'jobId' => $jobId, 'model' => $model, 'message' => 'Queued for re-extraction']);
+}
+
 if ($action === 'debug-email-attachments') {
     $emailId = $_GET['emailId'] ?? '';
     if (!$emailId) sendJSON(['error' => 'Need emailId'], 400);
