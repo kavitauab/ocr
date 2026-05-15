@@ -25,9 +25,24 @@ function validateInvoiceForVecticum($metadata) {
 
     // Accept any non-zero total. Negative totals are credit invoices — they'll
     // be uploaded with creditInvoice=true and absolute values in uploadToVecticum.
+    //
+    // If the model failed to read the explicit total but DID read subtotal
+    // and/or tax (common on utility / property-management invoices that label
+    // the total unusually, e.g. "Mokėtina suma" / "Iš viso apmokėti"), derive
+    // the total as subtotal + tax rather than hard-rejecting the whole invoice.
+    // This mirrors the backfill in uploadToVecticum(), which otherwise never
+    // runs because validation rejects first.
     $totalAmount = isset($metadata['totalAmount']) && is_numeric($metadata['totalAmount']) ? (float)$metadata['totalAmount'] : 0.0;
     if (abs($totalAmount) < 0.005) {
-        $missingFields[] = 'total amount';
+        $subtotal = isset($metadata['subtotalAmount']) && is_numeric($metadata['subtotalAmount']) ? (float)$metadata['subtotalAmount'] : 0.0;
+        $tax = isset($metadata['taxAmount']) && is_numeric($metadata['taxAmount']) ? (float)$metadata['taxAmount'] : 0.0;
+        $derivedTotal = $subtotal + $tax;
+        if (abs($derivedTotal) >= 0.005) {
+            // Recoverable — uploadToVecticum() will compute the same value.
+            $totalAmount = $derivedTotal;
+        } else {
+            $missingFields[] = 'total amount';
+        }
     }
 
     $currency = strtoupper(trim((string)($metadata['currency'] ?? '')));
